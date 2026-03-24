@@ -1,0 +1,55 @@
+# TeslaHub addon — add this to your existing TeslaMate docker-compose.yml
+#
+# Prerequisites:
+# 1. Create read-only user and TeslaHub database (run once):
+#
+#    docker exec -it <your-postgres-container> psql -U tm_user -d teslamate
+#
+#    CREATE USER teslahub_reader WITH PASSWORD 'your_reader_password';
+#    GRANT CONNECT ON DATABASE teslamate TO teslahub_reader;
+#    GRANT USAGE ON SCHEMA public TO teslahub_reader;
+#    GRANT SELECT ON ALL TABLES IN SCHEMA public TO teslahub_reader;
+#    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO teslahub_reader;
+#
+#    CREATE DATABASE teslahub;
+#    CREATE USER teslahub_app WITH PASSWORD 'your_app_password';
+#    GRANT ALL PRIVILEGES ON DATABASE teslahub TO teslahub_app;
+#    \c teslahub
+#    GRANT ALL ON SCHEMA public TO teslahub_app;
+#
+# 2. Add these services to your existing docker-compose.yml
+# 3. Add the environment variables to your .env file
+
+  teslahub-api:
+    image: teslahub/api:latest
+    restart: always
+    environment:
+      - TM_DB_HOST=database
+      - TM_DB_PORT=5432
+      - TM_DB_NAME=${TM_DB_NAME:-teslamate}
+      - TM_DB_USER=teslahub_reader
+      - TM_DB_PASSWORD=${TESLAHUB_READER_PASS}
+      - APP_DB_HOST=database
+      - APP_DB_PORT=5432
+      - APP_DB_NAME=teslahub
+      - APP_DB_USER=teslahub_app
+      - APP_DB_PASSWORD=${TESLAHUB_APP_PASS}
+      - TESLAHUB_ADMIN_USER=${TESLAHUB_ADMIN_USER:-admin}
+      - TESLAHUB_ADMIN_PASSWORD=${TESLAHUB_ADMIN_PASSWORD}
+      - TESLAHUB_SESSION_DAYS=${TESLAHUB_SESSION_DAYS:-30}
+      - TESLAHUB_JWT_SECRET=${TESLAHUB_JWT_SECRET}
+      - MAP_TILE_URL=${MAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
+      - TESLAHUB_ALLOWED_IPS=${TESLAHUB_ALLOWED_IPS:-}
+      - TZ=${TZ:-Europe/Paris}
+    ports:
+      - "127.0.0.1:4001:8080"
+    depends_on:
+      - database
+
+  teslahub-web:
+    image: teslahub/web:latest
+    restart: always
+    ports:
+      - "127.0.0.1:4002:80"
+    depends_on:
+      - teslahub-api

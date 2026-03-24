@@ -1,0 +1,30 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.vs/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Environment
+.env
+*.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+*.log
+
+# TeslaMate
+ExempleTeslaMateRepo/
