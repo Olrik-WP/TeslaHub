@@ -15,7 +15,7 @@ var tmPort = builder.Configuration["TM_DB_PORT"] ?? "5432";
 var tmDb = builder.Configuration["TM_DB_NAME"] ?? "teslamate";
 var tmUser = builder.Configuration["TM_DB_USER"] ?? "teslamate_readonly";
 var tmPass = builder.Configuration["TM_DB_PASSWORD"] ?? "";
-var tmConnectionString = $"Host={tmHost};Port={tmPort};Database={tmDb};Username={tmUser};Password={tmPass};Read Only=true;";
+var tmConnectionString = $"Host={tmHost};Port={tmPort};Database={tmDb};Username={tmUser};Password={tmPass};";
 
 var appHost = builder.Configuration["APP_DB_HOST"] ?? "localhost";
 var appPort = builder.Configuration["APP_DB_PORT"] ?? "5432";
