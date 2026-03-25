@@ -144,6 +144,9 @@ public record SessionCostDto
     public decimal? TotalCost { get; init; }
     public bool IsFree { get; init; }
     public string? Notes { get; init; }
+    public double? Latitude { get; init; }
+    public double? Longitude { get; init; }
+    public double? EnergyKwh { get; init; }
 }
 
 public record CostSummaryDto

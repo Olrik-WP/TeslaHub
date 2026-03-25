@@ -62,10 +62,12 @@ public class CostService
         return Math.Round(location.MonthlySubscription.Value / count, 2);
     }
 
-    public async Task<ChargingCostOverride> SetSessionCost(SessionCostDto dto, double? energyKwh)
+    public async Task<ChargingCostOverride> SetSessionCost(SessionCostDto dto)
     {
         var existing = await _db.ChargingCostOverrides
             .FirstOrDefaultAsync(c => c.ChargingProcessId == dto.ChargingProcessId && c.CarId == dto.CarId);
+
+        var energyKwh = dto.EnergyKwh;
 
         decimal? pricePerKwh;
         decimal totalCost;
@@ -86,6 +88,8 @@ public class CostService
             totalCost = (pricePerKwh ?? 0) * (decimal)(energyKwh ?? 0);
         }
 
+        var matchedLocation = await FindMatchingLocation(dto.Latitude, dto.Longitude, dto.CarId);
+
         if (existing != null)
         {
             existing.PricePerKwh = pricePerKwh;
@@ -93,6 +97,7 @@ public class CostService
             existing.IsFree = dto.IsFree;
             existing.IsManualOverride = true;
             existing.Notes = dto.Notes;
+            existing.LocationId = matchedLocation?.Id ?? existing.LocationId;
             existing.UpdatedAt = DateTime.UtcNow;
         }
         else
@@ -105,7 +110,8 @@ public class CostService
                 TotalCost = totalCost,
                 IsFree = dto.IsFree,
                 IsManualOverride = true,
-                Notes = dto.Notes
+                Notes = dto.Notes,
+                LocationId = matchedLocation?.Id
             };
             _db.ChargingCostOverrides.Add(existing);
         }

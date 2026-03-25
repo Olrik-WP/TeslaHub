@@ -78,7 +78,7 @@ public static class CostsEndpoints
 
         group.MapPost("/session", async (SessionCostDto dto, CostService costService) =>
         {
-            var result = await costService.SetSessionCost(dto, null);
+            var result = await costService.SetSessionCost(dto);
             return Results.Ok(result);
         });
 

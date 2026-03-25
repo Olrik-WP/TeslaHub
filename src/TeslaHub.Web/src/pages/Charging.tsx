@@ -113,6 +113,8 @@ function SessionCard({ session, override: costOverride, carId }: {
     },
   } as any);
 
+  const kwh = session.chargeEnergyAdded ?? session.chargeEnergyUsed ?? 0;
+
   const saveCost = useMutation({
     mutationFn: (data: { pricePerKwh?: number | null; totalCost?: number | null; isFree: boolean }) =>
       api('/costs/session', {
@@ -123,10 +125,14 @@ function SessionCard({ session, override: costOverride, carId }: {
           pricePerKwh: data.pricePerKwh ?? null,
           totalCost: data.totalCost ?? null,
           isFree: data.isFree,
+          latitude: session.latitude,
+          longitude: session.longitude,
+          energyKwh: kwh > 0 ? kwh : null,
         }),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['costOverrides'] });
+      queryClient.invalidateQueries({ queryKey: ['costSummary'] });
       setExpanded(false);
     },
   });
@@ -145,7 +151,6 @@ function SessionCard({ session, override: costOverride, carId }: {
     saveCost.mutate({ isFree: true });
   };
 
-  const kwh = session.chargeEnergyAdded ?? session.chargeEnergyUsed ?? 0;
   const displayCost = costOverride
     ? costOverride.isFree
       ? 'Free'
