@@ -5,7 +5,7 @@ namespace TeslaHub.Api.TeslaMate;
 
 public static class ChargingQueries
 {
-    public static async Task<IEnumerable<ChargingSessionDto>> GetChargingSessionsAsync(this TeslaMateConnectionFactory db, int carId, int limit = 20, int offset = 0)
+    public static async Task<IEnumerable<ChargingSessionDto>> GetChargingSessionsAsync(this TeslaMateConnectionFactory db, int carId, int limit = 20, int offset = 0, string? chargeType = null)
     {
         using var conn = db.CreateConnection();
         return await conn.QueryAsync<ChargingSessionDto>("""
@@ -27,21 +27,37 @@ public static class ChargingQueries
                 cp.geofence_id AS "GeofenceId",
                 g.name AS "GeofenceName",
                 ch.fast_charger_present AS "FastChargerPresent",
-                ch.fast_charger_type AS "FastChargerType"
+                ch.fast_charger_type AS "FastChargerType",
+                ch.charge_type AS "ChargeType",
+                CASE WHEN GREATEST(cp.charge_energy_used, cp.charge_energy_added) > 0
+                     THEN cp.charge_energy_added / GREATEST(cp.charge_energy_used, cp.charge_energy_added)
+                     ELSE NULL END AS "Efficiency",
+                CASE WHEN cp.duration_min > 0
+                     THEN cp.charge_energy_added * 60.0 / cp.duration_min
+                     ELSE NULL END AS "AvgPowerKw",
+                CASE WHEN cp.duration_min > 0
+                     THEN (cp.end_rated_range_km - cp.start_rated_range_km) * 60.0 / cp.duration_min
+                     ELSE NULL END AS "ChargeRateKmPerHour",
+                cp.end_rated_range_km - cp.start_rated_range_km AS "RangeAddedKm",
+                CASE WHEN GREATEST(cp.charge_energy_used, cp.charge_energy_added) > 0
+                     THEN cp.cost / GREATEST(cp.charge_energy_used, cp.charge_energy_added)
+                     ELSE NULL END AS "CostPerKwh"
             FROM charging_processes cp
             LEFT JOIN addresses a ON cp.address_id = a.id
             LEFT JOIN geofences g ON cp.geofence_id = g.id
             LEFT JOIN LATERAL (
-                SELECT fast_charger_present, fast_charger_type
+                SELECT fast_charger_present, fast_charger_type,
+                       CASE WHEN NULLIF(mode() WITHIN GROUP (ORDER BY charger_phases), 0) IS NULL
+                            THEN 'DC' ELSE 'AC' END AS charge_type
                 FROM charges
                 WHERE charging_process_id = cp.id
-                ORDER BY date
-                LIMIT 1
+                GROUP BY fast_charger_present, fast_charger_type
             ) ch ON true
             WHERE cp.car_id = @CarId
+              AND (@ChargeType IS NULL OR ch.charge_type = @ChargeType)
             ORDER BY cp.start_date DESC
             LIMIT @Limit OFFSET @Offset
-            """, new { CarId = carId, Limit = limit, Offset = offset });
+            """, new { CarId = carId, Limit = limit, Offset = offset, ChargeType = chargeType });
     }
 
     public static async Task<IEnumerable<ChargePointDto>> GetChargePointsAsync(this TeslaMateConnectionFactory db, int chargingProcessId)
@@ -74,6 +90,26 @@ public static class ChargingQueries
             FROM charging_processes
             WHERE car_id = @CarId AND charge_energy_added > 0.01
             """, new { CarId = carId });
+    }
+
+    public static async Task<ChargingSummaryDto?> GetChargingSummaryAsync(this TeslaMateConnectionFactory db, int carId, int? days = null)
+    {
+        using var conn = db.CreateConnection();
+        return await conn.QueryFirstOrDefaultAsync<ChargingSummaryDto>("""
+            SELECT
+                COUNT(*) AS "ChargeCount",
+                COALESCE(SUM(charge_energy_added), 0) AS "TotalEnergyAdded",
+                COALESCE(SUM(GREATEST(charge_energy_added, charge_energy_used)), 0) AS "TotalEnergyUsed",
+                COALESCE(SUM(cost), 0) AS "TotalCost",
+                COALESCE(AVG(duration_min), 0) AS "AvgDurationMin",
+                CASE WHEN SUM(GREATEST(charge_energy_added, charge_energy_used)) > 0
+                     THEN SUM(charge_energy_added) / SUM(GREATEST(charge_energy_added, charge_energy_used))
+                     ELSE 0 END AS "AvgEfficiency"
+            FROM charging_processes
+            WHERE car_id = @CarId
+              AND charge_energy_added > 0.01
+              AND (@Days IS NULL OR start_date >= NOW() - INTERVAL '1 day' * @Days)
+            """, new { CarId = carId, Days = days });
     }
 
     public static async Task<IEnumerable<GeofenceDto>> GetGeofencesAsync(this TeslaMateConnectionFactory db)

@@ -85,6 +85,21 @@ export interface ChargingSession {
   geofenceName: string | null;
   fastChargerPresent: boolean | null;
   fastChargerType: string | null;
+  chargeType: string | null;
+  efficiency: number | null;
+  avgPowerKw: number | null;
+  chargeRateKmPerHour: number | null;
+  rangeAddedKm: number | null;
+  costPerKwh: number | null;
+}
+
+export interface ChargingSummary {
+  chargeCount: number;
+  totalEnergyAdded: number;
+  totalEnergyUsed: number;
+  totalCost: number;
+  avgDurationMin: number;
+  avgEfficiency: number;
 }
 
 export interface ChargePoint {
@@ -162,8 +177,8 @@ export const getDrives = (carId: number, limit = 20, offset = 0) =>
 export const getDrivePositions = (driveId: number) => api<Position[]>(`/drives/positions/${driveId}`);
 
 // ─── Charging ───────────────────────────────────────────────────
-export const getChargingSessions = (carId: number, limit = 20, offset = 0) =>
-  api<ChargingSession[]>(`/charging/${carId}?limit=${limit}&offset=${offset}`);
+export const getChargingSessions = (carId: number, limit = 20, offset = 0, chargeType?: string) =>
+  api<ChargingSession[]>(`/charging/${carId}?limit=${limit}&offset=${offset}${chargeType ? `&chargeType=${chargeType}` : ''}`);
 export const getChargePoints = (carId: number, processId: number) =>
   api<ChargePoint[]>(`/charging/${carId}/${processId}/points`);
 
@@ -215,6 +230,9 @@ export interface ChargingStats {
 }
 
 export const getChargingStats = (carId: number) => api<ChargingStats>(`/charging/${carId}/stats`);
+
+export const getChargingSummary = (carId: number, days?: number) =>
+  api<ChargingSummary>(`/charging/${carId}/summary${days != null ? `?days=${days}` : ''}`);
 
 // ─── Vehicle Image ──────────────────────────────────────────────
 export interface CarImageInfo {

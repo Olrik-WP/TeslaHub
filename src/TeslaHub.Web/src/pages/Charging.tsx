@@ -1,18 +1,47 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
-import { useChargingSessions } from '../hooks/useCharging';
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts';
 import { useUnits } from '../hooks/useUnits';
-import { getCostOverrides, getSuggestedPrice, getMatchingLocation } from '../api/queries';
+import { getChargingSessions, getChargingSummary, getCostOverrides, getSuggestedPrice, getMatchingLocation } from '../api/queries';
 import { api } from '../api/client';
 import type { ChargingSession, CostOverride, ChargingLocation } from '../api/queries';
+import StatCard from '../components/StatCard';
 
 interface Props {
   carId: number | undefined;
 }
 
+type PeriodKey = '7d' | '30d' | '90d' | 'all';
+type TypeFilter = 'all' | 'AC' | 'DC';
+
+const PERIOD_OPTIONS: { key: PeriodKey; label: string; days?: number }[] = [
+  { key: '7d', label: '7 days', days: 7 },
+  { key: '30d', label: '30 days', days: 30 },
+  { key: '90d', label: '90 days', days: 90 },
+  { key: 'all', label: 'All' },
+];
+
 export default function Charging({ carId }: Props) {
-  const { data: sessions, isLoading } = useChargingSessions(carId, 30);
+  const [period, setPeriod] = useState<PeriodKey>('90d');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const u = useUnits();
+
+  const selectedPeriod = PERIOD_OPTIONS.find((p) => p.key === period)!;
+  const chargeTypeParam = typeFilter === 'all' ? undefined : typeFilter;
+
+  const { data: sessions, isLoading } = useQuery({
+    queryKey: ['charging', carId, 100, 0, chargeTypeParam],
+    queryFn: () => getChargingSessions(carId!, 100, 0, chargeTypeParam),
+    enabled: !!carId,
+    staleTime: 30_000,
+  });
+
+  const { data: summary } = useQuery({
+    queryKey: ['chargingSummary', carId, selectedPeriod.days],
+    queryFn: () => getChargingSummary(carId!, selectedPeriod.days),
+    enabled: !!carId,
+  });
+
   const { data: overrides } = useQuery({
     queryKey: ['costOverrides', carId],
     queryFn: () => getCostOverrides(carId!),
@@ -25,30 +54,74 @@ export default function Charging({ carId }: Props) {
 
   const overrideMap = new Map(overrides?.map((o) => [o.chargingProcessId, o]));
   const activeSession = sessions?.find((s) => !s.endDate);
-  const completedSessions = sessions?.filter((s) => s.endDate) ?? [];
 
-  const chartData = completedSessions
-    .slice(0, 15)
+  const cutoff = selectedPeriod.days
+    ? new Date(Date.now() - selectedPeriod.days * 86400_000)
+    : null;
+
+  const filteredSessions = (sessions?.filter((s) => s.endDate) ?? []).filter(
+    (s) => !cutoff || new Date(s.startDate) >= cutoff
+  );
+
+  const chartData = filteredSessions
+    .slice(0, 20)
     .reverse()
     .map((s) => ({
       date: new Date(s.startDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }),
       kwh: s.chargeEnergyAdded ?? 0,
+      type: s.chargeType ?? (s.fastChargerPresent ? 'DC' : 'AC'),
     }));
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-xl font-bold">Charging</h1>
+      {/* Filters */}
+      <div className="flex flex-wrap gap-1">
+        {PERIOD_OPTIONS.map((opt) => (
+          <button
+            key={opt.key}
+            onClick={() => setPeriod(opt.key)}
+            className={`px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors ${
+              period === opt.key ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+        <div className="w-px bg-[#2a2a2a] mx-1" />
+        {(['all', 'AC', 'DC'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTypeFilter(t)}
+            className={`px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors ${
+              typeFilter === t ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
+            }`}
+          >
+            {t === 'all' ? 'All' : t}
+          </button>
+        ))}
+      </div>
 
+      {/* Summary */}
+      {summary && summary.chargeCount > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Energy added" value={Math.round(summary.totalEnergyAdded)} unit="kWh" color="#eab308" />
+          <StatCard label="Total cost" value={summary.totalCost > 0 ? summary.totalCost.toFixed(2) : '—'} unit={summary.totalCost > 0 ? u.currencySymbol : undefined} />
+          <StatCard label="Ø Duration" value={Math.round(summary.avgDurationMin)} unit="min" />
+          <StatCard label="Efficiency" value={`${(summary.avgEfficiency * 100).toFixed(0)}%`} color="#22c55e" />
+        </div>
+      )}
+
+      {/* Charging now */}
       {activeSession && (
-        <div className="bg-[#141414] border border-[#3b82f6]/30 rounded-xl p-4">
+        <div className="bg-[#141414] border border-[#3b82f6]/30 rounded-xl p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-[#3b82f6] text-xl">⚡</span>
             <span className="font-medium">Charging now</span>
             {activeSession.address && (
-              <span className="text-[#9ca3af] text-sm ml-auto">{activeSession.address.split(',')[0]}</span>
+              <span className="text-[#9ca3af] text-sm ml-auto truncate max-w-[50%]">{activeSession.address.split(',')[0]}</span>
             )}
           </div>
-          <div className="flex items-center gap-6 text-sm">
+          <div className="flex flex-wrap items-center gap-4 text-sm">
             <div>
               <span className="text-[#9ca3af]">Added: </span>
               <span className="font-medium">{activeSession.chargeEnergyAdded?.toFixed(1) ?? '—'} kWh</span>
@@ -61,22 +134,32 @@ export default function Charging({ carId }: Props) {
         </div>
       )}
 
+      {/* Chart */}
       {chartData.length > 0 && (
-        <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
+        <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
           <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">Energy added (kWh)</div>
-          <ResponsiveContainer width="100%" height={180}>
+          <ResponsiveContainer width="100%" height={160}>
             <BarChart data={chartData}>
-              <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
-              <Tooltip contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, color: '#fff' }} />
-              <Bar dataKey="kwh" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
+              <Tooltip contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, color: '#fff', fontSize: 12 }} />
+              <Bar dataKey="kwh" radius={[4, 4, 0, 0]}>
+                {chartData.map((entry, i) => (
+                  <Cell key={i} fill={entry.type === 'DC' ? '#f59e0b' : '#3b82f6'} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
+          <div className="flex items-center gap-4 mt-2 text-[10px] text-[#9ca3af]">
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#3b82f6] inline-block" /> AC</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#f59e0b] inline-block" /> DC / Supercharger</span>
+          </div>
         </div>
       )}
 
+      {/* Sessions list */}
       <div className="space-y-2">
-        {completedSessions.map((session) => (
+        {filteredSessions.map((session) => (
           <SessionCard
             key={session.id}
             session={session}
@@ -84,6 +167,9 @@ export default function Charging({ carId }: Props) {
             carId={carId}
           />
         ))}
+        {filteredSessions.length === 0 && (
+          <div className="text-center text-[#9ca3af] py-8">No charging sessions for this period</div>
+        )}
       </div>
     </div>
   );
@@ -114,6 +200,7 @@ function SessionCard({ session, override: costOverride, carId }: {
   } as any);
 
   const kwh = session.chargeEnergyAdded ?? session.chargeEnergyUsed ?? 0;
+  const chargeType = session.chargeType ?? (session.fastChargerPresent ? 'DC' : 'AC');
 
   const saveCost = useMutation({
     mutationFn: (data: { pricePerKwh?: number | null; totalCost?: number | null; isFree: boolean }) =>
@@ -155,7 +242,9 @@ function SessionCard({ session, override: costOverride, carId }: {
     ? costOverride.isFree
       ? 'Free'
       : `${costOverride.totalCost.toFixed(2)} ${u.currencySymbol}`
-    : null;
+    : session.cost != null
+      ? `${session.cost.toFixed(2)} ${u.currencySymbol}`
+      : null;
 
   const previewText = (() => {
     const value = parseFloat(priceInput);
@@ -167,33 +256,71 @@ function SessionCard({ session, override: costOverride, carId }: {
     return `Total: ${(value * kwh).toFixed(2)} ${u.currencySymbol} for ${kwh.toFixed(1)} kWh`;
   })();
 
+  const effPct = session.efficiency != null ? Math.round(session.efficiency * 100) : null;
+  const effColor = effPct != null ? (effPct >= 95 ? '#22c55e' : effPct >= 85 ? '#eab308' : '#ef4444') : '#9ca3af';
+
   return (
-    <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
-      <div className="flex items-center justify-between mb-2" onClick={() => setExpanded(!expanded)}>
-        <span className="text-sm font-medium">
-          {new Date(session.startDate).toLocaleDateString()}
-          {' · '}
-          {costOverride?.location?.name ?? session.address?.split(',')[0] ?? 'Unknown'}
-        </span>
-        <div className="flex items-center gap-2">
+    <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-2 cursor-pointer" onClick={() => setExpanded(!expanded)}>
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="text-sm font-medium truncate">
+            {new Date(session.startDate).toLocaleDateString()}
+            {' · '}
+            {costOverride?.location?.name ?? session.geofenceName ?? session.address?.split(',')[0] ?? 'Unknown'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
           {displayCost && (
             <span className={`text-sm font-medium ${costOverride?.isFree ? 'text-[#22c55e]' : 'text-white'}`}>
               {displayCost}
             </span>
           )}
-          <span className={`text-xs px-2 py-0.5 rounded ${session.fastChargerPresent ? 'bg-[#f59e0b]/20 text-[#f59e0b]' : 'bg-[#3b82f6]/20 text-[#3b82f6]'}`}>
-            {session.fastChargerPresent ? 'Supercharger' : 'AC'}
+          <span className={`text-xs px-2 py-0.5 rounded ${chargeType === 'DC' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' : 'bg-[#3b82f6]/20 text-[#3b82f6]'}`}>
+            {chargeType}
           </span>
         </div>
       </div>
 
-      <div className="flex items-center gap-4 text-sm text-[#9ca3af]">
-        <span>{kwh.toFixed(1)} kWh</span>
-        <span>{session.durationMin ?? '—'} min</span>
-        <span>{session.startBatteryLevel}% → {session.endBatteryLevel}%</span>
-        {session.outsideTempAvg != null && <span>{u.fmtTemp(session.outsideTempAvg)}{u.tempUnit}</span>}
+      {/* Stats row */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-x-3 gap-y-1 text-xs text-[#9ca3af]">
+        <div>
+          <span className="text-white font-medium">{kwh.toFixed(1)}</span> kWh
+        </div>
+        <div>
+          <span className="text-white font-medium">{session.durationMin ?? '—'}</span> min
+        </div>
+        <div>
+          {session.startBatteryLevel}% → {session.endBatteryLevel}%
+        </div>
+        {effPct != null && (
+          <div className="flex items-center gap-1">
+            <span className="font-medium" style={{ color: effColor }}>{effPct}%</span>
+            <span>eff.</span>
+          </div>
+        )}
+        {session.avgPowerKw != null && (
+          <div>
+            <span className="text-white font-medium">{session.avgPowerKw.toFixed(1)}</span> kW
+          </div>
+        )}
+        {session.rangeAddedKm != null && session.rangeAddedKm > 0 && (
+          <div>
+            +<span className="text-white font-medium">{Math.round(u.convertDistance(session.rangeAddedKm)!)}</span> {u.distanceUnit}
+          </div>
+        )}
       </div>
 
+      {/* Temp row */}
+      {session.outsideTempAvg != null && (
+        <div className="text-xs text-[#9ca3af] mt-1">
+          {u.fmtTemp(session.outsideTempAvg)}{u.tempUnit}
+          {session.costPerKwh != null && ` · ${session.costPerKwh.toFixed(2)} ${u.currencySymbol}/kWh`}
+          {session.chargeRateKmPerHour != null && session.chargeRateKmPerHour > 0 && ` · ${Math.round(u.convertDistance(session.chargeRateKmPerHour)!)} ${u.distanceUnit}/h`}
+        </div>
+      )}
+
+      {/* Expanded: cost input + location form (unchanged logic) */}
       {expanded && (
         <div className="mt-3 pt-3 border-t border-[#2a2a2a] space-y-3">
           <div className="flex gap-1 mb-1">
@@ -336,7 +463,7 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
   const inputClass = 'bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px] w-full';
 
   return (
-    <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-4 space-y-3">
+    <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3 sm:p-4 space-y-3">
       <input className={inputClass} placeholder="Location name" value={name} onChange={(e) => setName(e.target.value)} />
 
       <div className="flex gap-2">

@@ -90,6 +90,12 @@ public record ChargingSessionDto
     public double? Longitude { get; init; }
     public bool? FastChargerPresent { get; init; }
     public string? FastChargerType { get; init; }
+    public string? ChargeType { get; init; }
+    public double? Efficiency { get; init; }
+    public double? AvgPowerKw { get; init; }
+    public double? ChargeRateKmPerHour { get; init; }
+    public double? RangeAddedKm { get; init; }
+    public double? CostPerKwh { get; init; }
 }
 
 public record ChargePointDto
@@ -137,6 +143,16 @@ public record ChargingStatsDto
     public double TotalEnergyAdded { get; init; }
     public double TotalEnergyUsed { get; init; }
     public double ChargingEfficiency { get; init; }
+}
+
+public record ChargingSummaryDto
+{
+    public int ChargeCount { get; init; }
+    public double TotalEnergyAdded { get; init; }
+    public double TotalEnergyUsed { get; init; }
+    public double TotalCost { get; init; }
+    public double AvgDurationMin { get; init; }
+    public double AvgEfficiency { get; init; }
 }
 
 public record CarListItemDto
