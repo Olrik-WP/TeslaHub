@@ -331,7 +331,7 @@ export default function Home({ carId }: Props) {
         {vehicle.latitude != null && vehicle.longitude != null && (
           <div
             className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl overflow-hidden cursor-pointer active:bg-[#1a1a1a] transition-colors"
-            onClick={() => navigate('/map')}
+            onClick={() => navigate(`/map?lat=${vehicle.latitude}&lng=${vehicle.longitude}`)}
           >
             <div className="px-3 pt-2 pb-1">
               <span className="text-xs text-[#9ca3af] uppercase tracking-wider">Position</span>

@@ -22,11 +22,15 @@ function FitBounds({ points }: { points: [number, number][] }) {
   const prevCount = useRef(0);
 
   useEffect(() => {
-    if (points.length < 2) return;
+    if (points.length === 0) return;
     if (points.length === prevCount.current) return;
 
-    const bounds = L.latLngBounds(points.map(([lat, lng]) => L.latLng(lat, lng)));
-    map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+    if (points.length === 1) {
+      map.setView(points[0], 16);
+    } else {
+      const bounds = L.latLngBounds(points.map(([lat, lng]) => L.latLng(lat, lng)));
+      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+    }
     prevCount.current = points.length;
   }, [map, points]);
 

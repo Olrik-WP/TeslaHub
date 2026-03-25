@@ -27,6 +27,11 @@ export default function MapPage({ carId }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const driveIdParam = searchParams.get('driveId');
   const driveId = driveIdParam ? parseInt(driveIdParam, 10) : null;
+  const latParam = searchParams.get('lat');
+  const lngParam = searchParams.get('lng');
+  const positionMode = latParam != null && lngParam != null;
+  const posLat = positionMode ? parseFloat(latParam) : null;
+  const posLng = positionMode ? parseFloat(lngParam) : null;
 
   const [rangeKey, setRangeKey] = useState<RangeKey>('48h');
   const [customFrom, setCustomFrom] = useState(() => formatDateForInput(new Date(Date.now() - 48 * 3600_000)));
@@ -38,7 +43,7 @@ export default function MapPage({ carId }: Props) {
   const { data: drivePositions } = useQuery({
     queryKey: ['drivePositions', driveId],
     queryFn: () => getDrivePositions(driveId!),
-    enabled: driveId != null,
+    enabled: driveId != null && !positionMode,
     placeholderData: keepPreviousData,
   });
 
@@ -54,7 +59,7 @@ export default function MapPage({ carId }: Props) {
       }
       return getRecentPositions(carId, selectedRange.hours!);
     },
-    enabled: !!carId && driveId == null,
+    enabled: !!carId && driveId == null && !positionMode,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   });
@@ -62,7 +67,7 @@ export default function MapPage({ carId }: Props) {
   const { data: charges } = useQuery({
     queryKey: ['chargingForMap', carId],
     queryFn: () => getChargingSessions(carId!, 20),
-    enabled: !!carId && driveId == null,
+    enabled: !!carId && driveId == null && !positionMode,
     placeholderData: keepPreviousData,
   });
 
@@ -78,16 +83,28 @@ export default function MapPage({ carId }: Props) {
     [charges, driveId]
   );
 
-  const clearDrive = () => {
+  const clearParams = () => {
     setSearchParams({});
   };
 
+  const positionPoint: [number, number][] = posLat != null && posLng != null ? [[posLat, posLng]] : [];
+
   return (
     <div className="flex flex-col h-[calc(100dvh-64px)]">
-      {driveId != null ? (
+      {positionMode ? (
         <div className="flex items-center gap-2 p-2 bg-[#0a0a0a]">
           <button
-            onClick={clearDrive}
+            onClick={clearParams}
+            className="px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] bg-[#1a1a1a] text-[#9ca3af] active:bg-[#2a2a2a]"
+          >
+            ← Back
+          </button>
+          <span className="text-sm text-white font-medium">Current position</span>
+        </div>
+      ) : driveId != null ? (
+        <div className="flex items-center gap-2 p-2 bg-[#0a0a0a]">
+          <button
+            onClick={clearParams}
             className="px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] bg-[#1a1a1a] text-[#9ca3af] active:bg-[#2a2a2a]"
           >
             ← Back
@@ -140,7 +157,10 @@ export default function MapPage({ carId }: Props) {
 
       {/* Map */}
       <div className="flex-1">
-        <LeafletMap routePoints={routePoints} chargeMarkers={chargeMarkers} />
+        <LeafletMap
+          routePoints={positionMode ? positionPoint : routePoints}
+          chargeMarkers={positionMode ? [] : chargeMarkers}
+        />
       </div>
     </div>
   );
