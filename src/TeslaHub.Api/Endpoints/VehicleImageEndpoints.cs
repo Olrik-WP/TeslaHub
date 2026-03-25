@@ -1,8 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TeslaHub.Api.Data;
 using TeslaHub.Api.Models;
-using TeslaHub.Api.Services;
-using TeslaHub.Api.TeslaMate;
 
 namespace TeslaHub.Api.Endpoints;
 
@@ -21,18 +19,12 @@ public static class VehicleImageEndpoints
         group.MapDelete("/{carId:int}/image", DeleteImage);
     }
 
-    private static async Task<IResult> GetImage(
-        int carId, AppDbContext db, TeslaMateConnectionFactory tm,
-        IHttpClientFactory httpFactory, CompositorService compositor)
+    private static async Task<IResult> GetImage(int carId, AppDbContext db)
     {
         var img = await db.CarImages.FirstOrDefaultAsync(i => i.CarId == carId);
 
         if (img != null && img.ImageData.Length > 0)
             return Results.File(img.ImageData, img.ContentType);
-
-        var autoBytes = await TryAutoGenerate(carId, db, tm, httpFactory, compositor);
-        if (autoBytes != null)
-            return Results.File(autoBytes, "image/jpeg");
 
         return Results.NotFound();
     }
@@ -50,23 +42,30 @@ public static class VehicleImageEndpoints
     }
 
     private static async Task<IResult> SaveCompositorImage(
-        int carId, AppearanceDto dto, AppDbContext db,
-        IHttpClientFactory httpFactory, CompositorService compositor)
+        int carId, CompositorUrlDto dto, AppDbContext db,
+        IHttpClientFactory httpFactory)
     {
-        var url = compositor.BuildUrl(dto.ModelCode, dto.PaintCode, dto.WheelCode, dto.VariantCode);
+        if (string.IsNullOrWhiteSpace(dto.Url) ||
+            !dto.Url.Contains("static-assets.tesla.com") ||
+            !dto.Url.Contains("compositor"))
+        {
+            return Results.BadRequest("Invalid Tesla compositor URL");
+        }
 
         var client = httpFactory.CreateClient("tesla");
         byte[] imageBytes;
         try
         {
-            var response = await client.GetAsync(url);
+            var response = await client.GetAsync(dto.Url);
             if (!response.IsSuccessStatusCode)
-                return Results.Problem($"Tesla compositor returned {response.StatusCode}", statusCode: 502);
+                return Results.Problem($"Tesla returned {response.StatusCode}", statusCode: 502);
             imageBytes = await response.Content.ReadAsByteArrayAsync();
+            if (imageBytes.Length < 100)
+                return Results.Problem("Downloaded image is too small", statusCode: 502);
         }
         catch (Exception ex)
         {
-            return Results.Problem($"Failed to download compositor image: {ex.Message}", statusCode: 502);
+            return Results.Problem($"Failed to download image: {ex.Message}", statusCode: 502);
         }
 
         var contentType = "image/jpeg";
@@ -76,8 +75,6 @@ public static class VehicleImageEndpoints
         var img = await db.CarImages.FirstOrDefaultAsync(i => i.CarId == carId);
         if (img != null)
         {
-            img.PaintCode = dto.PaintCode;
-            img.WheelCode = dto.WheelCode;
             img.IsCustomUpload = false;
             img.ImageData = imageBytes;
             img.ContentType = contentType;
@@ -88,8 +85,6 @@ public static class VehicleImageEndpoints
             db.CarImages.Add(new CarImage
             {
                 CarId = carId,
-                PaintCode = dto.PaintCode,
-                WheelCode = dto.WheelCode,
                 IsCustomUpload = false,
                 ImageData = imageBytes,
                 ContentType = contentType,
@@ -158,54 +153,9 @@ public static class VehicleImageEndpoints
         return Results.Ok(new { success = true });
     }
 
-    private static async Task<byte[]?> TryAutoGenerate(
-        int carId, AppDbContext db, TeslaMateConnectionFactory tm,
-        IHttpClientFactory httpFactory, CompositorService compositor)
-    {
-        var vehicle = await tm.GetVehicleStatusAsync(carId);
-        if (vehicle == null) return null;
-
-        var url = compositor.TryBuildAutoUrl(vehicle.Model, vehicle.ExteriorColor, vehicle.WheelType);
-        if (url == null) return null;
-
-        try
-        {
-            var client = httpFactory.CreateClient("tesla");
-            var response = await client.GetAsync(url);
-            if (!response.IsSuccessStatusCode) return null;
-
-            var imageBytes = await response.Content.ReadAsByteArrayAsync();
-            if (imageBytes.Length < 100) return null;
-
-            var contentType = "image/jpeg";
-            if (imageBytes.Length > 4 && imageBytes[0] == 0x89 && imageBytes[1] == 0x50)
-                contentType = "image/png";
-
-            db.CarImages.Add(new CarImage
-            {
-                CarId = carId,
-                PaintCode = compositor.MapPaint(vehicle.ExteriorColor),
-                WheelCode = compositor.MapWheel(vehicle.WheelType),
-                IsCustomUpload = false,
-                ImageData = imageBytes,
-                ContentType = contentType,
-                UpdatedAt = DateTime.UtcNow,
-            });
-            await db.SaveChangesAsync();
-
-            return imageBytes;
-        }
-        catch
-        {
-            return null;
-        }
-    }
 }
 
-public record AppearanceDto
+public record CompositorUrlDto
 {
-    public string ModelCode { get; init; } = "";
-    public string PaintCode { get; init; } = "";
-    public string WheelCode { get; init; } = "";
-    public string? VariantCode { get; init; }
+    public string Url { get; init; } = "";
 }

@@ -31,7 +31,6 @@ builder.Services.AddSingleton(new TeslaMateConnectionFactory(tmConnectionString)
 builder.Services.AddScoped<CostService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<CacheService>();
-builder.Services.AddSingleton<CompositorService>();
 builder.Services.AddHttpClient("tesla", c => c.DefaultRequestHeaders.UserAgent.ParseAdd("TeslaHub/1.0"));
 
 var jwtSecret = builder.Configuration["TESLAHUB_JWT_SECRET"]

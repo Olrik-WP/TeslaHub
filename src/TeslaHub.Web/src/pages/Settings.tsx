@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSettings, getChargingLocations, getCarImageInfo } from '../api/queries';
-import { useVehicleStatus } from '../hooks/useVehicle';
 import { useUnits } from '../hooks/useUnits';
 import { api, logout } from '../api/client';
 import { useNavigate } from 'react-router-dom';
-import { PAINT_OPTIONS, getModelCode, getWheelsForModel, buildCompositorUrl, isHighlandWheel, HIGHLAND_M3_VARIANTS } from '../utils/teslaCompositor';
 import type { GlobalSettings, ChargingLocation } from '../api/queries';
 
 interface Props {
@@ -23,7 +21,6 @@ export default function Settings({ carId }: Props) {
     queryKey: ['chargingLocations', carId],
     queryFn: () => getChargingLocations(carId),
   });
-  const { data: vehicle } = useVehicleStatus(carId);
   const { data: imageInfo } = useQuery({
     queryKey: ['carImageInfo', carId],
     queryFn: () => getCarImageInfo(carId!),
@@ -31,38 +28,14 @@ export default function Settings({ carId }: Props) {
   });
 
   const [form, setForm] = useState<Partial<GlobalSettings>>({});
-  const [selectedPaint, setSelectedPaint] = useState('PPSW');
-  const [selectedWheel, setSelectedWheel] = useState('');
-  const [selectedVariant, setSelectedVariant] = useState('MT336');
-  const [previewUrl, setPreviewUrl] = useState('');
+  const [teslaUrl, setTeslaUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-
-  const modelCode = getModelCode(vehicle?.model);
-  const wheels = getWheelsForModel(modelCode);
+  const [urlError, setUrlError] = useState('');
 
   useEffect(() => {
     if (settings) setForm(settings);
   }, [settings]);
-
-  useEffect(() => {
-    if (imageInfo?.paintCode) setSelectedPaint(imageInfo.paintCode);
-    if (imageInfo?.wheelCode) setSelectedWheel(imageInfo.wheelCode);
-  }, [imageInfo]);
-
-  useEffect(() => {
-    if (!selectedWheel && wheels.length > 0) {
-      setSelectedWheel(wheels[0].code);
-    }
-  }, [wheels, selectedWheel]);
-
-  const showVariant = isHighlandWheel(modelCode, selectedWheel);
-
-  useEffect(() => {
-    if (selectedPaint && selectedWheel) {
-      setPreviewUrl(buildCompositorUrl(modelCode, selectedPaint, selectedWheel, showVariant ? selectedVariant : undefined));
-    }
-  }, [modelCode, selectedPaint, selectedWheel, selectedVariant, showVariant]);
 
   const save = useMutation({
     mutationFn: () => api('/costs/settings', { method: 'PUT', body: JSON.stringify(form) }),
@@ -74,20 +47,25 @@ export default function Settings({ carId }: Props) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['chargingLocations'] }),
   });
 
-  const handleSaveAppearance = async () => {
-    if (!carId) return;
+  const handleSaveTeslaUrl = async () => {
+    if (!carId || !teslaUrl.trim()) return;
+
+    if (!teslaUrl.includes('static-assets.tesla.com') || !teslaUrl.includes('compositor')) {
+      setUrlError('Invalid URL. Must be a Tesla compositor URL.');
+      return;
+    }
+
+    setUrlError('');
     setSaving(true);
     try {
       await api(`/vehicle/${carId}/image/compositor`, {
         method: 'PUT',
-        body: JSON.stringify({
-          modelCode,
-          paintCode: selectedPaint,
-          wheelCode: selectedWheel,
-          variantCode: showVariant ? selectedVariant : undefined,
-        }),
+        body: JSON.stringify({ url: teslaUrl.trim() }),
       });
       queryClient.invalidateQueries({ queryKey: ['carImageInfo', carId] });
+      setTeslaUrl('');
+    } catch {
+      setUrlError('Failed to download image. Check the URL.');
     } finally {
       setSaving(false);
     }
@@ -212,93 +190,43 @@ export default function Settings({ carId }: Props) {
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-4">
           <div className="text-xs text-[#9ca3af] uppercase tracking-wider">Vehicle image</div>
 
-          <div className="flex justify-center bg-[#0a0a0a] rounded-lg p-3">
-            {imageInfo?.isCustomUpload ? (
-              <img src={`/api/vehicle/${carId}/image?t=${Date.now()}`} alt="Custom" className="h-[100px] object-contain" />
-            ) : previewUrl ? (
-              <img src={previewUrl} alt="Preview" className="h-[100px] object-contain" />
-            ) : (
-              <span className="text-[#6b7280] text-xs">Select color and wheels</span>
-            )}
-          </div>
-
-          {!imageInfo?.isCustomUpload && (
-            <>
-              <div>
-                <div className="text-xs text-[#6b7280] mb-2">Color</div>
-                <div className="flex flex-wrap gap-2">
-                  {PAINT_OPTIONS.map((p) => (
-                    <button
-                      key={p.code}
-                      onClick={() => setSelectedPaint(p.code)}
-                      className="flex flex-col items-center gap-1"
-                    >
-                      <div
-                        className="w-10 h-10 rounded-full border-2 transition-all"
-                        style={{
-                          backgroundColor: p.hex,
-                          borderColor: selectedPaint === p.code ? '#e31937' : '#2a2a2a',
-                          boxShadow: selectedPaint === p.code ? '0 0 0 2px #e31937' : 'none',
-                        }}
-                      />
-                      <span className={`text-[9px] leading-tight text-center max-w-[48px] ${selectedPaint === p.code ? 'text-white' : 'text-[#6b7280]'}`}>
-                        {p.name}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-xs text-[#6b7280] mb-2">Wheels ({vehicle?.model ? `Model ${vehicle.model}` : 'Model 3'})</div>
-                <div className="flex flex-wrap gap-2">
-                  {wheels.map((w) => (
-                    <button
-                      key={w.code}
-                      onClick={() => setSelectedWheel(w.code)}
-                      className={`px-3 py-2 rounded-lg text-xs border transition-all min-h-[36px] ${
-                        selectedWheel === w.code
-                          ? 'border-[#e31937] text-white bg-[#e31937]/10'
-                          : 'border-[#2a2a2a] text-[#9ca3af] bg-[#0a0a0a]'
-                      }`}
-                    >
-                      {w.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {showVariant && (
-                <div>
-                  <div className="text-xs text-[#6b7280] mb-2">Variant (Highland)</div>
-                  <div className="flex flex-wrap gap-2">
-                    {HIGHLAND_M3_VARIANTS.map((v) => (
-                      <button
-                        key={v.code}
-                        onClick={() => setSelectedVariant(v.code)}
-                        className={`px-3 py-2 rounded-lg text-xs border transition-all min-h-[36px] ${
-                          selectedVariant === v.code
-                            ? 'border-[#e31937] text-white bg-[#e31937]/10'
-                            : 'border-[#2a2a2a] text-[#9ca3af] bg-[#0a0a0a]'
-                        }`}
-                      >
-                        {v.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <button
-                onClick={handleSaveAppearance}
-                disabled={saving}
-                className="bg-[#e31937] text-white px-6 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f] disabled:opacity-50 w-full"
-              >
-                {saving ? 'Downloading image...' : 'Save appearance'}
-              </button>
-            </>
+          {imageInfo?.hasImage && (
+            <div className="flex justify-center bg-[#0a0a0a] rounded-lg p-3">
+              <img
+                src={`/api/vehicle/${carId}/image?t=${Date.now()}`}
+                alt="Vehicle"
+                className="h-[120px] object-contain"
+              />
+            </div>
           )}
 
+          {/* Tesla URL input */}
+          <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3 space-y-3">
+            <div className="text-xs text-[#9ca3af] font-medium">Import from Tesla account</div>
+            <div className="text-xs text-[#6b7280] leading-relaxed space-y-1">
+              <p>1. Go to <span className="text-white">tesla.com</span> and sign in</p>
+              <p>2. Right-click on your car image</p>
+              <p>3. Select <span className="text-white">"Copy image address"</span></p>
+              <p>4. Paste the URL below</p>
+            </div>
+            <input
+              className={inputClass}
+              type="url"
+              placeholder="https://static-assets.tesla.com/v1/compositor/..."
+              value={teslaUrl}
+              onChange={(e) => { setTeslaUrl(e.target.value); setUrlError(''); }}
+            />
+            {urlError && <p className="text-xs text-[#ef4444]">{urlError}</p>}
+            <button
+              onClick={handleSaveTeslaUrl}
+              disabled={saving || !teslaUrl.trim()}
+              className="bg-[#e31937] text-white px-6 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f] disabled:opacity-50 w-full"
+            >
+              {saving ? 'Downloading...' : 'Save image'}
+            </button>
+          </div>
+
+          {/* Upload + Delete buttons */}
           <div className="flex gap-2">
             <button
               onClick={() => fileRef.current?.click()}
