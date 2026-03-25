@@ -8,6 +8,7 @@ public record VehicleDto
     public string? MarketingName { get; init; }
     public string? TrimBadging { get; init; }
     public string? ExteriorColor { get; init; }
+    public string? WheelType { get; init; }
     public string? Vin { get; init; }
     public double? Efficiency { get; init; }
 

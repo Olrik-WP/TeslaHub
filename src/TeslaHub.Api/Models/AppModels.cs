@@ -119,6 +119,29 @@ public class ChargingCostOverride
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
+public class CarImage
+{
+    [Key]
+    public int Id { get; set; }
+
+    public int CarId { get; set; }
+
+    [MaxLength(20)]
+    public string? PaintCode { get; set; }
+
+    [MaxLength(20)]
+    public string? WheelCode { get; set; }
+
+    public bool IsCustomUpload { get; set; }
+
+    public byte[] ImageData { get; set; } = [];
+
+    [MaxLength(50)]
+    public string ContentType { get; set; } = "image/jpeg";
+
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
 // ─── DTOs ──────────────────────────────────────────────────────
 
 public record ChargingLocationCreateDto

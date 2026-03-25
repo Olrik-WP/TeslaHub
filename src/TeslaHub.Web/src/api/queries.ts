@@ -15,6 +15,7 @@ export interface VehicleStatus {
   marketingName: string | null;
   trimBadging: string | null;
   exteriorColor: string | null;
+  wheelType: string | null;
   vin: string | null;
   efficiency: number | null;
   batteryLevel: number | null;
@@ -190,6 +191,16 @@ export const getSuggestedPrice = (lat: number, lng: number, carId: number) =>
   api<{ suggestedPrice: number | null }>(`/costs/suggest-price?lat=${lat}&lng=${lng}&carId=${carId}`);
 export const getMatchingLocation = (lat: number, lng: number, carId?: number) =>
   api<ChargingLocation | null>(`/costs/match-location?lat=${lat}&lng=${lng}${carId ? `&carId=${carId}` : ''}`);
+
+// ─── Vehicle Image ──────────────────────────────────────────────
+export interface CarImageInfo {
+  paintCode: string | null;
+  wheelCode: string | null;
+  isCustomUpload: boolean;
+  hasImage: boolean;
+}
+
+export const getCarImageInfo = (carId: number) => api<CarImageInfo>(`/vehicle/${carId}/image/info`);
 
 // ─── Settings ───────────────────────────────────────────────────
 export const getSettings = () => api<GlobalSettings>('/costs/settings');

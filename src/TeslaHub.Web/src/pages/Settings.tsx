@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getSettings, getChargingLocations } from '../api/queries';
+import { getSettings, getChargingLocations, getCarImageInfo } from '../api/queries';
+import { useVehicleStatus } from '../hooks/useVehicle';
 import { useUnits } from '../hooks/useUnits';
 import { api, logout } from '../api/client';
 import { useNavigate } from 'react-router-dom';
+import { PAINT_OPTIONS, getModelCode, getWheelsForModel, buildCompositorUrl } from '../utils/teslaCompositor';
 import type { GlobalSettings, ChargingLocation } from '../api/queries';
 
 interface Props {
@@ -14,18 +16,50 @@ export default function Settings({ carId }: Props) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const u = useUnits();
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings });
   const { data: locations } = useQuery({
     queryKey: ['chargingLocations', carId],
     queryFn: () => getChargingLocations(carId),
   });
+  const { data: vehicle } = useVehicleStatus(carId);
+  const { data: imageInfo } = useQuery({
+    queryKey: ['carImageInfo', carId],
+    queryFn: () => getCarImageInfo(carId!),
+    enabled: !!carId,
+  });
 
   const [form, setForm] = useState<Partial<GlobalSettings>>({});
+  const [selectedPaint, setSelectedPaint] = useState('PPSW');
+  const [selectedWheel, setSelectedWheel] = useState('');
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const modelCode = getModelCode(vehicle?.model);
+  const wheels = getWheelsForModel(modelCode);
 
   useEffect(() => {
     if (settings) setForm(settings);
   }, [settings]);
+
+  useEffect(() => {
+    if (imageInfo?.paintCode) setSelectedPaint(imageInfo.paintCode);
+    if (imageInfo?.wheelCode) setSelectedWheel(imageInfo.wheelCode);
+  }, [imageInfo]);
+
+  useEffect(() => {
+    if (!selectedWheel && wheels.length > 0) {
+      setSelectedWheel(wheels[0].code);
+    }
+  }, [wheels, selectedWheel]);
+
+  useEffect(() => {
+    if (selectedPaint && selectedWheel) {
+      setPreviewUrl(buildCompositorUrl(modelCode, selectedPaint, selectedWheel));
+    }
+  }, [modelCode, selectedPaint, selectedWheel]);
 
   const save = useMutation({
     mutationFn: () => api('/costs/settings', { method: 'PUT', body: JSON.stringify(form) }),
@@ -36,6 +70,46 @@ export default function Settings({ carId }: Props) {
     mutationFn: (id: number) => api(`/costs/locations/${id}`, { method: 'DELETE' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['chargingLocations'] }),
   });
+
+  const handleSaveAppearance = async () => {
+    if (!carId) return;
+    setSaving(true);
+    try {
+      await api(`/vehicle/${carId}/image/compositor`, {
+        method: 'PUT',
+        body: JSON.stringify({ modelCode, paintCode: selectedPaint, wheelCode: selectedWheel }),
+      });
+      queryClient.invalidateQueries({ queryKey: ['carImageInfo', carId] });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpload = async (file: File) => {
+    if (!carId || file.size > 2 * 1024 * 1024) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const token = localStorage.getItem('teslahub_token');
+      await fetch(`/api/vehicle/${carId}/image/upload`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      queryClient.invalidateQueries({ queryKey: ['carImageInfo', carId] });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteImage = async () => {
+    if (!carId) return;
+    await api(`/vehicle/${carId}/image`, { method: 'DELETE' });
+    queryClient.invalidateQueries({ queryKey: ['carImageInfo', carId] });
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -72,6 +146,114 @@ export default function Settings({ carId }: Props) {
     <div className="p-4 space-y-4">
       <h1 className="text-xl font-bold">Settings</h1>
 
+      {/* Vehicle Image Section */}
+      {carId && (
+        <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-4">
+          <div className="text-xs text-[#9ca3af] uppercase tracking-wider">Vehicle image</div>
+
+          {/* Preview */}
+          <div className="flex justify-center bg-[#0a0a0a] rounded-lg p-3">
+            {imageInfo?.isCustomUpload ? (
+              <img src={`/api/vehicle/${carId}/image?t=${Date.now()}`} alt="Custom" className="h-[100px] object-contain" />
+            ) : previewUrl ? (
+              <img src={previewUrl} alt="Preview" className="h-[100px] object-contain" />
+            ) : (
+              <span className="text-[#6b7280] text-xs">Select color and wheels</span>
+            )}
+          </div>
+
+          {/* Color swatches */}
+          {!imageInfo?.isCustomUpload && (
+            <>
+              <div>
+                <div className="text-xs text-[#6b7280] mb-2">Color</div>
+                <div className="flex flex-wrap gap-2">
+                  {PAINT_OPTIONS.map((p) => (
+                    <button
+                      key={p.code}
+                      onClick={() => setSelectedPaint(p.code)}
+                      className="flex flex-col items-center gap-1"
+                    >
+                      <div
+                        className="w-10 h-10 rounded-full border-2 transition-all"
+                        style={{
+                          backgroundColor: p.hex,
+                          borderColor: selectedPaint === p.code ? '#e31937' : '#2a2a2a',
+                          boxShadow: selectedPaint === p.code ? '0 0 0 2px #e31937' : 'none',
+                        }}
+                      />
+                      <span className={`text-[9px] leading-tight text-center max-w-[48px] ${selectedPaint === p.code ? 'text-white' : 'text-[#6b7280]'}`}>
+                        {p.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Wheel selector */}
+              <div>
+                <div className="text-xs text-[#6b7280] mb-2">Wheels ({vehicle?.model ? `Model ${vehicle.model}` : 'Model 3'})</div>
+                <div className="flex flex-wrap gap-2">
+                  {wheels.map((w) => (
+                    <button
+                      key={w.code}
+                      onClick={() => setSelectedWheel(w.code)}
+                      className={`px-3 py-2 rounded-lg text-xs border transition-all min-h-[36px] ${
+                        selectedWheel === w.code
+                          ? 'border-[#e31937] text-white bg-[#e31937]/10'
+                          : 'border-[#2a2a2a] text-[#9ca3af] bg-[#0a0a0a]'
+                      }`}
+                    >
+                      {w.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Save appearance */}
+              <button
+                onClick={handleSaveAppearance}
+                disabled={saving}
+                className="bg-[#e31937] text-white px-6 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f] disabled:opacity-50 w-full"
+              >
+                {saving ? 'Downloading image...' : 'Save appearance'}
+              </button>
+            </>
+          )}
+
+          {/* Upload / Remove */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="flex-1 bg-[#1a1a1a] border border-[#2a2a2a] text-white py-2 rounded-lg text-sm min-h-[44px] active:bg-[#2a2a2a] disabled:opacity-50"
+            >
+              {uploading ? 'Uploading...' : 'Upload my photo'}
+            </button>
+            {imageInfo?.hasImage && (
+              <button
+                onClick={handleDeleteImage}
+                className="px-4 bg-[#1a1a1a] border border-[#2a2a2a] text-[#ef4444] py-2 rounded-lg text-sm min-h-[44px] active:bg-[#2a2a2a]"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleUpload(file);
+              e.target.value = '';
+            }}
+          />
+        </div>
+      )}
+
+      {/* General settings */}
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-4">
         <div>
           <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">Currency</label>
@@ -124,6 +306,7 @@ export default function Settings({ carId }: Props) {
         </button>
       </div>
 
+      {/* Charging locations */}
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
         <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">Charging locations</div>
         <div className="space-y-2">
@@ -153,6 +336,7 @@ export default function Settings({ carId }: Props) {
         </div>
       </div>
 
+      {/* About */}
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
         <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2">About</div>
         <p className="text-sm text-[#9ca3af]">TeslaHub — TeslaMate companion app</p>

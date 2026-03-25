@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<CarConfig> CarConfigs => Set<CarConfig>();
     public DbSet<ChargingLocation> ChargingLocations => Set<ChargingLocation>();
     public DbSet<ChargingCostOverride> ChargingCostOverrides => Set<ChargingCostOverride>();
+    public DbSet<CarImage> CarImages => Set<CarImage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -25,6 +26,10 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<ChargingCostOverride>()
             .HasIndex(c => new { c.ChargingProcessId, c.CarId })
+            .IsUnique();
+
+        modelBuilder.Entity<CarImage>()
+            .HasIndex(c => c.CarId)
             .IsUnique();
 
         modelBuilder.Entity<GlobalSettings>().HasData(new GlobalSettings

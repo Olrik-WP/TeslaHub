@@ -23,7 +23,8 @@ public static class VehicleQueries
             SELECT
                 c.id AS "CarId", c.name AS "Name", c.model AS "Model",
                 c.marketing_name AS "MarketingName", c.trim_badging AS "TrimBadging",
-                c.exterior_color AS "ExteriorColor", c.vin AS "Vin", c.efficiency AS "Efficiency",
+                c.exterior_color AS "ExteriorColor", c.wheel_type AS "WheelType",
+                c.vin AS "Vin", c.efficiency AS "Efficiency",
                 p.battery_level AS "BatteryLevel",
                 p.usable_battery_level AS "UsableBatteryLevel",
                 p.rated_battery_range_km AS "RatedBatteryRangeKm",
