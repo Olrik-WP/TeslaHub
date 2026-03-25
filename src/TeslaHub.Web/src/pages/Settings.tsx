@@ -5,7 +5,7 @@ import { useVehicleStatus } from '../hooks/useVehicle';
 import { useUnits } from '../hooks/useUnits';
 import { api, logout } from '../api/client';
 import { useNavigate } from 'react-router-dom';
-import { PAINT_OPTIONS, getModelCode, getWheelsForModel, buildCompositorUrl } from '../utils/teslaCompositor';
+import { PAINT_OPTIONS, getModelCode, getWheelsForModel, buildCompositorUrl, isHighlandWheel, HIGHLAND_M3_VARIANTS } from '../utils/teslaCompositor';
 import type { GlobalSettings, ChargingLocation } from '../api/queries';
 
 interface Props {
@@ -33,6 +33,7 @@ export default function Settings({ carId }: Props) {
   const [form, setForm] = useState<Partial<GlobalSettings>>({});
   const [selectedPaint, setSelectedPaint] = useState('PPSW');
   const [selectedWheel, setSelectedWheel] = useState('');
+  const [selectedVariant, setSelectedVariant] = useState('MT336');
   const [previewUrl, setPreviewUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -55,11 +56,13 @@ export default function Settings({ carId }: Props) {
     }
   }, [wheels, selectedWheel]);
 
+  const showVariant = isHighlandWheel(modelCode, selectedWheel);
+
   useEffect(() => {
     if (selectedPaint && selectedWheel) {
-      setPreviewUrl(buildCompositorUrl(modelCode, selectedPaint, selectedWheel));
+      setPreviewUrl(buildCompositorUrl(modelCode, selectedPaint, selectedWheel, showVariant ? selectedVariant : undefined));
     }
-  }, [modelCode, selectedPaint, selectedWheel]);
+  }, [modelCode, selectedPaint, selectedWheel, selectedVariant, showVariant]);
 
   const save = useMutation({
     mutationFn: () => api('/costs/settings', { method: 'PUT', body: JSON.stringify(form) }),
@@ -77,7 +80,12 @@ export default function Settings({ carId }: Props) {
     try {
       await api(`/vehicle/${carId}/image/compositor`, {
         method: 'PUT',
-        body: JSON.stringify({ modelCode, paintCode: selectedPaint, wheelCode: selectedWheel }),
+        body: JSON.stringify({
+          modelCode,
+          paintCode: selectedPaint,
+          wheelCode: selectedWheel,
+          variantCode: showVariant ? selectedVariant : undefined,
+        }),
       });
       queryClient.invalidateQueries({ queryKey: ['carImageInfo', carId] });
     } finally {
@@ -259,6 +267,27 @@ export default function Settings({ carId }: Props) {
                   ))}
                 </div>
               </div>
+
+              {showVariant && (
+                <div>
+                  <div className="text-xs text-[#6b7280] mb-2">Variant (Highland)</div>
+                  <div className="flex flex-wrap gap-2">
+                    {HIGHLAND_M3_VARIANTS.map((v) => (
+                      <button
+                        key={v.code}
+                        onClick={() => setSelectedVariant(v.code)}
+                        className={`px-3 py-2 rounded-lg text-xs border transition-all min-h-[36px] ${
+                          selectedVariant === v.code
+                            ? 'border-[#e31937] text-white bg-[#e31937]/10'
+                            : 'border-[#2a2a2a] text-[#9ca3af] bg-[#0a0a0a]'
+                        }`}
+                      >
+                        {v.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <button
                 onClick={handleSaveAppearance}

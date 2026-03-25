@@ -59,6 +59,35 @@ export function getWheelsForModel(modelCode: string): WheelOption[] {
   return WHEELS_BY_MODEL[modelCode] ?? WHEELS_BY_MODEL.m3;
 }
 
-export function buildCompositorUrl(modelCode: string, paintCode: string, wheelCode: string): string {
-  return `https://static-assets.tesla.com/configurator/compositor?model=${modelCode}&view=STUD_3QTR&size=800&options=$${paintCode},$${wheelCode}&bkba_opt=1`;
+export const HIGHLAND_M3_WHEELS = new Set(['W38A', 'W40B']);
+
+export interface VariantOption {
+  code: string;
+  name: string;
+}
+
+export const HIGHLAND_M3_VARIANTS: VariantOption[] = [
+  { code: 'MT336', name: 'Propulsion (RWD)' },
+  { code: 'MT337', name: 'Long Range (AWD)' },
+  { code: 'MT338', name: 'Performance (AWD)' },
+];
+
+export function isHighlandWheel(modelCode: string, wheelCode: string): boolean {
+  return modelCode === 'm3' && HIGHLAND_M3_WHEELS.has(wheelCode);
+}
+
+export function buildCompositorUrl(
+  modelCode: string,
+  paintCode: string,
+  wheelCode: string,
+  variantCode?: string
+): string {
+  let opts = `$${paintCode},$${wheelCode}`;
+
+  if (modelCode === 'm3' && HIGHLAND_M3_WHEELS.has(wheelCode)) {
+    const variant = variantCode || 'MT336';
+    opts = `$${variant},$${paintCode},$${wheelCode}`;
+  }
+
+  return `https://static-assets.tesla.com/configurator/compositor?model=${modelCode}&view=STUD_3QTR&size=800&options=${opts}&bkba_opt=1`;
 }

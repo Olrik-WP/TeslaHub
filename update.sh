@@ -74,6 +74,7 @@ cd "$REPO_DIR"
 git pull --ff-only
 
 # ── Rebuild and restart only TeslaHub ────────────────────────────
+export COMPOSE_BAKE=false
 cd "$DEPLOY_DIR"
 
 log "Stopping TeslaHub services..."

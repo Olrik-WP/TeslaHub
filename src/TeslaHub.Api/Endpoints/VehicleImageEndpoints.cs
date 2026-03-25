@@ -53,7 +53,7 @@ public static class VehicleImageEndpoints
         int carId, AppearanceDto dto, AppDbContext db,
         IHttpClientFactory httpFactory, CompositorService compositor)
     {
-        var url = compositor.BuildUrl(dto.ModelCode, dto.PaintCode, dto.WheelCode);
+        var url = compositor.BuildUrl(dto.ModelCode, dto.PaintCode, dto.WheelCode, dto.VariantCode);
 
         var client = httpFactory.CreateClient("tesla");
         byte[] imageBytes;
@@ -207,4 +207,5 @@ public record AppearanceDto
     public string ModelCode { get; init; } = "";
     public string PaintCode { get; init; } = "";
     public string WheelCode { get; init; } = "";
+    public string? VariantCode { get; init; }
 }

@@ -56,8 +56,23 @@ public class CompositorService
     public string? MapWheel(string? wheelType) =>
         wheelType != null && WheelMap.TryGetValue(wheelType, out var w) ? w : null;
 
-    public string BuildUrl(string modelCode, string paintCode, string wheelCode) =>
-        $"https://static-assets.tesla.com/configurator/compositor?model={modelCode}&view=STUD_3QTR&size=800&options=${paintCode},${wheelCode}&bkba_opt=1";
+    private static readonly HashSet<string> HighlandM3Wheels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "W38A", "W40B"
+    };
+
+    public string BuildUrl(string modelCode, string paintCode, string wheelCode, string? variantCode = null)
+    {
+        var opts = $"${paintCode},${wheelCode}";
+
+        if (modelCode == "m3" && HighlandM3Wheels.Contains(wheelCode))
+        {
+            var variant = variantCode ?? "MT336";
+            opts = $"${variant},${paintCode},${wheelCode}";
+        }
+
+        return $"https://static-assets.tesla.com/configurator/compositor?model={modelCode}&view=STUD_3QTR&size=800&options={opts}&bkba_opt=1";
+    }
 
     public string? TryBuildAutoUrl(string? model, string? exteriorColor, string? wheelType)
     {
