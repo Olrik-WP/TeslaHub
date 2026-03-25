@@ -137,45 +137,38 @@ export default function Home({ carId }: Props) {
 
   return (
     <div className="p-4 space-y-4">
-      {/* Header */}
-      <div className="text-center">
-        <h1 className="text-xl font-bold">
-          {vehicle.marketingName || vehicle.model || vehicle.name}
-        </h1>
-        <p className="text-sm text-[#9ca3af] mt-1">
-          {[vehicle.exteriorColor, vehicle.vin ? `VIN ${vehicle.vin}` : null]
-            .filter(Boolean)
-            .join(' · ')}
-        </p>
-      </div>
-
       {/* Hero: Vehicle image with drive stats */}
       <div className="bg-[#141414] rounded-xl overflow-hidden">
         {/* Top row: drive averages */}
         {driveStats && driveStats.driveCount > 0 && (
           <div className="grid grid-cols-3 border-b border-[#2a2a2a]">
             <div className="px-3 py-2 text-center">
-              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">Median dist.</div>
-              <div className="text-sm font-bold tabular-nums text-[#e31937]">{driveStats.medianDistanceKm != null ? u.fmtDist(driveStats.medianDistanceKm) : '—'} <span className="text-[10px] font-normal text-[#e31937]/50">{u.distanceUnit}</span></div>
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Median dist.</div>
+              <div className="text-sm font-bold tabular-nums text-[#e31937]">{driveStats.medianDistanceKm != null ? u.fmtDist(driveStats.medianDistanceKm) : '—'} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
             </div>
             <div className="px-3 py-2 text-center border-x border-[#2a2a2a]">
-              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">Ø Dist/day</div>
-              <div className="text-sm font-bold tabular-nums text-[#e31937]">{u.fmtDist(driveStats.totalDistanceKm / driveStats.totalDays)} <span className="text-[10px] font-normal text-[#e31937]/50">{u.distanceUnit}</span></div>
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Ø Dist/day</div>
+              <div className="text-sm font-bold tabular-nums text-[#e31937]">{u.fmtDist(driveStats.totalDistanceKm / driveStats.totalDays)} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
             </div>
             <div className="px-3 py-2 text-center">
-              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">Ø kWh/day</div>
-              <div className="text-sm font-bold tabular-nums text-[#e31937]">{(driveStats.totalNetEnergyKwh / driveStats.totalDays).toFixed(1)} <span className="text-[10px] font-normal text-[#e31937]/50">kWh</span></div>
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Ø kWh/day</div>
+              <div className="text-sm font-bold tabular-nums text-[#e31937]">{(driveStats.totalNetEnergyKwh / driveStats.totalDays).toFixed(1)} <span className="text-[10px] font-normal text-[#9ca3af]">kWh</span></div>
             </div>
           </div>
         )}
 
-        {/* Middle row: Max Speed | Car Image | Battery Gauge */}
+        {/* Middle row: Vehicle info + Max Speed | Car Image | Battery Gauge */}
         <div className="relative flex items-center h-[220px]">
+          <div className="absolute left-3 top-2 z-10 bg-black/60 rounded-xl px-3 py-2">
+            <div className="text-sm font-bold">{vehicle.marketingName || vehicle.model || vehicle.name}</div>
+            {vehicle.exteriorColor && <div className="text-[10px] text-[#9ca3af]">{vehicle.exteriorColor}</div>}
+            {vehicle.vin && <div className="text-[10px] text-[#9ca3af] tabular-nums">{vehicle.vin}</div>}
+          </div>
           {driveStats && driveStats.maxSpeedKmh != null && (
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10 bg-black/60 rounded-xl px-3 py-2 text-center">
-              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">Max Speed</div>
+            <div className="absolute left-3 bottom-2 z-10 bg-black/60 rounded-xl px-3 py-2 text-center">
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Max Speed</div>
               <div className="text-xl font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.maxSpeedKmh)!)}</div>
-              <div className="text-[10px] text-[#e31937]/50">{u.distanceUnit === 'mi' ? 'mph' : 'km/h'}</div>
+              <div className="text-[10px] text-[#9ca3af]">{u.distanceUnit === 'mi' ? 'mph' : 'km/h'}</div>
             </div>
           )}
           <div className="flex-1 flex items-center justify-center">
@@ -204,16 +197,16 @@ export default function Home({ carId }: Props) {
         {driveStats && driveStats.driveCount > 0 && (
           <div className="grid grid-cols-3 border-t border-[#2a2a2a]">
             <div className="px-3 py-2 text-center">
-              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">Est. Monthly</div>
-              <div className="text-sm font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * (365 / 12))!).toLocaleString()} <span className="text-[10px] font-normal text-[#e31937]/50">{u.distanceUnit}</span></div>
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Est. Monthly</div>
+              <div className="text-sm font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * (365 / 12))!).toLocaleString()} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
             </div>
             <div className="px-3 py-2 text-center border-x border-[#2a2a2a]">
-              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">{driveStats.driveCount} trips</div>
-              <div className="text-sm font-bold tabular-nums text-[#e31937]">{Math.round(driveStats.totalDays)} <span className="text-[10px] font-normal text-[#e31937]/50">days</span></div>
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{driveStats.driveCount} trips</div>
+              <div className="text-sm font-bold tabular-nums text-[#e31937]">{Math.round(driveStats.totalDays)} <span className="text-[10px] font-normal text-[#9ca3af]">days</span></div>
             </div>
             <div className="px-3 py-2 text-center">
-              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">Est. Annual</div>
-              <div className="text-sm font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * 365)!).toLocaleString()} <span className="text-[10px] font-normal text-[#e31937]/50">{u.distanceUnit}</span></div>
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Est. Annual</div>
+              <div className="text-sm font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * 365)!).toLocaleString()} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
             </div>
           </div>
         )}
