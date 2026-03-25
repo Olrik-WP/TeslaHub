@@ -205,8 +205,9 @@ export const getChargingLocations = (carId?: number) =>
   api<ChargingLocation[]>(`/costs/locations${carId ? `?carId=${carId}` : ''}`);
 export const getCostOverrides = (carId: number) =>
   api<CostOverride[]>(`/costs/overrides/${carId}`);
-export const getCostSummary = (carId: number, year?: number, month?: number) => {
+export const getCostSummary = (carId: number, period?: string, year?: number, month?: number) => {
   const params = new URLSearchParams();
+  if (period) params.set('period', period);
   if (year) params.set('year', String(year));
   if (month) params.set('month', String(month));
   return api<CostSummary>(`/costs/summary/${carId}?${params}`);
@@ -251,8 +252,9 @@ export interface CarImageInfo {
 export const getCarImageInfo = (carId: number) => api<CarImageInfo>(`/vehicle/${carId}/image/info`);
 
 // ─── TeslaMate cost analytics ────────────────────────────────────
-export const getTeslaMateCostSummary = (carId: number, year?: number, month?: number) => {
+export const getTeslaMateCostSummary = (carId: number, period?: string, year?: number, month?: number) => {
   const params = new URLSearchParams();
+  if (period) params.set('period', period);
   if (year) params.set('year', String(year));
   if (month) params.set('month', String(month));
   return api<CostSummary>(`/costs/teslamate-summary/${carId}?${params}`);

@@ -107,24 +107,31 @@ public static class CostsEndpoints
 
         // ─── Analytics ─────────────────────────────────────────────
 
-        group.MapGet("/summary/{carId:int}", async (int carId, int? year, int? month, CostService costService) =>
+        group.MapGet("/summary/{carId:int}", async (int carId, string? period, int? year, int? month,
+            CostService costService, TeslaMateConnectionFactory tm) =>
         {
+            var p = period ?? "month";
             var y = year ?? DateTime.UtcNow.Year;
             var m = month ?? DateTime.UtcNow.Month;
-            var summary = await costService.GetMonthlySummary(carId, y, m, 0);
+            var (start, end, _) = CostService.ComputeDateRange(p, y, m);
+            var dist = await tm.GetTotalDistanceAsync(carId, start, end);
+            var summary = await costService.GetSummary(carId, p, y, m, dist);
             return Results.Ok(summary);
         });
 
         // ─── TeslaMate cost analytics ────────────────────────────────
 
-        group.MapGet("/teslamate-summary/{carId:int}", async (int carId, int? year, int? month,
+        group.MapGet("/teslamate-summary/{carId:int}", async (int carId, string? period, int? year, int? month,
             TeslaMateConnectionFactory tm, CacheService cache) =>
         {
+            var p = period ?? "month";
             var y = year ?? DateTime.UtcNow.Year;
             var m = month ?? DateTime.UtcNow.Month;
+            var (start, end, label) = CostService.ComputeDateRange(p, y, m);
+            var dist = await tm.GetTotalDistanceAsync(carId, start, end);
             var summary = await cache.GetOrSetHistoricalAsync(
-                $"tmCostSummary:{carId}:{y}:{m}",
-                () => tm.GetTeslaMateCostSummaryAsync(carId, y, m));
+                $"tmCostSummary:{carId}:{p}:{y}:{m}",
+                () => tm.GetTeslaMateCostSummaryAsync(carId, start, end, label, dist));
             return Results.Ok(summary);
         });
 

@@ -54,6 +54,19 @@ public static class DrivesQueries
             """, new { CarId = carId });
     }
 
+    public static async Task<double> GetTotalDistanceAsync(this TeslaMateConnectionFactory db, int carId, DateTime? from, DateTime? to)
+    {
+        using var conn = db.CreateConnection();
+        return await conn.ExecuteScalarAsync<double>("""
+            SELECT COALESCE(SUM(distance), 0)
+            FROM drives
+            WHERE car_id = @CarId
+              AND end_date IS NOT NULL
+              AND (@From IS NULL OR start_date >= @From)
+              AND (@To IS NULL OR start_date < @To)
+            """, new { CarId = carId, From = from, To = to });
+    }
+
     public static async Task<IEnumerable<PositionDto>> GetDrivePositionsAsync(this TeslaMateConnectionFactory db, int driveId)
     {
         using var conn = db.CreateConnection();

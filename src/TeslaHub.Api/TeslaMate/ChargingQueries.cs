@@ -125,11 +125,9 @@ public static class ChargingQueries
     }
 
     public static async Task<CostSummaryDto> GetTeslaMateCostSummaryAsync(
-        this TeslaMateConnectionFactory db, int carId, int year, int month)
+        this TeslaMateConnectionFactory db, int carId, DateTime? start, DateTime? end, string label, double totalDistanceKm)
     {
         using var conn = db.CreateConnection();
-        var monthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
-        var monthEnd = monthStart.AddMonths(1);
 
         var row = await conn.QueryFirstOrDefaultAsync<(
             decimal TotalCost,
@@ -145,8 +143,9 @@ public static class ChargingQueries
             FROM charging_processes
             WHERE car_id = @CarId
               AND charge_energy_added > 0.01
-              AND start_date >= @Start AND start_date < @End
-            """, new { CarId = carId, Start = monthStart, End = monthEnd });
+              AND (@Start IS NULL OR start_date >= @Start)
+              AND (@End IS NULL OR start_date < @End)
+            """, new { CarId = carId, Start = start, End = end });
 
         var locationRows = await conn.QueryAsync<(string Name, decimal Cost)>("""
             SELECT
@@ -158,17 +157,20 @@ public static class ChargingQueries
             WHERE cp.car_id = @CarId
               AND cp.charge_energy_added > 0.01
               AND cp.cost > 0
-              AND cp.start_date >= @Start AND cp.start_date < @End
+              AND (@Start IS NULL OR cp.start_date >= @Start)
+              AND (@End IS NULL OR cp.start_date < @End)
             GROUP BY COALESCE(g.name, SPLIT_PART(a.display_name, ',', 1), 'Other')
             ORDER BY "Cost" DESC
-            """, new { CarId = carId, Start = monthStart, End = monthEnd });
+            """, new { CarId = carId, Start = start, End = end });
 
         return new CostSummaryDto
         {
-            Period = $"{year}-{month:D2}",
+            Period = label,
             TotalCost = row.TotalCost,
             TotalKwh = row.TotalKwh,
             AvgPricePerKwh = row.TotalKwh > 0 ? Math.Round(row.TotalCost / row.TotalKwh, 4) : 0,
+            CostPerKm = totalDistanceKm > 0 ? Math.Round(row.TotalCost / (decimal)totalDistanceKm, 4) : 0,
+            TotalDistanceKm = (decimal)totalDistanceKm,
             SessionCount = row.SessionCount,
             FreeSessionCount = row.FreeCount,
             CostByLocation = locationRows.ToDictionary(r => r.Name, r => r.Cost)

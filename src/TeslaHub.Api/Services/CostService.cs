@@ -120,15 +120,20 @@ public class CostService
         return existing;
     }
 
-    public async Task<CostSummaryDto> GetMonthlySummary(int carId, int year, int month, double totalDistanceKm)
+    public async Task<CostSummaryDto> GetSummary(int carId, string period, int year, int month, double totalDistanceKm)
     {
-        var monthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
-        var monthEnd = monthStart.AddMonths(1);
+        var (start, end, label) = ComputeDateRange(period, year, month);
 
-        var overrides = await _db.ChargingCostOverrides
+        var query = _db.ChargingCostOverrides
             .Include(c => c.Location)
-            .Where(c => c.CarId == carId && c.CreatedAt >= monthStart && c.CreatedAt < monthEnd)
-            .ToListAsync();
+            .Where(c => c.CarId == carId);
+
+        if (start.HasValue)
+            query = query.Where(c => c.CreatedAt >= start.Value);
+        if (end.HasValue)
+            query = query.Where(c => c.CreatedAt < end.Value);
+
+        var overrides = await query.ToListAsync();
 
         var totalCost = overrides.Sum(c => c.TotalCost);
         var totalKwh = overrides
@@ -143,7 +148,7 @@ public class CostService
 
         return new CostSummaryDto
         {
-            Period = $"{year}-{month:D2}",
+            Period = label,
             TotalCost = totalCost,
             TotalKwh = totalKwh,
             AvgPricePerKwh = totalKwh > 0 ? Math.Round(totalCost / totalKwh, 4) : 0,
@@ -152,6 +157,22 @@ public class CostService
             SessionCount = sessionCount,
             FreeSessionCount = freeCount,
             CostByLocation = costByLocation
+        };
+    }
+
+    public static (DateTime? Start, DateTime? End, string Label) ComputeDateRange(string period, int year, int month)
+    {
+        return period switch
+        {
+            "year" => (
+                new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                $"{year}"),
+            "all" => (null, null, "All time"),
+            _ => (
+                new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc),
+                new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1),
+                $"{year}-{month:D2}")
         };
     }
 
