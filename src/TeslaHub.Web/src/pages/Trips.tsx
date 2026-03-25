@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useDrives } from '../hooks/useDrives';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
@@ -7,6 +8,7 @@ interface Props {
 
 export default function Trips({ carId }: Props) {
   const { data: drives, isLoading } = useDrives(carId, 30);
+  const navigate = useNavigate();
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">Loading...</div>;
@@ -17,12 +19,12 @@ export default function Trips({ carId }: Props) {
   const dailyData: Record<string, number> = {};
   driveList.forEach((d) => {
     const day = new Date(d.startDate).toLocaleDateString(undefined, { weekday: 'short', day: '2-digit' });
-    dailyData[day] = (dailyData[day] ?? 0) + (d.distance ?? 0) / 1000;
+    dailyData[day] = (dailyData[day] ?? 0) + (d.distance ?? 0);
   });
 
   const chartData = Object.entries(dailyData)
     .slice(-7)
-    .map(([day, km]) => ({ day, km: Math.round(km) }));
+    .map(([day, km]) => ({ day, km: Math.round(km * 10) / 10 }));
 
   return (
     <div className="p-4 space-y-4">
@@ -44,7 +46,11 @@ export default function Trips({ carId }: Props) {
 
       <div className="space-y-2">
         {driveList.map((drive) => (
-          <div key={drive.id} className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
+          <div
+            key={drive.id}
+            className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 active:bg-[#1a1a1a] cursor-pointer"
+            onClick={() => navigate(`/map?driveId=${drive.id}`)}
+          >
             <div className="flex items-center justify-between mb-1">
               <span className="text-sm font-medium">
                 {drive.startAddress?.split(',')[0] ?? '?'}{' → '}{drive.endAddress?.split(',')[0] ?? '?'}
@@ -54,7 +60,7 @@ export default function Trips({ carId }: Props) {
               </span>
             </div>
             <div className="flex items-center gap-4 text-sm text-[#9ca3af]">
-              <span>{drive.distance ? (drive.distance / 1000).toFixed(1) : '—'} km</span>
+              <span>{drive.distance != null ? drive.distance.toFixed(1) : '—'} km</span>
               <span>{drive.durationMin ?? '—'} min</span>
               {drive.consumptionKWhPer100Km != null && (
                 <span>{drive.consumptionKWhPer100Km.toFixed(1)} kWh/100km</span>

@@ -23,7 +23,7 @@ public static class DrivesQueries
                 sa.display_name AS "StartAddress",
                 ea.display_name AS "EndAddress",
                 CASE WHEN d.distance > 0
-                    THEN (d.start_rated_range_km - d.end_rated_range_km) * c.efficiency / (d.distance / 1000.0) * 100.0
+                    THEN (d.start_rated_range_km - d.end_rated_range_km) * c.efficiency / d.distance * 100.0
                     ELSE NULL
                 END AS "ConsumptionKWhPer100Km"
             FROM drives d

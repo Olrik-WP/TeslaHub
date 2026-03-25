@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { getRecentPositions, getPositionsInRange, getChargingSessions } from '../api/queries';
+import { useSearchParams } from 'react-router-dom';
+import { getRecentPositions, getPositionsInRange, getChargingSessions, getDrivePositions } from '../api/queries';
 import LeafletMap from '../components/LeafletMap';
 
 interface Props {
@@ -23,13 +24,26 @@ function formatDateForInput(d: Date): string {
 }
 
 export default function MapPage({ carId }: Props) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const driveIdParam = searchParams.get('driveId');
+  const driveId = driveIdParam ? parseInt(driveIdParam, 10) : null;
+
   const [rangeKey, setRangeKey] = useState<RangeKey>('48h');
   const [customFrom, setCustomFrom] = useState(() => formatDateForInput(new Date(Date.now() - 48 * 3600_000)));
   const [customTo, setCustomTo] = useState(() => formatDateForInput(new Date()));
 
   const selectedRange = RANGE_OPTIONS.find((r) => r.key === rangeKey)!;
 
-  const { data: positions } = useQuery({
+  // Single drive mode
+  const { data: drivePositions } = useQuery({
+    queryKey: ['drivePositions', driveId],
+    queryFn: () => getDrivePositions(driveId!),
+    enabled: driveId != null,
+    placeholderData: keepPreviousData,
+  });
+
+  // Range mode
+  const { data: rangePositions } = useQuery({
     queryKey: rangeKey === 'custom'
       ? ['mapPositions', carId, 'custom', customFrom, customTo]
       : ['mapPositions', carId, rangeKey],
@@ -40,7 +54,7 @@ export default function MapPage({ carId }: Props) {
       }
       return getRecentPositions(carId, selectedRange.hours!);
     },
-    enabled: !!carId,
+    enabled: !!carId && driveId == null,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   });
@@ -48,9 +62,11 @@ export default function MapPage({ carId }: Props) {
   const { data: charges } = useQuery({
     queryKey: ['chargingForMap', carId],
     queryFn: () => getChargingSessions(carId!, 20),
-    enabled: !!carId,
+    enabled: !!carId && driveId == null,
     placeholderData: keepPreviousData,
   });
+
+  const positions = driveId != null ? drivePositions : rangePositions;
 
   const routePoints = useMemo(
     () => positions?.map((p) => [p.latitude, p.longitude] as [number, number]) ?? [],
@@ -58,50 +74,69 @@ export default function MapPage({ carId }: Props) {
   );
 
   const chargeMarkers = useMemo(
-    () => charges?.filter((c) => c.endDate && c.latitude != null && c.longitude != null)?.slice(0, 20) ?? [],
-    [charges]
+    () => driveId != null ? [] : (charges?.filter((c) => c.endDate && c.latitude != null && c.longitude != null)?.slice(0, 20) ?? []),
+    [charges, driveId]
   );
+
+  const clearDrive = () => {
+    setSearchParams({});
+  };
 
   return (
     <div className="flex flex-col h-[calc(100dvh-64px)]">
-      {/* Range selector */}
-      <div className="flex gap-1 p-2 bg-[#0a0a0a] flex-wrap">
-        {RANGE_OPTIONS.map((opt) => (
+      {driveId != null ? (
+        <div className="flex items-center gap-2 p-2 bg-[#0a0a0a]">
           <button
-            key={opt.key}
-            onClick={() => setRangeKey(opt.key)}
-            className={`px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors duration-150 ${
-              rangeKey === opt.key ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
-            }`}
+            onClick={clearDrive}
+            className="px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] bg-[#1a1a1a] text-[#9ca3af] active:bg-[#2a2a2a]"
           >
-            {opt.label}
+            ← Back
           </button>
-        ))}
-      </div>
-
-      {/* Custom date inputs */}
-      {rangeKey === 'custom' && (
-        <div className="flex gap-2 px-2 pb-2 bg-[#0a0a0a]">
-          <input
-            type="datetime-local"
-            value={customFrom}
-            onChange={(e) => setCustomFrom(e.target.value)}
-            className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-lg px-2 py-1.5 text-white text-xs focus:border-[#e31937] focus:outline-none min-h-[40px]"
-          />
-          <input
-            type="datetime-local"
-            value={customTo}
-            onChange={(e) => setCustomTo(e.target.value)}
-            className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-lg px-2 py-1.5 text-white text-xs focus:border-[#e31937] focus:outline-none min-h-[40px]"
-          />
+          <span className="text-sm text-white font-medium">Trip #{driveId}</span>
+          <span className="text-xs text-[#9ca3af] ml-auto">{routePoints.length} points</span>
         </div>
-      )}
+      ) : (
+        <>
+          {/* Range selector */}
+          <div className="flex gap-1 p-2 bg-[#0a0a0a] flex-wrap">
+            {RANGE_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setRangeKey(opt.key)}
+                className={`px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors duration-150 ${
+                  rangeKey === opt.key ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
 
-      {/* Info bar */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#141414] border-b border-[#2a2a2a] text-xs text-[#9ca3af]">
-        <span>{routePoints.length > 0 ? `${routePoints.length} points` : 'No data'}</span>
-        <span>{chargeMarkers.length} charges</span>
-      </div>
+          {/* Custom date inputs */}
+          {rangeKey === 'custom' && (
+            <div className="flex gap-2 px-2 pb-2 bg-[#0a0a0a]">
+              <input
+                type="datetime-local"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-lg px-2 py-1.5 text-white text-xs focus:border-[#e31937] focus:outline-none min-h-[40px]"
+              />
+              <input
+                type="datetime-local"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-lg px-2 py-1.5 text-white text-xs focus:border-[#e31937] focus:outline-none min-h-[40px]"
+              />
+            </div>
+          )}
+
+          {/* Info bar */}
+          <div className="flex items-center justify-between px-3 py-1.5 bg-[#141414] border-b border-[#2a2a2a] text-xs text-[#9ca3af]">
+            <span>{routePoints.length > 0 ? `${routePoints.length} points` : 'No data'}</span>
+            <span>{chargeMarkers.length} charges</span>
+          </div>
+        </>
+      )}
 
       {/* Map */}
       <div className="flex-1">

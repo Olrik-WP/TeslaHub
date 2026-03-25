@@ -38,7 +38,7 @@ public static class PositionsQueries
                 COUNT(*),
                 CASE WHEN SUM(distance) > 0
                     THEN (SUM(start_rated_range_km - end_rated_range_km) * MAX(c.efficiency))
-                         / (SUM(distance) / 1000.0) * 100.0
+                         / SUM(distance) * 100.0
                     ELSE 0
                 END
             FROM drives d
@@ -59,7 +59,7 @@ public static class PositionsQueries
         return new StatsDto
         {
             Period = $"{from:yyyy-MM-dd} - {to:yyyy-MM-dd}",
-            TotalDistanceKm = Math.Round(drives.Distance / 1000.0, 1),
+            TotalDistanceKm = Math.Round(drives.Distance, 1),
             TotalEnergyAddedKWh = Math.Round(charges.Energy, 1),
             DriveCount = drives.Count,
             ChargeCount = charges.Count,
