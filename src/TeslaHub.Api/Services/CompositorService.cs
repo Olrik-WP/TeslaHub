@@ -63,15 +63,27 @@ public class CompositorService
 
     public string BuildUrl(string modelCode, string paintCode, string wheelCode, string? variantCode = null)
     {
-        var opts = $"${paintCode},${wheelCode}";
+        var parts = new List<string>();
 
-        if (modelCode == "m3" && HighlandM3Wheels.Contains(wheelCode))
+        if (modelCode == "m3")
         {
-            var variant = variantCode ?? "MT336";
-            opts = $"${variant},${paintCode},${wheelCode}";
+            if (HighlandM3Wheels.Contains(wheelCode))
+            {
+                parts.Add(variantCode ?? "MT337");
+                parts.Add("IBB1");
+            }
+            else
+            {
+                parts.Add("IN3PB");
+            }
         }
 
-        return $"https://static-assets.tesla.com/configurator/compositor?model={modelCode}&view=STUD_3QTR&size=800&options={opts}&bkba_opt=1";
+        parts.Add(paintCode);
+        parts.Add(wheelCode);
+        parts.Sort(StringComparer.Ordinal);
+
+        var opts = string.Join(",", parts);
+        return $"https://static-assets.tesla.com/configurator/compositor?model={modelCode}&view=STUD_3QTR&size=800&options={opts}&bkba_opt=2&file_type=jpg";
     }
 
     public string? TryBuildAutoUrl(string? model, string? exteriorColor, string? wheelType)

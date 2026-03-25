@@ -67,9 +67,8 @@ export interface VariantOption {
 }
 
 export const HIGHLAND_M3_VARIANTS: VariantOption[] = [
-  { code: 'MT336', name: 'Propulsion (RWD)' },
-  { code: 'MT337', name: 'Long Range (AWD)' },
-  { code: 'MT338', name: 'Performance (AWD)' },
+  { code: 'MT337', name: 'Propulsion / Long Range' },
+  { code: 'MT338', name: 'Performance' },
 ];
 
 export function isHighlandWheel(modelCode: string, wheelCode: string): boolean {
@@ -82,12 +81,19 @@ export function buildCompositorUrl(
   wheelCode: string,
   variantCode?: string
 ): string {
-  let opts = `$${paintCode},$${wheelCode}`;
+  const parts: string[] = [];
 
-  if (modelCode === 'm3' && HIGHLAND_M3_WHEELS.has(wheelCode)) {
-    const variant = variantCode || 'MT336';
-    opts = `$${variant},$${paintCode},$${wheelCode}`;
+  if (modelCode === 'm3') {
+    if (HIGHLAND_M3_WHEELS.has(wheelCode)) {
+      parts.push(variantCode || 'MT337');
+      parts.push('IBB1');
+    } else {
+      parts.push('IN3PB');
+    }
   }
 
-  return `https://static-assets.tesla.com/configurator/compositor?model=${modelCode}&view=STUD_3QTR&size=800&options=${opts}&bkba_opt=1`;
+  parts.push(paintCode, wheelCode);
+  parts.sort();
+
+  return `https://static-assets.tesla.com/configurator/compositor?model=${modelCode}&view=STUD_3QTR&size=800&options=${parts.join(',')}&bkba_opt=2&file_type=jpg`;
 }
