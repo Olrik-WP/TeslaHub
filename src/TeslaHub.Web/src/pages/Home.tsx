@@ -84,6 +84,9 @@ export default function Home({ carId }: Props) {
   const isCharging = lastCharge && !lastCharge.endDate;
   const imgSrc = carId ? `/api/vehicle/${carId}/image` : null;
 
+  const tempColor = (t: number | null | undefined) =>
+    t == null ? undefined : t <= 0 ? '#3b82f6' : t < 10 ? '#60a5fa' : t < 20 ? '#9ca3af' : t < 30 ? '#f97316' : '#ef4444';
+
   const currentCapacity = vehicle?.currentCapacityKwh ?? null;
   const maxCapacity = vehicle?.maxCapacityKwh ?? null;
 
@@ -152,16 +155,16 @@ export default function Home({ carId }: Props) {
         {driveStats && driveStats.driveCount > 0 && (
           <div className="grid grid-cols-3 border-b border-[#2a2a2a]">
             <div className="px-3 py-2 text-center">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Median dist.</div>
-              <div className="text-sm font-bold tabular-nums">{driveStats.medianDistanceKm != null ? u.fmtDist(driveStats.medianDistanceKm) : '—'} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">Median dist.</div>
+              <div className="text-sm font-bold tabular-nums text-[#e31937]">{driveStats.medianDistanceKm != null ? u.fmtDist(driveStats.medianDistanceKm) : '—'} <span className="text-[10px] font-normal text-[#e31937]/50">{u.distanceUnit}</span></div>
             </div>
             <div className="px-3 py-2 text-center border-x border-[#2a2a2a]">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Ø Dist/day</div>
-              <div className="text-sm font-bold tabular-nums">{u.fmtDist(driveStats.totalDistanceKm / driveStats.totalDays)} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">Ø Dist/day</div>
+              <div className="text-sm font-bold tabular-nums text-[#e31937]">{u.fmtDist(driveStats.totalDistanceKm / driveStats.totalDays)} <span className="text-[10px] font-normal text-[#e31937]/50">{u.distanceUnit}</span></div>
             </div>
             <div className="px-3 py-2 text-center">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Ø kWh/day</div>
-              <div className="text-sm font-bold tabular-nums">{(driveStats.totalNetEnergyKwh / driveStats.totalDays).toFixed(1)} <span className="text-[10px] font-normal text-[#9ca3af]">kWh</span></div>
+              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">Ø kWh/day</div>
+              <div className="text-sm font-bold tabular-nums text-[#e31937]">{(driveStats.totalNetEnergyKwh / driveStats.totalDays).toFixed(1)} <span className="text-[10px] font-normal text-[#e31937]/50">kWh</span></div>
             </div>
           </div>
         )}
@@ -170,9 +173,9 @@ export default function Home({ carId }: Props) {
         <div className="relative flex items-center h-[220px]">
           {driveStats && driveStats.maxSpeedKmh != null && (
             <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10 bg-black/60 rounded-xl px-3 py-2 text-center">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Max Speed</div>
-              <div className="text-xl font-bold tabular-nums">{Math.round(u.convertDistance(driveStats.maxSpeedKmh)!)}</div>
-              <div className="text-[10px] text-[#9ca3af]">{u.distanceUnit === 'mi' ? 'mph' : 'km/h'}</div>
+              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">Max Speed</div>
+              <div className="text-xl font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.maxSpeedKmh)!)}</div>
+              <div className="text-[10px] text-[#e31937]/50">{u.distanceUnit === 'mi' ? 'mph' : 'km/h'}</div>
             </div>
           )}
           <div className="flex-1 flex items-center justify-center">
@@ -201,16 +204,16 @@ export default function Home({ carId }: Props) {
         {driveStats && driveStats.driveCount > 0 && (
           <div className="grid grid-cols-3 border-t border-[#2a2a2a]">
             <div className="px-3 py-2 text-center">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Est. Monthly</div>
-              <div className="text-sm font-bold tabular-nums">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * (365 / 12))!).toLocaleString()} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">Est. Monthly</div>
+              <div className="text-sm font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * (365 / 12))!).toLocaleString()} <span className="text-[10px] font-normal text-[#e31937]/50">{u.distanceUnit}</span></div>
             </div>
             <div className="px-3 py-2 text-center border-x border-[#2a2a2a]">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{driveStats.driveCount} trips</div>
-              <div className="text-sm font-bold tabular-nums">{Math.round(driveStats.totalDays)} <span className="text-[10px] font-normal text-[#9ca3af]">days</span></div>
+              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">{driveStats.driveCount} trips</div>
+              <div className="text-sm font-bold tabular-nums text-[#e31937]">{Math.round(driveStats.totalDays)} <span className="text-[10px] font-normal text-[#e31937]/50">days</span></div>
             </div>
             <div className="px-3 py-2 text-center">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Est. Annual</div>
-              <div className="text-sm font-bold tabular-nums text-[#eab308]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * 365)!).toLocaleString()} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+              <div className="text-[10px] text-[#e31937]/60 uppercase tracking-wider">Est. Annual</div>
+              <div className="text-sm font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * 365)!).toLocaleString()} <span className="text-[10px] font-normal text-[#e31937]/50">{u.distanceUnit}</span></div>
             </div>
           </div>
         )}
@@ -243,11 +246,13 @@ export default function Home({ carId }: Props) {
           label="Ext. temp"
           value={u.fmtTemp(vehicle.outsideTemp)}
           unit={u.tempUnit}
+          color={tempColor(vehicle.outsideTemp)}
         />
         <StatCard
           label="Int. temp"
           value={u.fmtTemp(vehicle.insideTemp)}
           unit={u.tempUnit}
+          color={tempColor(vehicle.insideTemp)}
         />
         <StatCard
           label="State"
@@ -305,20 +310,17 @@ export default function Home({ carId }: Props) {
       {chargingStats && chargingStats.chargeCount > 0 && (
         <div className="grid grid-cols-3 gap-3">
           <StatCard
-            label="Charges / Cycles"
-            value={`${chargingStats.chargeCount} / ${maxCapacity && maxCapacity > 0 ? Math.floor(chargingStats.totalEnergyAdded / maxCapacity) : '—'}`}
+            label="Charges"
+            value={chargingStats.chargeCount}
           />
           <StatCard
-            label="Energy added"
-            value={Math.round(chargingStats.totalEnergyAdded)}
-            unit="kWh"
+            label="Cycles"
+            value={maxCapacity && maxCapacity > 0 ? Math.floor(chargingStats.totalEnergyAdded / maxCapacity) : '—'}
+          />
+          <StatCard
+            label="Energy / Efficiency"
+            value={`${Math.round(chargingStats.totalEnergyAdded)} kWh · ${(chargingStats.chargingEfficiency * 100).toFixed(1)}%`}
             color="#eab308"
-          />
-          <StatCard
-            label="Charge efficiency"
-            value={(chargingStats.chargingEfficiency * 100).toFixed(1)}
-            unit="%"
-            color="#22c55e"
           />
         </div>
       )}
