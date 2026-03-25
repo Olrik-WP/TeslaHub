@@ -14,8 +14,8 @@ export default function BatteryGauge({ level, rangeKm, rangeUnit = 'km', isCharg
   const offset = circumference * (1 - clampedLevel / 100);
 
   return (
-    <div className="flex flex-col items-center">
-      <svg width={160} height={160} viewBox="0 0 160 160">
+    <div className="flex flex-col items-center w-full h-full">
+      <svg viewBox="0 0 160 160" className="w-full h-full max-w-[160px] max-h-[160px]">
         <circle
           cx={80} cy={80} r={radius}
           fill="none" stroke="#2a2a2a" strokeWidth={stroke}
