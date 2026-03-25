@@ -293,16 +293,12 @@ export default function Home({ carId }: Props) {
           const health = Math.min(100, 100 - degradation);
           const healthColor = health >= 90 ? '#22c55e' : health >= 80 ? '#eab308' : '#ef4444';
           return (
-            <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 flex flex-col justify-between min-h-[100px]">
+            <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4 flex flex-col justify-between min-h-[90px] sm:min-h-[100px]">
               <span className="text-[#9ca3af] text-xs uppercase tracking-wider">Battery</span>
-              <div className="mt-2 flex items-baseline justify-between">
-                <div>
-                  <span className="text-3xl font-bold tabular-nums" style={{ color: healthColor }}>{health.toFixed(1)}</span>
-                  <span className="text-[#9ca3af] text-sm ml-1">%</span>
-                </div>
-                <div className="text-right">
-                  <span className="text-sm tabular-nums" style={{ color: degradationColor }}>-{degradation.toFixed(1)}%</span>
-                </div>
+              <div className="mt-2 flex items-baseline gap-1 flex-wrap">
+                <span className="text-xl sm:text-3xl font-bold tabular-nums" style={{ color: healthColor }}>{health.toFixed(1)}</span>
+                <span className="text-[#9ca3af] text-xs sm:text-sm">%</span>
+                <span className="text-xs sm:text-sm tabular-nums ml-auto" style={{ color: degradationColor }}>-{degradation.toFixed(1)}%</span>
               </div>
               <div className="mt-2 h-2 rounded-full bg-[#2a2a2a] overflow-hidden">
                 <div
@@ -331,7 +327,7 @@ export default function Home({ carId }: Props) {
       </div>
 
       {/* Map + Last trip */}
-      <div className="flex gap-3" style={{ minHeight: 260 }}>
+      <div className="flex flex-col sm:flex-row gap-3" style={{ minHeight: 200 }}>
         {vehicle.latitude != null && vehicle.longitude != null && (
           <div
             className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl overflow-hidden cursor-pointer active:bg-[#1a1a1a] transition-colors"
@@ -340,7 +336,7 @@ export default function Home({ carId }: Props) {
             <div className="px-3 pt-2 pb-1">
               <span className="text-xs text-[#9ca3af] uppercase tracking-wider">Position</span>
             </div>
-            <div className="h-[220px]">
+            <div className="h-[160px] sm:h-[220px]">
               <MapContainer
                 center={[vehicle.latitude, vehicle.longitude]}
                 zoom={15}
@@ -385,7 +381,7 @@ export default function Home({ carId }: Props) {
 
         {/* Last trip */}
         <div
-          className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 flex flex-col cursor-pointer active:bg-[#1a1a1a] transition-colors overflow-hidden"
+          className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4 flex flex-col cursor-pointer active:bg-[#1a1a1a] transition-colors overflow-hidden"
           onClick={() => lastDrive && navigate(`/map?driveId=${lastDrive.id}`)}
         >
           <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2">Latest trip</div>
@@ -416,7 +412,7 @@ export default function Home({ carId }: Props) {
 
       {/* Charging in progress */}
       {isCharging && lastCharge && (
-        <div className="bg-[#141414] border border-[#3b82f6]/30 rounded-xl p-4">
+        <div className="bg-[#141414] border border-[#3b82f6]/30 rounded-xl p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-[#3b82f6] text-lg">⚡</span>
             <span className="font-medium">Charging in progress</span>
