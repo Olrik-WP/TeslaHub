@@ -173,7 +173,7 @@ function SessionCard({ session, override: costOverride, carId }: {
         <span className="text-sm font-medium">
           {new Date(session.startDate).toLocaleDateString()}
           {' · '}
-          {session.address?.split(',')[0] ?? 'Unknown'}
+          {costOverride?.location?.name ?? session.address?.split(',')[0] ?? 'Unknown'}
         </span>
         <div className="flex items-center gap-2">
           {displayCost && (
