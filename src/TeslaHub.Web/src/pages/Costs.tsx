@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getCostSummary, getCostOverrides, getSettings, getTeslaMateCostSummary, getTeslaMateMonthlyTrend } from '../api/queries';
 import { useUnits } from '../hooks/useUnits';
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import StatCard from '../components/StatCard';
 
 interface Props {
@@ -128,7 +128,7 @@ export default function Costs({ carId }: Props) {
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
           <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">Cost by location</div>
           <div className="flex flex-col sm:flex-row items-center gap-4">
-            <div className="w-36 h-36 sm:w-40 sm:h-40 flex-shrink-0">
+            <div className="w-40 h-40 sm:w-44 sm:h-44 flex-shrink-0 relative">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -137,8 +137,8 @@ export default function Costs({ carId }: Props) {
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    outerRadius={65}
-                    innerRadius={35}
+                    outerRadius={70}
+                    innerRadius={40}
                     paddingAngle={2}
                   >
                     {locationData.map((_, i) => (
@@ -149,13 +149,11 @@ export default function Costs({ carId }: Props) {
                     contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, color: '#fff', fontSize: 12 }}
                     formatter={(value) => [`${Number(value).toFixed(2)} ${u.currencySymbol}`, '']}
                   />
-                  <Legend
-                    verticalAlign="bottom"
-                    iconSize={8}
-                    wrapperStyle={{ fontSize: 10, color: '#9ca3af' }}
-                  />
                 </PieChart>
               </ResponsiveContainer>
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className="text-sm font-bold text-white">{totalLocCost.toFixed(0)} {u.currencySymbol}</span>
+              </div>
             </div>
             <div className="flex-1 w-full space-y-2">
               {locationData.map((d, i) => {

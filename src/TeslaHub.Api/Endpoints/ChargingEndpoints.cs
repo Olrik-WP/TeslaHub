@@ -44,6 +44,17 @@ public static class ChargingEndpoints
             return Results.Ok(summary);
         });
 
+        group.MapGet("/{carId:int}/curve", async (int carId, TeslaMateConnectionFactory tm, CacheService cache) =>
+        {
+            var points = await cache.GetOrSetHistoricalAsync(
+                $"chargingCurvePoints:{carId}",
+                () => tm.GetChargingCurvePointsAsync(carId));
+            var median = await cache.GetOrSetHistoricalAsync(
+                $"chargingCurveMedian:{carId}",
+                () => tm.GetChargingCurveMedianAsync(carId));
+            return Results.Ok(new { points, median });
+        });
+
         group.MapGet("/geofences", async (TeslaMateConnectionFactory tm, CacheService cache) =>
         {
             var geofences = await cache.GetOrSetStaticAsync("geofences", tm.GetGeofencesAsync);

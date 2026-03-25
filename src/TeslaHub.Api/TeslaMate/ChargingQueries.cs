@@ -194,4 +194,47 @@ public static class ChargingQueries
             LIMIT 12
             """, new { CarId = carId });
     }
+
+    public static async Task<IEnumerable<ChargingCurvePointDto>> GetChargingCurvePointsAsync(
+        this TeslaMateConnectionFactory db, int carId)
+    {
+        using var conn = db.CreateConnection();
+        return await conn.QueryAsync<ChargingCurvePointDto>("""
+            SELECT
+                c.battery_level AS "SoC",
+                ROUND(AVG(c.charger_power)::numeric, 0) AS "Power",
+                c.charging_process_id AS "ChargingProcessId",
+                COALESCE(g.name, SPLIT_PART(a.display_name, ',', 1))
+                    || ' ' || TO_CHAR(c.date, 'YYYY-MM-DD') AS "Label"
+            FROM charges c
+            JOIN charging_processes p ON p.id = c.charging_process_id
+            LEFT JOIN addresses a ON a.id = p.address_id
+            LEFT JOIN geofences g ON g.id = p.geofence_id
+            WHERE p.car_id = @CarId
+              AND c.charger_power > 0
+              AND c.fast_charger_present
+            GROUP BY c.battery_level, c.charging_process_id,
+                     a.display_name, g.name,
+                     TO_CHAR(c.date, 'YYYY-MM-DD')
+            ORDER BY c.battery_level
+            """, new { CarId = carId });
+    }
+
+    public static async Task<IEnumerable<ChargingCurveMedianDto>> GetChargingCurveMedianAsync(
+        this TeslaMateConnectionFactory db, int carId)
+    {
+        using var conn = db.CreateConnection();
+        return await conn.QueryAsync<ChargingCurveMedianDto>("""
+            SELECT
+                c.battery_level AS "SoC",
+                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY c.charger_power)::numeric, 0) AS "Power"
+            FROM charges c
+            JOIN charging_processes p ON p.id = c.charging_process_id
+            WHERE p.car_id = @CarId
+              AND c.charger_power > 0
+              AND c.fast_charger_present
+            GROUP BY c.battery_level
+            ORDER BY c.battery_level
+            """, new { CarId = carId });
+    }
 }

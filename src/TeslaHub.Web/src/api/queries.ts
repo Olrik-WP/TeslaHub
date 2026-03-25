@@ -241,6 +241,27 @@ export const getChargingStats = (carId: number) => api<ChargingStats>(`/charging
 export const getChargingSummary = (carId: number, days?: number) =>
   api<ChargingSummary>(`/charging/${carId}/summary${days != null ? `?days=${days}` : ''}`);
 
+// ─── Charging Curve ─────────────────────────────────────────────
+export interface ChargingCurvePoint {
+  soC: number;
+  power: number;
+  chargingProcessId: number;
+  label: string | null;
+}
+
+export interface ChargingCurveMedian {
+  soC: number;
+  power: number;
+}
+
+export interface ChargingCurveData {
+  points: ChargingCurvePoint[];
+  median: ChargingCurveMedian[];
+}
+
+export const getChargingCurve = (carId: number) =>
+  api<ChargingCurveData>(`/charging/${carId}/curve`);
+
 // ─── Vehicle Image ──────────────────────────────────────────────
 export interface CarImageInfo {
   paintCode: string | null;

@@ -163,3 +163,17 @@ public record CarListItemDto
     public string? MarketingName { get; init; }
     public string? Vin { get; init; }
 }
+
+public record ChargingCurvePointDto
+{
+    public int SoC { get; init; }
+    public double Power { get; init; }
+    public int ChargingProcessId { get; init; }
+    public string? Label { get; init; }
+}
+
+public record ChargingCurveMedianDto
+{
+    public int SoC { get; init; }
+    public double Power { get; init; }
+}

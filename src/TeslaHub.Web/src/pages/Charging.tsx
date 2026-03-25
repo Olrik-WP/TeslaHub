@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts';
 import { useUnits } from '../hooks/useUnits';
@@ -22,6 +23,7 @@ const PERIOD_OPTIONS: { key: PeriodKey; label: string; days?: number }[] = [
 ];
 
 export default function Charging({ carId }: Props) {
+  const navigate = useNavigate();
   const [period, setPeriod] = useState<PeriodKey>('90d');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const u = useUnits();
@@ -102,6 +104,13 @@ export default function Charging({ carId }: Props) {
             {t === 'all' ? 'All' : t}
           </button>
         ))}
+        <div className="w-px bg-[#2a2a2a] mx-1" />
+        <button
+          onClick={() => navigate('/charging-stats')}
+          className="px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] bg-[#1a1a1a] text-[#f59e0b] border border-[#f59e0b]/30 hover:bg-[#f59e0b]/10 transition-colors"
+        >
+          DC Curve ⚡
+        </button>
       </div>
 
       {/* Summary */}
