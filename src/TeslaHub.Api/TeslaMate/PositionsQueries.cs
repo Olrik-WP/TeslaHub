@@ -7,6 +7,11 @@ public static class PositionsQueries
 {
     public static async Task<IEnumerable<PositionDto>> GetRecentPositionsAsync(this TeslaMateConnectionFactory db, int carId, int hours = 24)
     {
+        return await GetPositionsInRangeAsync(db, carId, DateTime.UtcNow.AddHours(-hours), DateTime.UtcNow);
+    }
+
+    public static async Task<IEnumerable<PositionDto>> GetPositionsInRangeAsync(this TeslaMateConnectionFactory db, int carId, DateTime from, DateTime to)
+    {
         using var conn = db.CreateConnection();
         return await conn.QueryAsync<PositionDto>("""
             SELECT
@@ -17,10 +22,10 @@ public static class PositionsQueries
                 elevation AS "Elevation"
             FROM positions
             WHERE car_id = @CarId
-              AND date >= NOW() - @Hours * INTERVAL '1 hour'
+              AND date >= @From AND date <= @To
               AND drive_id IS NOT NULL
             ORDER BY date
-            """, new { CarId = carId, Hours = hours });
+            """, new { CarId = carId, From = from, To = to });
     }
 
     public static async Task<StatsDto> GetStatsAsync(this TeslaMateConnectionFactory db, int carId, DateTime from, DateTime to)

@@ -166,6 +166,8 @@ export const getChargePoints = (carId: number, processId: number) =>
 // ─── Map ────────────────────────────────────────────────────────
 export const getRecentPositions = (carId: number, hours = 24) =>
   api<Position[]>(`/map/recent/${carId}?hours=${hours}`);
+export const getPositionsInRange = (carId: number, from: string, to: string) =>
+  api<Position[]>(`/map/recent/${carId}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 export const getStats = (carId: number, from?: string, to?: string) => {
   const params = new URLSearchParams();
   if (from) params.set('from', from);
