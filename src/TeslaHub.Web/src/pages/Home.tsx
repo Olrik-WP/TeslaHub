@@ -304,25 +304,22 @@ export default function Home({ carId }: Props) {
             </div>
           );
         })()}
-      </div>
-
-      {/* Charging stats */}
-      {chargingStats && chargingStats.chargeCount > 0 && (
-        <div className="grid grid-cols-2 gap-3">
+        {chargingStats && chargingStats.chargeCount > 0 && (
           <StatCard
-            label="Charge sessions"
-            value={chargingStats.chargeCount}
-            subtitle={`Eq. full charges: ${maxCapacity && maxCapacity > 0 ? Math.floor(chargingStats.totalEnergyAdded / maxCapacity) : '—'}`}
+            label="Sessions / Full charges"
+            value={`${chargingStats.chargeCount} / ${maxCapacity && maxCapacity > 0 ? Math.floor(chargingStats.totalEnergyAdded / maxCapacity) : '—'}`}
           />
+        )}
+        {chargingStats && chargingStats.chargeCount > 0 && (
           <StatCard
-            label="Energy added"
+            label="Total energy added"
             value={`${Math.round(chargingStats.totalEnergyAdded)} kWh`}
             color="#eab308"
-            subtitle={`Efficiency ${(chargingStats.chargingEfficiency * 100).toFixed(1)}%`}
+            subtitle={`Overall efficiency ${(chargingStats.chargingEfficiency * 100).toFixed(1)}%`}
             subtitleColor="#22c55e"
           />
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Map + Last trip */}
       <div className="flex gap-3" style={{ minHeight: 260 }}>
