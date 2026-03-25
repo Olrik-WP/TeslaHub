@@ -8,7 +8,6 @@ import CarSelector from './components/CarSelector';
 
 const Login = lazy(() => import('./pages/Login'));
 const Home = lazy(() => import('./pages/Home'));
-const Vehicle = lazy(() => import('./pages/Vehicle'));
 const Charging = lazy(() => import('./pages/Charging'));
 const Trips = lazy(() => import('./pages/Trips'));
 const MapPage = lazy(() => import('./pages/Map'));
@@ -77,7 +76,6 @@ function AppLayout() {
         <Suspense fallback={<div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">Loading...</div>}>
           <Routes>
             <Route path="/" element={<Home carId={selectedCarId} />} />
-            <Route path="/vehicle" element={<Vehicle carId={selectedCarId} />} />
             <Route path="/charging" element={<Charging carId={selectedCarId} />} />
             <Route path="/trips" element={<Trips carId={selectedCarId} />} />
             <Route path="/map" element={<MapPage carId={selectedCarId} />} />

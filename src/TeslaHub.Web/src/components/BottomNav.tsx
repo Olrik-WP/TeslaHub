@@ -2,7 +2,6 @@ import { NavLink } from 'react-router-dom';
 
 const links = [
   { to: '/', label: 'Accueil', icon: '⌂' },
-  { to: '/vehicle', label: 'Voiture', icon: '◈' },
   { to: '/charging', label: 'Charge', icon: '⚡' },
   { to: '/trips', label: 'Trajets', icon: '⟿' },
   { to: '/map', label: 'Carte', icon: '◉' },
