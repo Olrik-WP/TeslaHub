@@ -35,7 +35,8 @@ public static class VehicleQueries
                 p.speed AS "Speed", p.power AS "Power",
                 p.date AS "PositionDate",
                 s.state AS "State",
-                u.version AS "FirmwareVersion"
+                u.version AS "FirmwareVersion",
+                deg.max_full_range_km AS "MaxFullRangeKm"
             FROM cars c
             LEFT JOIN LATERAL (
                 SELECT * FROM positions
@@ -55,6 +56,11 @@ public static class VehicleQueries
                 ORDER BY start_date DESC
                 LIMIT 1
             ) u ON true
+            LEFT JOIN LATERAL (
+                SELECT MAX(rated_battery_range_km * 100.0 / NULLIF(battery_level, 0)) AS max_full_range_km
+                FROM positions
+                WHERE car_id = c.id AND battery_level >= 50
+            ) deg ON true
             WHERE c.id = @CarId
             """, new { CarId = carId });
     }

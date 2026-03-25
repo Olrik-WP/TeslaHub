@@ -38,6 +38,7 @@ function useStickyVehicle(vehicle: VehicleStatus | undefined) {
     latitude: vehicle.latitude ?? lastKnown.current.latitude ?? null,
     longitude: vehicle.longitude ?? lastKnown.current.longitude ?? null,
     firmwareVersion: vehicle.firmwareVersion ?? lastKnown.current.firmwareVersion ?? null,
+    maxFullRangeKm: vehicle.maxFullRangeKm ?? lastKnown.current.maxFullRangeKm ?? null,
   };
 }
 
@@ -69,6 +70,35 @@ export default function Home({ carId }: Props) {
   const lastCharge = charges?.[0];
   const isCharging = lastCharge && !lastCharge.endDate;
   const imgSrc = carId ? `/api/vehicle/${carId}/image` : null;
+
+  const storedEnergy =
+    vehicle?.ratedBatteryRangeKm != null && vehicle?.efficiency != null
+      ? vehicle.ratedBatteryRangeKm * vehicle.efficiency
+      : null;
+
+  const usableCapacity =
+    vehicle?.ratedBatteryRangeKm != null &&
+    vehicle?.batteryLevel != null &&
+    vehicle.batteryLevel > 0 &&
+    vehicle?.efficiency != null
+      ? (vehicle.ratedBatteryRangeKm / vehicle.batteryLevel) * 100 * vehicle.efficiency
+      : null;
+
+  const originalCapacity =
+    vehicle?.maxFullRangeKm != null && vehicle?.efficiency != null
+      ? vehicle.maxFullRangeKm * vehicle.efficiency
+      : null;
+
+  const degradation =
+    usableCapacity != null && originalCapacity != null && originalCapacity > 0
+      ? (1 - usableCapacity / originalCapacity) * 100
+      : null;
+
+  const degradationColor =
+    degradation == null ? undefined
+    : degradation < 5 ? '#22c55e'
+    : degradation < 15 ? '#eab308'
+    : '#ef4444';
 
   const lat = vehicle?.latitude;
   const lng = vehicle?.longitude;
@@ -171,6 +201,29 @@ export default function Home({ carId }: Props) {
             label="Avg. consumption"
             value={u.fmtConsumption(stats.avgConsumptionKWhPer100Km)}
             unit={u.consumptionUnit}
+          />
+        )}
+        {storedEnergy != null && (
+          <StatCard
+            label="Stored energy"
+            value={storedEnergy.toFixed(1)}
+            unit="kWh"
+            color="#3b82f6"
+          />
+        )}
+        {usableCapacity != null && (
+          <StatCard
+            label="Usable (100%)"
+            value={usableCapacity.toFixed(1)}
+            unit="kWh"
+          />
+        )}
+        {degradation != null && (
+          <StatCard
+            label="Degradation"
+            value={degradation.toFixed(1)}
+            unit="%"
+            color={degradationColor}
           />
         )}
       </div>

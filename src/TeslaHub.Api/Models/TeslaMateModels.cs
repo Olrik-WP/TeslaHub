@@ -26,6 +26,7 @@ public record VehicleDto
     public DateTime? PositionDate { get; init; }
     public string? State { get; init; }
     public string? FirmwareVersion { get; init; }
+    public double? MaxFullRangeKm { get; init; }
 }
 
 public record DriveDto
