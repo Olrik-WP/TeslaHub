@@ -40,6 +40,13 @@ for arg in "$@"; do
   esac
 done
 
+# ── Check .env exists ────────────────────────────────────────────
+if [ ! -f "$SCRIPT_DIR/.env" ]; then
+  err ".env file not found in $SCRIPT_DIR"
+  err "Copy your .env file here: cp ~/teslamate/.env $SCRIPT_DIR/.env"
+  exit 1
+fi
+
 # ── Show disk usage before ───────────────────────────────────────
 DISK_BEFORE=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1)
 log "Docker disk usage before: ${DISK_BEFORE:-unknown}"
@@ -48,19 +55,25 @@ log "Docker disk usage before: ${DISK_BEFORE:-unknown}"
 log "Pulling latest code from git..."
 git pull --ff-only
 
+# ── Stop TeslaHub containers before rebuild ──────────────────────
+log "Stopping TeslaHub services..."
+docker compose stop teslahub-api teslahub-web 2>/dev/null || true
+docker compose rm -f teslahub-api teslahub-web 2>/dev/null || true
+
 # ── Build TeslaHub containers ────────────────────────────────────
 log "Building TeslaHub API and Web..."
-docker compose build --no-cache teslahub-api teslahub-web
+docker compose build teslahub-api teslahub-web
 
-# ── Restart only TeslaHub (not teslamate/grafana unless updated) ─
-log "Restarting TeslaHub services..."
-docker compose up -d teslahub-api teslahub-web
+# ── Start everything ─────────────────────────────────────────────
+log "Starting all services..."
+docker compose up -d
 
 # ── Wait for API health ──────────────────────────────────────────
 log "Waiting for API health check..."
+API_PORT=$(docker compose port teslahub-api 8080 2>/dev/null | cut -d: -f2 || echo "4001")
 HEALTHY=false
 for i in $(seq 1 15); do
-  if curl -sf http://localhost:4001/api/health > /dev/null 2>&1; then
+  if curl -sf "http://localhost:${API_PORT}/api/health" > /dev/null 2>&1; then
     HEALTHY=true
     break
   fi
@@ -70,7 +83,8 @@ done
 if $HEALTHY; then
   log "API is healthy!"
 else
-  warn "API did not respond after 30s — check logs: docker compose logs teslahub-api --tail 30"
+  warn "API did not respond after 30s — check logs:"
+  warn "  docker compose logs teslahub-api --tail 30"
 fi
 
 # ── Cleanup ──────────────────────────────────────────────────────
