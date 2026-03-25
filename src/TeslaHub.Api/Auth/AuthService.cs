@@ -47,6 +47,17 @@ public class AuthService
         return GenerateTokens(user);
     }
 
+    public async Task<bool> ChangePasswordAsync(int userId, string currentPassword, string newPassword)
+    {
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null || !BCrypt.Net.BCrypt.Verify(currentPassword, user.PasswordHash))
+            return false;
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
     public TokenResult? RefreshToken(string refreshToken)
     {
         var principal = ValidateToken(refreshToken, validateLifetime: true);
@@ -134,4 +145,10 @@ public record LoginRequest
 public record RefreshRequest
 {
     public string RefreshToken { get; init; } = string.Empty;
+}
+
+public record ChangePasswordRequest
+{
+    public string CurrentPassword { get; init; } = string.Empty;
+    public string NewPassword { get; init; } = string.Empty;
 }

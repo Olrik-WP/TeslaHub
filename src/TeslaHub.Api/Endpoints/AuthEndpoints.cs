@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Claims;
 using TeslaHub.Api.Auth;
 
 namespace TeslaHub.Api.Endpoints;
@@ -75,6 +76,22 @@ public static class AuthEndpoints
             ctx.Response.Cookies.Delete(RefreshCookieName);
             return Results.Ok();
         }).AllowAnonymous();
+
+        group.MapPost("/change-password", async (ChangePasswordRequest request, AuthService auth, HttpContext ctx) =>
+        {
+            var userIdClaim = ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
+                return Results.Unauthorized();
+
+            if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 6)
+                return Results.BadRequest("Password must be at least 6 characters.");
+
+            var success = await auth.ChangePasswordAsync(userId, request.CurrentPassword, request.NewPassword);
+            if (!success)
+                return Results.BadRequest("Current password is incorrect.");
+
+            return Results.Ok(new { message = "Password changed successfully." });
+        }).RequireAuthorization();
     }
 
     private static void SetRefreshCookie(HttpContext ctx, string token, int expiresInDays)

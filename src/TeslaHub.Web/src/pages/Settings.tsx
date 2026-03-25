@@ -32,6 +32,11 @@ export default function Settings({ carId }: Props) {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [urlError, setUrlError] = useState('');
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [pwMsg, setPwMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [pwSaving, setPwSaving] = useState(false);
 
   useEffect(() => {
     if (settings) setForm(settings);
@@ -298,6 +303,61 @@ export default function Settings({ carId }: Props) {
             </p>
           )}
         </div>
+      </div>
+
+      {/* Change password */}
+      <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-3">
+        <div className="text-xs text-[#9ca3af] uppercase tracking-wider">Change password</div>
+        <input
+          className={inputClass}
+          type="password"
+          placeholder="Current password"
+          autoComplete="current-password"
+          value={currentPw}
+          onChange={(e) => { setCurrentPw(e.target.value); setPwMsg(null); }}
+        />
+        <input
+          className={inputClass}
+          type="password"
+          placeholder="New password (min. 6 characters)"
+          autoComplete="new-password"
+          value={newPw}
+          onChange={(e) => { setNewPw(e.target.value); setPwMsg(null); }}
+        />
+        <input
+          className={inputClass}
+          type="password"
+          placeholder="Confirm new password"
+          autoComplete="new-password"
+          value={confirmPw}
+          onChange={(e) => { setConfirmPw(e.target.value); setPwMsg(null); }}
+        />
+        {pwMsg && (
+          <p className={`text-xs ${pwMsg.ok ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>{pwMsg.text}</p>
+        )}
+        <button
+          disabled={pwSaving || !currentPw || !newPw || !confirmPw}
+          onClick={async () => {
+            if (newPw.length < 6) { setPwMsg({ text: 'Password must be at least 6 characters.', ok: false }); return; }
+            if (newPw !== confirmPw) { setPwMsg({ text: 'New passwords do not match.', ok: false }); return; }
+            setPwSaving(true);
+            try {
+              await api('/auth/change-password', {
+                method: 'POST',
+                body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
+              });
+              setPwMsg({ text: 'Password changed successfully.', ok: true });
+              setCurrentPw(''); setNewPw(''); setConfirmPw('');
+            } catch {
+              setPwMsg({ text: 'Current password is incorrect.', ok: false });
+            } finally {
+              setPwSaving(false);
+            }
+          }}
+          className="bg-[#e31937] text-white px-6 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f] disabled:opacity-50 w-full"
+        >
+          {pwSaving ? 'Saving...' : 'Change password'}
+        </button>
       </div>
 
       {/* About */}
