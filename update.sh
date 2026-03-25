@@ -71,7 +71,7 @@ log "Docker disk usage before: ${DISK_BEFORE:-unknown}"
 # ── Pull latest code ─────────────────────────────────────────────
 log "Pulling latest code..."
 cd "$REPO_DIR"
-git pull --ff-only
+git -c core.fileMode=false pull --ff-only
 
 # ── Rebuild and restart only TeslaHub ────────────────────────────
 export COMPOSE_BAKE=false
