@@ -10,7 +10,7 @@ public class AppDbContext : DbContext
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<GlobalSettings> GlobalSettings => Set<GlobalSettings>();
     public DbSet<CarConfig> CarConfigs => Set<CarConfig>();
-    public DbSet<PriceRule> PriceRules => Set<PriceRule>();
+    public DbSet<ChargingLocation> ChargingLocations => Set<ChargingLocation>();
     public DbSet<ChargingCostOverride> ChargingCostOverrides => Set<ChargingCostOverride>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -22,9 +22,6 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<CarConfig>()
             .HasIndex(c => c.CarId)
             .IsUnique();
-
-        modelBuilder.Entity<PriceRule>()
-            .HasIndex(p => new { p.Priority, p.IsActive });
 
         modelBuilder.Entity<ChargingCostOverride>()
             .HasIndex(c => new { c.ChargingProcessId, c.CarId })

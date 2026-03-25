@@ -13,64 +13,83 @@ public class CostService
         _db = db;
     }
 
-    public async Task<ChargingCostOverride?> CalculateCostForSession(
-        ChargingSessionDto session)
+    public async Task<ChargingLocation?> FindMatchingLocation(double? lat, double? lng, int? carId)
     {
-        var existing = await _db.ChargingCostOverrides
-            .FirstOrDefaultAsync(c => c.ChargingProcessId == session.Id && c.CarId == session.CarId);
+        if (lat == null || lng == null)
+            return null;
 
-        if (existing is { IsManualOverride: true })
-            return existing;
-
-        var rules = await _db.PriceRules
-            .Where(r => r.IsActive)
-            .Where(r => r.CarId == null || r.CarId == session.CarId)
-            .OrderBy(r => r.Priority)
+        var locations = await _db.ChargingLocations
+            .Where(l => l.CarId == null || l.CarId == carId)
             .ToListAsync();
 
-        PriceRule? matchedRule = null;
-        foreach (var rule in rules)
+        foreach (var loc in locations)
         {
-            if (!MatchesTime(rule, session.StartDate))
-                continue;
-            if (!MatchesDate(rule, session.StartDate))
-                continue;
-            if (!MatchesLocation(rule, session))
-                continue;
-
-            matchedRule = rule;
-            break;
+            var distance = HaversineMeters(lat.Value, lng.Value, loc.Latitude, loc.Longitude);
+            if (distance <= loc.RadiusMeters)
+                return loc;
         }
 
-        if (matchedRule == null)
-            return existing;
+        return null;
+    }
 
-        var energyKwh = (decimal)(session.ChargeEnergyAdded ?? session.ChargeEnergyUsed ?? 0);
-        var cost = matchedRule.PricePerKwh * energyKwh;
-        var isFree = matchedRule.PricePerKwh == 0;
+    public decimal? CalculatePricePerKwh(ChargingLocation location, DateTime sessionStart)
+    {
+        return location.PricingType switch
+        {
+            "home" => IsOffPeak(location, sessionStart)
+                ? location.OffPeakPricePerKwh ?? location.PeakPricePerKwh
+                : location.PeakPricePerKwh,
+            "subscription" => null,
+            _ => null
+        };
+    }
 
-        var detectedSource = DetectSourceType(session);
+    public async Task<decimal?> CalculateSubscriptionCostForSession(
+        ChargingLocation location, int carId, DateTime sessionStart)
+    {
+        if (location.PricingType != "subscription" || location.MonthlySubscription == null)
+            return null;
+
+        var monthStart = new DateTime(sessionStart.Year, sessionStart.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var monthEnd = monthStart.AddMonths(1);
+
+        var sessionsThisMonth = await _db.ChargingCostOverrides
+            .Where(c => c.LocationId == location.Id && c.CarId == carId
+                && c.CreatedAt >= monthStart && c.CreatedAt < monthEnd)
+            .CountAsync();
+
+        var count = Math.Max(sessionsThisMonth, 1);
+        return Math.Round(location.MonthlySubscription.Value / count, 2);
+    }
+
+    public async Task<ChargingCostOverride> SetSessionCost(SessionCostDto dto, double? energyKwh)
+    {
+        var existing = await _db.ChargingCostOverrides
+            .FirstOrDefaultAsync(c => c.ChargingProcessId == dto.ChargingProcessId && c.CarId == dto.CarId);
+
+        var pricePerKwh = dto.IsFree ? 0 : dto.PricePerKwh;
+        var totalCost = dto.IsFree ? 0 : (pricePerKwh ?? 0) * (decimal)(energyKwh ?? 0);
 
         if (existing != null)
         {
-            existing.Cost = cost;
-            existing.IsFree = isFree;
-            existing.SourceType = detectedSource ?? matchedRule.SourceType;
-            existing.AppliedRuleId = matchedRule.Id;
-            existing.IsManualOverride = false;
+            existing.PricePerKwh = pricePerKwh;
+            existing.TotalCost = totalCost;
+            existing.IsFree = dto.IsFree;
+            existing.IsManualOverride = true;
+            existing.Notes = dto.Notes;
             existing.UpdatedAt = DateTime.UtcNow;
         }
         else
         {
             existing = new ChargingCostOverride
             {
-                ChargingProcessId = session.Id,
-                CarId = session.CarId,
-                Cost = cost,
-                IsFree = isFree,
-                SourceType = detectedSource ?? matchedRule.SourceType,
-                AppliedRuleId = matchedRule.Id,
-                IsManualOverride = false
+                ChargingProcessId = dto.ChargingProcessId,
+                CarId = dto.CarId,
+                PricePerKwh = pricePerKwh,
+                TotalCost = totalCost,
+                IsFree = dto.IsFree,
+                IsManualOverride = true,
+                Notes = dto.Notes
             };
             _db.ChargingCostOverrides.Add(existing);
         }
@@ -79,76 +98,80 @@ public class CostService
         return existing;
     }
 
-    public async Task<CostSummaryDto> GetMonthlySummary(int carId, int year, int month,
-        double totalDistanceKm)
+    public async Task<CostSummaryDto> GetMonthlySummary(int carId, int year, int month, double totalDistanceKm)
     {
+        var monthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var monthEnd = monthStart.AddMonths(1);
+
         var overrides = await _db.ChargingCostOverrides
-            .Where(c => c.CarId == carId)
+            .Include(c => c.Location)
+            .Where(c => c.CarId == carId && c.CreatedAt >= monthStart && c.CreatedAt < monthEnd)
             .ToListAsync();
 
-        var totalCost = overrides.Sum(c => c.Cost);
-        var totalKwh = overrides.Sum(c => c.Cost); // will be enhanced with session join
+        var totalCost = overrides.Sum(c => c.TotalCost);
+        var totalKwh = overrides
+            .Where(c => c.PricePerKwh > 0 && !c.IsFree)
+            .Sum(c => c.PricePerKwh > 0 ? c.TotalCost / c.PricePerKwh.Value : 0);
         var sessionCount = overrides.Count;
+        var freeCount = overrides.Count(c => c.IsFree);
 
-        var costBySource = overrides
-            .GroupBy(c => c.SourceType ?? "unknown")
-            .ToDictionary(g => g.Key, g => g.Sum(c => c.Cost));
+        var costByLocation = overrides
+            .GroupBy(c => c.Location?.Name ?? "Other")
+            .ToDictionary(g => g.Key, g => g.Sum(c => c.TotalCost));
 
         return new CostSummaryDto
         {
             Period = $"{year}-{month:D2}",
             TotalCost = totalCost,
             TotalKwh = totalKwh,
-            AvgPricePerKwh = totalKwh > 0 ? totalCost / totalKwh : 0,
-            CostPerKm = totalDistanceKm > 0 ? totalCost / (decimal)totalDistanceKm : 0,
+            AvgPricePerKwh = totalKwh > 0 ? Math.Round(totalCost / totalKwh, 4) : 0,
+            CostPerKm = totalDistanceKm > 0 ? Math.Round(totalCost / (decimal)totalDistanceKm, 4) : 0,
             TotalDistanceKm = (decimal)totalDistanceKm,
             SessionCount = sessionCount,
-            CostBySourceType = costBySource
+            FreeSessionCount = freeCount,
+            CostByLocation = costByLocation
         };
     }
 
-    private static bool MatchesTime(PriceRule rule, DateTime sessionStart)
+    public async Task<decimal?> GetLastPriceAtLocation(double? lat, double? lng, int carId)
     {
-        if (rule.TimeStart == null || rule.TimeEnd == null)
-            return true;
+        if (lat == null || lng == null)
+            return null;
 
-        var sessionTime = TimeOnly.FromDateTime(sessionStart);
-        if (rule.TimeStart <= rule.TimeEnd)
-            return sessionTime >= rule.TimeStart && sessionTime < rule.TimeEnd;
+        var location = await FindMatchingLocation(lat, lng, carId);
+        if (location == null)
+            return null;
 
-        // Overnight range (e.g. 22:00 - 06:00)
-        return sessionTime >= rule.TimeStart || sessionTime < rule.TimeEnd;
+        var lastOverride = await _db.ChargingCostOverrides
+            .Where(c => c.LocationId == location.Id && c.CarId == carId && c.PricePerKwh != null)
+            .OrderByDescending(c => c.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        return lastOverride?.PricePerKwh;
     }
 
-    private static bool MatchesDate(PriceRule rule, DateTime sessionStart)
+    private static bool IsOffPeak(ChargingLocation location, DateTime sessionStart)
     {
-        if (rule.ValidFrom != null && sessionStart < rule.ValidFrom)
+        if (location.OffPeakStart == null || location.OffPeakEnd == null)
             return false;
-        if (rule.ValidTo != null && sessionStart > rule.ValidTo)
-            return false;
-        return true;
+
+        var time = TimeOnly.FromDateTime(sessionStart);
+        if (location.OffPeakStart <= location.OffPeakEnd)
+            return time >= location.OffPeakStart && time < location.OffPeakEnd;
+
+        return time >= location.OffPeakStart || time < location.OffPeakEnd;
     }
 
-    private static bool MatchesLocation(PriceRule rule, ChargingSessionDto session)
+    private static double HaversineMeters(double lat1, double lon1, double lat2, double lon2)
     {
-        if (rule.GeofenceId != null)
-            return session.GeofenceId == rule.GeofenceId;
-
-        if (!string.IsNullOrEmpty(rule.LocationName))
-            return session.Address?.Contains(rule.LocationName, StringComparison.OrdinalIgnoreCase) == true
-                || session.GeofenceName?.Contains(rule.LocationName, StringComparison.OrdinalIgnoreCase) == true;
-
-        return true;
+        const double R = 6371000;
+        var dLat = ToRad(lat2 - lat1);
+        var dLon = ToRad(lon2 - lon1);
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(ToRad(lat1)) * Math.Cos(ToRad(lat2)) *
+                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
     }
 
-    public static string? DetectSourceType(ChargingSessionDto session)
-    {
-        if (session.FastChargerPresent == true)
-        {
-            if (session.FastChargerType?.Contains("Tesla", StringComparison.OrdinalIgnoreCase) == true)
-                return "supercharger";
-            return "public";
-        }
-        return null;
-    }
+    private static double ToRad(double deg) => deg * Math.PI / 180.0;
 }

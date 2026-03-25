@@ -29,6 +29,31 @@ namespace TeslaHub.Api.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "ChargingLocations",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Latitude = table.Column<double>(type: "double precision", nullable: false),
+                    Longitude = table.Column<double>(type: "double precision", nullable: false),
+                    RadiusMeters = table.Column<int>(type: "integer", nullable: false),
+                    PricingType = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    PeakPricePerKwh = table.Column<decimal>(type: "numeric(10,4)", nullable: true),
+                    OffPeakPricePerKwh = table.Column<decimal>(type: "numeric(10,4)", nullable: true),
+                    OffPeakStart = table.Column<TimeOnly>(type: "time without time zone", nullable: true),
+                    OffPeakEnd = table.Column<TimeOnly>(type: "time without time zone", nullable: true),
+                    MonthlySubscription = table.Column<decimal>(type: "numeric(10,2)", nullable: true),
+                    CarId = table.Column<int>(type: "integer", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ChargingLocations", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "GlobalSettings",
                 columns: table => new
                 {
@@ -43,31 +68,6 @@ namespace TeslaHub.Api.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_GlobalSettings", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "PriceRules",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    CarId = table.Column<int>(type: "integer", nullable: true),
-                    Label = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    PricePerKwh = table.Column<decimal>(type: "numeric(10,4)", nullable: false),
-                    SourceType = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
-                    LocationName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
-                    GeofenceId = table.Column<int>(type: "integer", nullable: true),
-                    TimeStart = table.Column<TimeOnly>(type: "time without time zone", nullable: true),
-                    TimeEnd = table.Column<TimeOnly>(type: "time without time zone", nullable: true),
-                    ValidFrom = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    ValidTo = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    Priority = table.Column<int>(type: "integer", nullable: false),
-                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_PriceRules", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -93,11 +93,11 @@ namespace TeslaHub.Api.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     ChargingProcessId = table.Column<int>(type: "integer", nullable: false),
                     CarId = table.Column<int>(type: "integer", nullable: false),
-                    Cost = table.Column<decimal>(type: "numeric(10,2)", nullable: false),
+                    PricePerKwh = table.Column<decimal>(type: "numeric(10,4)", nullable: true),
+                    TotalCost = table.Column<decimal>(type: "numeric(10,2)", nullable: false),
                     IsFree = table.Column<bool>(type: "boolean", nullable: false),
-                    SourceType = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
-                    AppliedRuleId = table.Column<int>(type: "integer", nullable: true),
                     IsManualOverride = table.Column<bool>(type: "boolean", nullable: false),
+                    LocationId = table.Column<int>(type: "integer", nullable: true),
                     Notes = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
@@ -106,9 +106,9 @@ namespace TeslaHub.Api.Migrations
                 {
                     table.PrimaryKey("PK_ChargingCostOverrides", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_ChargingCostOverrides_PriceRules_AppliedRuleId",
-                        column: x => x.AppliedRuleId,
-                        principalTable: "PriceRules",
+                        name: "FK_ChargingCostOverrides_ChargingLocations_LocationId",
+                        column: x => x.LocationId,
+                        principalTable: "ChargingLocations",
                         principalColumn: "Id");
                 });
 
@@ -124,20 +124,15 @@ namespace TeslaHub.Api.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_ChargingCostOverrides_AppliedRuleId",
-                table: "ChargingCostOverrides",
-                column: "AppliedRuleId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_ChargingCostOverrides_ChargingProcessId_CarId",
                 table: "ChargingCostOverrides",
                 columns: new[] { "ChargingProcessId", "CarId" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_PriceRules_Priority_IsActive",
-                table: "PriceRules",
-                columns: new[] { "Priority", "IsActive" });
+                name: "IX_ChargingCostOverrides_LocationId",
+                table: "ChargingCostOverrides",
+                column: "LocationId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Users_Username",
@@ -162,7 +157,7 @@ namespace TeslaHub.Api.Migrations
                 name: "Users");
 
             migrationBuilder.DropTable(
-                name: "PriceRules");
+                name: "ChargingLocations");
         }
     }
 }

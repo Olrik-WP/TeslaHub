@@ -82,9 +82,10 @@ public record ChargingSessionDto
     public string? Address { get; init; }
     public int? GeofenceId { get; init; }
     public string? GeofenceName { get; init; }
+    public double? Latitude { get; init; }
+    public double? Longitude { get; init; }
     public bool? FastChargerPresent { get; init; }
     public string? FastChargerType { get; init; }
-    public string? DetectedSourceType { get; init; }
 }
 
 public record ChargePointDto

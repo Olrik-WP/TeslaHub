@@ -53,38 +53,41 @@ public class CarConfig
     public bool IsActive { get; set; } = true;
 }
 
-public class PriceRule
+/// <summary>
+/// A named charging location with its pricing configuration.
+/// Pricing types: "home" (peak/off-peak), "subscription" (monthly flat), "manual" (per-session entry).
+/// </summary>
+public class ChargingLocation
 {
     [Key]
     public int Id { get; set; }
 
-    public int? CarId { get; set; }
-
     [Required, MaxLength(200)]
-    public string Label { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+    public int RadiusMeters { get; set; } = 200;
+
+    [Required, MaxLength(20)]
+    public string PricingType { get; set; } = "manual";
 
     [Column(TypeName = "decimal(10,4)")]
-    public decimal PricePerKwh { get; set; }
+    public decimal? PeakPricePerKwh { get; set; }
 
-    [Required, MaxLength(50)]
-    public string SourceType { get; set; } = "home";
+    [Column(TypeName = "decimal(10,4)")]
+    public decimal? OffPeakPricePerKwh { get; set; }
 
-    [MaxLength(200)]
-    public string? LocationName { get; set; }
+    public TimeOnly? OffPeakStart { get; set; }
+    public TimeOnly? OffPeakEnd { get; set; }
 
-    public int? GeofenceId { get; set; }
+    [Column(TypeName = "decimal(10,2)")]
+    public decimal? MonthlySubscription { get; set; }
 
-    public TimeOnly? TimeStart { get; set; }
-    public TimeOnly? TimeEnd { get; set; }
-
-    public DateTime? ValidFrom { get; set; }
-    public DateTime? ValidTo { get; set; }
-
-    public int Priority { get; set; }
-
-    public bool IsActive { get; set; } = true;
+    public int? CarId { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
 public class ChargingCostOverride
@@ -93,23 +96,21 @@ public class ChargingCostOverride
     public int Id { get; set; }
 
     public int ChargingProcessId { get; set; }
-
     public int CarId { get; set; }
 
+    [Column(TypeName = "decimal(10,4)")]
+    public decimal? PricePerKwh { get; set; }
+
     [Column(TypeName = "decimal(10,2)")]
-    public decimal Cost { get; set; }
+    public decimal TotalCost { get; set; }
 
     public bool IsFree { get; set; }
-
-    [MaxLength(50)]
-    public string? SourceType { get; set; }
-
-    public int? AppliedRuleId { get; set; }
-
-    [ForeignKey(nameof(AppliedRuleId))]
-    public PriceRule? AppliedRule { get; set; }
-
     public bool IsManualOverride { get; set; }
+
+    public int? LocationId { get; set; }
+
+    [ForeignKey(nameof(LocationId))]
+    public ChargingLocation? Location { get; set; }
 
     [MaxLength(500)]
     public string? Notes { get; set; }
@@ -118,28 +119,29 @@ public class ChargingCostOverride
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
-public record PriceRuleCreateDto
+// ─── DTOs ──────────────────────────────────────────────────────
+
+public record ChargingLocationCreateDto
 {
+    public string Name { get; init; } = string.Empty;
+    public double Latitude { get; init; }
+    public double Longitude { get; init; }
+    public int RadiusMeters { get; init; } = 200;
+    public string PricingType { get; init; } = "manual";
+    public decimal? PeakPricePerKwh { get; init; }
+    public decimal? OffPeakPricePerKwh { get; init; }
+    public string? OffPeakStart { get; init; }
+    public string? OffPeakEnd { get; init; }
+    public decimal? MonthlySubscription { get; init; }
     public int? CarId { get; init; }
-    public string Label { get; init; } = string.Empty;
-    public decimal PricePerKwh { get; init; }
-    public string SourceType { get; init; } = "home";
-    public string? LocationName { get; init; }
-    public int? GeofenceId { get; init; }
-    public string? TimeStart { get; init; }
-    public string? TimeEnd { get; init; }
-    public DateTime? ValidFrom { get; init; }
-    public DateTime? ValidTo { get; init; }
-    public int Priority { get; init; }
 }
 
-public record CostOverrideCreateDto
+public record SessionCostDto
 {
     public int ChargingProcessId { get; init; }
     public int CarId { get; init; }
-    public decimal Cost { get; init; }
+    public decimal? PricePerKwh { get; init; }
     public bool IsFree { get; init; }
-    public string? SourceType { get; init; }
     public string? Notes { get; init; }
 }
 
@@ -152,5 +154,6 @@ public record CostSummaryDto
     public decimal CostPerKm { get; init; }
     public decimal TotalDistanceKm { get; init; }
     public int SessionCount { get; init; }
-    public Dictionary<string, decimal> CostBySourceType { get; init; } = new();
+    public int FreeSessionCount { get; init; }
+    public Dictionary<string, decimal> CostByLocation { get; init; } = new();
 }

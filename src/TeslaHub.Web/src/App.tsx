@@ -58,7 +58,7 @@ function AppLayout() {
           <Route path="/trips" element={<Trips carId={selectedCarId} />} />
           <Route path="/map" element={<MapPage carId={selectedCarId} />} />
           <Route path="/costs" element={<Costs carId={selectedCarId} />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/settings" element={<Settings carId={selectedCarId} />} />
         </Routes>
       </Suspense>
       <BottomNav />

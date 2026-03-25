@@ -12,7 +12,7 @@ using TeslaHub.Api.Data;
 namespace TeslaHub.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260324152338_InitialCreate")]
+    [Migration("20260325081354_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -91,17 +91,11 @@ namespace TeslaHub.Api.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("AppliedRuleId")
-                        .HasColumnType("integer");
-
                     b.Property<int>("CarId")
                         .HasColumnType("integer");
 
                     b.Property<int>("ChargingProcessId")
                         .HasColumnType("integer");
-
-                    b.Property<decimal>("Cost")
-                        .HasColumnType("decimal(10,2)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -112,25 +106,86 @@ namespace TeslaHub.Api.Migrations
                     b.Property<bool>("IsManualOverride")
                         .HasColumnType("boolean");
 
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<string>("SourceType")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
+                    b.Property<decimal?>("PricePerKwh")
+                        .HasColumnType("decimal(10,4)");
+
+                    b.Property<decimal>("TotalCost")
+                        .HasColumnType("decimal(10,2)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AppliedRuleId");
+                    b.HasIndex("LocationId");
 
                     b.HasIndex("ChargingProcessId", "CarId")
                         .IsUnique();
 
                     b.ToTable("ChargingCostOverrides");
+                });
+
+            modelBuilder.Entity("TeslaHub.Api.Models.ChargingLocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("CarId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<decimal?>("MonthlySubscription")
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<TimeOnly?>("OffPeakEnd")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<decimal?>("OffPeakPricePerKwh")
+                        .HasColumnType("decimal(10,4)");
+
+                    b.Property<TimeOnly?>("OffPeakStart")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<decimal?>("PeakPricePerKwh")
+                        .HasColumnType("decimal(10,4)");
+
+                    b.Property<string>("PricingType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("RadiusMeters")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ChargingLocations");
                 });
 
             modelBuilder.Entity("TeslaHub.Api.Models.GlobalSettings", b =>
@@ -179,72 +234,13 @@ namespace TeslaHub.Api.Migrations
                         });
                 });
 
-            modelBuilder.Entity("TeslaHub.Api.Models.PriceRule", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int?>("CarId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("GeofenceId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Label")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("LocationName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<decimal>("PricePerKwh")
-                        .HasColumnType("decimal(10,4)");
-
-                    b.Property<int>("Priority")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("SourceType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<TimeOnly?>("TimeEnd")
-                        .HasColumnType("time without time zone");
-
-                    b.Property<TimeOnly?>("TimeStart")
-                        .HasColumnType("time without time zone");
-
-                    b.Property<DateTime?>("ValidFrom")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ValidTo")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Priority", "IsActive");
-
-                    b.ToTable("PriceRules");
-                });
-
             modelBuilder.Entity("TeslaHub.Api.Models.ChargingCostOverride", b =>
                 {
-                    b.HasOne("TeslaHub.Api.Models.PriceRule", "AppliedRule")
+                    b.HasOne("TeslaHub.Api.Models.ChargingLocation", "Location")
                         .WithMany()
-                        .HasForeignKey("AppliedRuleId");
+                        .HasForeignKey("LocationId");
 
-                    b.Navigation("AppliedRule");
+                    b.Navigation("Location");
                 });
 #pragma warning restore 612, 618
         }

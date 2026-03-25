@@ -22,6 +22,8 @@ public static class ChargingQueries
                 cp.end_rated_range_km AS "EndRatedRangeKm",
                 cp.cost AS "Cost",
                 a.display_name AS "Address",
+                a.latitude AS "Latitude",
+                a.longitude AS "Longitude",
                 cp.geofence_id AS "GeofenceId",
                 g.name AS "GeofenceName",
                 ch.fast_charger_present AS "FastChargerPresent",

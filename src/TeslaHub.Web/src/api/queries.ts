@@ -75,11 +75,12 @@ export interface ChargingSession {
   outsideTempAvg: number | null;
   cost: number | null;
   address: string | null;
+  latitude: number | null;
+  longitude: number | null;
   geofenceId: number | null;
   geofenceName: string | null;
   fastChargerPresent: boolean | null;
   fastChargerType: string | null;
-  detectedSourceType: string | null;
 }
 
 export interface ChargePoint {
@@ -89,32 +90,44 @@ export interface ChargePoint {
   chargerPower: number | null;
 }
 
-export interface PriceRule {
+export interface ChargingLocation {
   id: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  pricingType: string;
+  peakPricePerKwh: number | null;
+  offPeakPricePerKwh: number | null;
+  offPeakStart: string | null;
+  offPeakEnd: string | null;
+  monthlySubscription: number | null;
   carId: number | null;
-  label: string;
-  pricePerKwh: number;
-  sourceType: string;
-  locationName: string | null;
-  geofenceId: number | null;
-  timeStart: string | null;
-  timeEnd: string | null;
-  validFrom: string | null;
-  validTo: string | null;
-  priority: number;
-  isActive: boolean;
 }
 
 export interface CostOverride {
   id: number;
   chargingProcessId: number;
   carId: number;
-  cost: number;
+  pricePerKwh: number | null;
+  totalCost: number;
   isFree: boolean;
-  sourceType: string | null;
-  appliedRuleId: number | null;
   isManualOverride: boolean;
+  locationId: number | null;
+  location: ChargingLocation | null;
   notes: string | null;
+}
+
+export interface CostSummary {
+  period: string;
+  totalCost: number;
+  totalKwh: number;
+  avgPricePerKwh: number;
+  costPerKm: number;
+  totalDistanceKm: number;
+  sessionCount: number;
+  freeSessionCount: number;
+  costByLocation: Record<string, number>;
 }
 
 export interface GlobalSettings {
@@ -135,15 +148,22 @@ export interface Stats {
   avgConsumptionKWhPer100Km: number;
 }
 
+// ─── Vehicle ────────────────────────────────────────────────────
 export const getCars = () => api<Car[]>('/vehicle/cars');
 export const getVehicleStatus = (carId: number) => api<VehicleStatus>(`/vehicle/${carId}/status`);
+
+// ─── Drives ─────────────────────────────────────────────────────
 export const getDrives = (carId: number, limit = 20, offset = 0) =>
   api<Drive[]>(`/drives/${carId}?limit=${limit}&offset=${offset}`);
 export const getDrivePositions = (driveId: number) => api<Position[]>(`/drives/positions/${driveId}`);
+
+// ─── Charging ───────────────────────────────────────────────────
 export const getChargingSessions = (carId: number, limit = 20, offset = 0) =>
   api<ChargingSession[]>(`/charging/${carId}?limit=${limit}&offset=${offset}`);
 export const getChargePoints = (carId: number, processId: number) =>
   api<ChargePoint[]>(`/charging/${carId}/${processId}/points`);
+
+// ─── Map ────────────────────────────────────────────────────────
 export const getRecentPositions = (carId: number, hours = 24) =>
   api<Position[]>(`/map/recent/${carId}?hours=${hours}`);
 export const getStats = (carId: number, from?: string, to?: string) => {
@@ -152,7 +172,22 @@ export const getStats = (carId: number, from?: string, to?: string) => {
   if (to) params.set('to', to);
   return api<Stats>(`/map/stats/${carId}?${params}`);
 };
-export const getPriceRules = (carId?: number) =>
-  api<PriceRule[]>(`/costs/rules${carId ? `?carId=${carId}` : ''}`);
+
+// ─── Costs & Locations ──────────────────────────────────────────
+export const getChargingLocations = (carId?: number) =>
+  api<ChargingLocation[]>(`/costs/locations${carId ? `?carId=${carId}` : ''}`);
+export const getCostOverrides = (carId: number) =>
+  api<CostOverride[]>(`/costs/overrides/${carId}`);
+export const getCostSummary = (carId: number, year?: number, month?: number) => {
+  const params = new URLSearchParams();
+  if (year) params.set('year', String(year));
+  if (month) params.set('month', String(month));
+  return api<CostSummary>(`/costs/summary/${carId}?${params}`);
+};
+export const getSuggestedPrice = (lat: number, lng: number, carId: number) =>
+  api<{ suggestedPrice: number | null }>(`/costs/suggest-price?lat=${lat}&lng=${lng}&carId=${carId}`);
+export const getMatchingLocation = (lat: number, lng: number, carId?: number) =>
+  api<ChargingLocation | null>(`/costs/match-location?lat=${lat}&lng=${lng}${carId ? `&carId=${carId}` : ''}`);
+
+// ─── Settings ───────────────────────────────────────────────────
 export const getSettings = () => api<GlobalSettings>('/costs/settings');
-export const getCostOverrides = (carId: number) => api<CostOverride[]>(`/costs/overrides/${carId}`);
