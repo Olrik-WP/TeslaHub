@@ -11,7 +11,7 @@ public static class VehicleEndpoints
 
         group.MapGet("/cars", async (TeslaMateConnectionFactory tm, CacheService cache) =>
         {
-            var cars = await cache.GetOrSetStaticAsync("cars", tm.GetCarsAsync);
+            var cars = await cache.GetOrSetHistoricalAsync("cars", tm.GetCarsAsync);
             return Results.Ok(cars);
         });
 

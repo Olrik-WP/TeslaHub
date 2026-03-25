@@ -120,6 +120,25 @@ public record StatsDto
     public double AvgConsumptionKWhPer100Km { get; init; }
 }
 
+public record DriveStatsDto
+{
+    public int DriveCount { get; init; }
+    public double? MaxSpeedKmh { get; init; }
+    public double? MedianDistanceKm { get; init; }
+    public double TotalDistanceKm { get; init; }
+    public double TotalNetEnergyKwh { get; init; }
+    public double TotalDays { get; init; }
+    public double TotalMileageKm { get; init; }
+}
+
+public record ChargingStatsDto
+{
+    public int ChargeCount { get; init; }
+    public double TotalEnergyAdded { get; init; }
+    public double TotalEnergyUsed { get; init; }
+    public double ChargingEfficiency { get; init; }
+}
+
 public record CarListItemDto
 {
     public int Id { get; init; }

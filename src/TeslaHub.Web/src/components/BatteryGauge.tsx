@@ -7,7 +7,7 @@ interface Props {
 
 export default function BatteryGauge({ level, rangeKm, rangeUnit = 'km', isCharging }: Props) {
   const clampedLevel = Math.max(0, Math.min(100, level));
-  const color = clampedLevel <= 20 ? '#ef4444' : clampedLevel <= 50 ? '#f59e0b' : '#22c55e';
+  const color = clampedLevel < 20 ? '#ef4444' : clampedLevel < 30 ? '#f97316' : clampedLevel < 50 ? '#eab308' : '#22c55e';
   const radius = 60;
   const stroke = 10;
   const circumference = 2 * Math.PI * radius;

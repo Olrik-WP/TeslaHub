@@ -195,6 +195,27 @@ export const getSuggestedPrice = (lat: number, lng: number, carId: number) =>
 export const getMatchingLocation = (lat: number, lng: number, carId?: number) =>
   api<ChargingLocation | null>(`/costs/match-location?lat=${lat}&lng=${lng}${carId ? `&carId=${carId}` : ''}`);
 
+export interface DriveStats {
+  driveCount: number;
+  maxSpeedKmh: number | null;
+  medianDistanceKm: number | null;
+  totalDistanceKm: number;
+  totalNetEnergyKwh: number;
+  totalDays: number;
+  totalMileageKm: number;
+}
+
+export const getDriveStats = (carId: number) => api<DriveStats>(`/drives/${carId}/stats`);
+
+export interface ChargingStats {
+  chargeCount: number;
+  totalEnergyAdded: number;
+  totalEnergyUsed: number;
+  chargingEfficiency: number;
+}
+
+export const getChargingStats = (carId: number) => api<ChargingStats>(`/charging/${carId}/stats`);
+
 // ─── Vehicle Image ──────────────────────────────────────────────
 export interface CarImageInfo {
   paintCode: string | null;

@@ -8,7 +8,7 @@ import { useDrives } from '../hooks/useDrives';
 import { useUnits } from '../hooks/useUnits';
 import BatteryGauge from '../components/BatteryGauge';
 import StatCard from '../components/StatCard';
-import { getStats } from '../api/queries';
+import { getStats, getChargingStats, getDriveStats } from '../api/queries';
 import type { VehicleStatus } from '../api/queries';
 
 interface Props {
@@ -60,6 +60,18 @@ export default function Home({ carId }: Props) {
   const { data: stats } = useQuery({
     queryKey: ['home-stats', carId],
     queryFn: () => getStats(carId!),
+    enabled: !!carId,
+    staleTime: 5 * 60_000,
+  });
+  const { data: chargingStats } = useQuery({
+    queryKey: ['charging-stats', carId],
+    queryFn: () => getChargingStats(carId!),
+    enabled: !!carId,
+    staleTime: 5 * 60_000,
+  });
+  const { data: driveStats } = useQuery({
+    queryKey: ['drive-stats', carId],
+    queryFn: () => getDriveStats(carId!),
     enabled: !!carId,
     staleTime: 5 * 60_000,
   });
@@ -134,28 +146,74 @@ export default function Home({ carId }: Props) {
         </p>
       </div>
 
-      {/* Hero: Vehicle image with battery gauge overlay */}
-      <div className="relative bg-[#141414] rounded-xl overflow-hidden">
-        <div className="flex items-center justify-center h-[220px]">
-          {imgSrc && !imgError ? (
-            <img
-              src={imgSrc}
-              alt={vehicle.name || 'Tesla'}
-              className="max-h-[200px] w-auto object-contain"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <span className="text-[#6b7280]">Vehicle image</span>
+      {/* Hero: Vehicle image with drive stats */}
+      <div className="bg-[#141414] rounded-xl overflow-hidden">
+        {/* Top row: drive averages */}
+        {driveStats && driveStats.driveCount > 0 && (
+          <div className="grid grid-cols-3 border-b border-[#2a2a2a]">
+            <div className="px-3 py-2 text-center">
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Median dist.</div>
+              <div className="text-sm font-bold tabular-nums">{driveStats.medianDistanceKm != null ? u.fmtDist(driveStats.medianDistanceKm) : '—'} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+            </div>
+            <div className="px-3 py-2 text-center border-x border-[#2a2a2a]">
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Ø Dist/day</div>
+              <div className="text-sm font-bold tabular-nums">{u.fmtDist(driveStats.totalDistanceKm / driveStats.totalDays)} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+            </div>
+            <div className="px-3 py-2 text-center">
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Ø kWh/day</div>
+              <div className="text-sm font-bold tabular-nums">{(driveStats.totalNetEnergyKwh / driveStats.totalDays).toFixed(1)} <span className="text-[10px] font-normal text-[#9ca3af]">kWh</span></div>
+            </div>
+          </div>
+        )}
+
+        {/* Middle row: Max Speed | Car Image | Battery Gauge */}
+        <div className="relative flex items-center h-[220px]">
+          {driveStats && driveStats.maxSpeedKmh != null && (
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10 bg-black/60 rounded-xl px-3 py-2 text-center">
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Max Speed</div>
+              <div className="text-xl font-bold tabular-nums">{Math.round(u.convertDistance(driveStats.maxSpeedKmh)!)}</div>
+              <div className="text-[10px] text-[#9ca3af]">{u.distanceUnit === 'mi' ? 'mph' : 'km/h'}</div>
+            </div>
           )}
+          <div className="flex-1 flex items-center justify-center">
+            {imgSrc && !imgError ? (
+              <img
+                src={imgSrc}
+                alt={vehicle.name || 'Tesla'}
+                className="max-h-[200px] w-auto object-contain"
+                onError={() => setImgError(true)}
+              />
+            ) : (
+              <span className="text-[#6b7280]">Vehicle image</span>
+            )}
+          </div>
+          <div className="absolute right-2 bottom-2 z-10 bg-black/60 rounded-xl p-1">
+            <BatteryGauge
+              level={vehicle.batteryLevel ?? 0}
+              rangeKm={u.convertDistance(vehicle.ratedBatteryRangeKm)}
+              rangeUnit={u.distanceUnit}
+              isCharging={isCharging}
+            />
+          </div>
         </div>
-        <div className="absolute bottom-2 right-2 bg-black/60 rounded-xl p-1">
-          <BatteryGauge
-            level={vehicle.batteryLevel ?? 0}
-            rangeKm={u.convertDistance(vehicle.ratedBatteryRangeKm)}
-            rangeUnit={u.distanceUnit}
-            isCharging={isCharging}
-          />
-        </div>
+
+        {/* Bottom row: mileage extrapolations */}
+        {driveStats && driveStats.driveCount > 0 && (
+          <div className="grid grid-cols-3 border-t border-[#2a2a2a]">
+            <div className="px-3 py-2 text-center">
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Est. Monthly</div>
+              <div className="text-sm font-bold tabular-nums">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * (365 / 12))!).toLocaleString()} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+            </div>
+            <div className="px-3 py-2 text-center border-x border-[#2a2a2a]">
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{driveStats.driveCount} trips</div>
+              <div className="text-sm font-bold tabular-nums">{Math.round(driveStats.totalDays)} <span className="text-[10px] font-normal text-[#9ca3af]">days</span></div>
+            </div>
+            <div className="px-3 py-2 text-center">
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Est. Annual</div>
+              <div className="text-sm font-bold tabular-nums text-[#eab308]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * 365)!).toLocaleString()} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stats grid */}
@@ -167,7 +225,12 @@ export default function Home({ carId }: Props) {
         />
         <StatCard
           label="Range"
-          value={vehicle.ratedBatteryRangeKm ? Math.round(u.convertDistance(vehicle.ratedBatteryRangeKm)!) : '—'}
+          value={vehicle.ratedBatteryRangeKm ? (() => {
+            const current = Math.round(u.convertDistance(vehicle.ratedBatteryRangeKm)!);
+            const bl = vehicle.usableBatteryLevel ?? vehicle.batteryLevel;
+            const max = bl && bl > 0 ? Math.round(u.convertDistance(vehicle.ratedBatteryRangeKm * 100 / bl)!) : null;
+            return max ? `${current} / ${max}` : current;
+          })() : '—'}
           unit={u.distanceUnit}
           color="#22c55e"
           progress={vehicle.batteryLevel}
@@ -212,15 +275,69 @@ export default function Home({ carId }: Props) {
             unit="kWh"
           />
         )}
-        {degradation != null && (
-          <StatCard
-            label="Degradation"
-            value={degradation.toFixed(1)}
-            unit="%"
-            color={degradationColor}
-          />
-        )}
+        {degradation != null && (() => {
+          const health = Math.min(100, 100 - degradation);
+          const healthColor = health >= 90 ? '#22c55e' : health >= 80 ? '#eab308' : '#ef4444';
+          return (
+            <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 flex flex-col justify-between min-h-[100px]">
+              <span className="text-[#9ca3af] text-xs uppercase tracking-wider">Battery</span>
+              <div className="mt-2 flex items-baseline justify-between">
+                <div>
+                  <span className="text-3xl font-bold tabular-nums" style={{ color: healthColor }}>{health.toFixed(1)}</span>
+                  <span className="text-[#9ca3af] text-sm ml-1">%</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm tabular-nums" style={{ color: degradationColor }}>-{degradation.toFixed(1)}%</span>
+                </div>
+              </div>
+              <div className="mt-2 h-2 rounded-full bg-[#2a2a2a] overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{ width: `${health}%`, background: 'linear-gradient(90deg, #ef4444, #f97316, #eab308, #22c55e)' }}
+                />
+              </div>
+            </div>
+          );
+        })()}
       </div>
+
+      {/* Charging stats */}
+      {chargingStats && chargingStats.chargeCount > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
+            <span className="text-xs text-[#9ca3af] uppercase tracking-wider">Charges</span>
+            <div className="mt-3 space-y-2">
+              <div className="flex justify-between items-baseline">
+                <span className="text-sm text-[#9ca3af]"># of charges</span>
+                <span className="text-lg font-bold tabular-nums">{chargingStats.chargeCount}</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-sm text-[#9ca3af]">Cycles</span>
+                <span className="text-lg font-bold tabular-nums">
+                  {maxCapacity && maxCapacity > 0 ? Math.floor(chargingStats.totalEnergyAdded / maxCapacity) : '—'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
+            <span className="text-xs text-[#9ca3af] uppercase tracking-wider">Energy</span>
+            <div className="mt-3 space-y-2">
+              <div className="flex justify-between items-baseline">
+                <span className="text-sm text-[#9ca3af]">Added</span>
+                <span className="text-lg font-bold tabular-nums text-[#eab308]">{Math.round(chargingStats.totalEnergyAdded)} <span className="text-sm font-normal text-[#9ca3af]">kWh</span></span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-sm text-[#9ca3af]">Used</span>
+                <span className="text-lg font-bold tabular-nums text-[#eab308]">{Math.round(chargingStats.totalEnergyUsed)} <span className="text-sm font-normal text-[#9ca3af]">kWh</span></span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="text-sm text-[#9ca3af]">Efficiency</span>
+                <span className="text-lg font-bold tabular-nums text-[#22c55e]">{(chargingStats.chargingEfficiency * 100).toFixed(1)}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Map + Last trip */}
       <div className="flex gap-3" style={{ minHeight: 260 }}>

@@ -27,6 +27,14 @@ public static class ChargingEndpoints
             return Results.Ok(points);
         });
 
+        group.MapGet("/{carId:int}/stats", async (int carId, TeslaMateConnectionFactory tm, CacheService cache) =>
+        {
+            var stats = await cache.GetOrSetHistoricalAsync(
+                $"chargingStats:{carId}",
+                () => tm.GetChargingStatsAsync(carId));
+            return Results.Ok(stats);
+        });
+
         group.MapGet("/geofences", async (TeslaMateConnectionFactory tm, CacheService cache) =>
         {
             var geofences = await cache.GetOrSetStaticAsync("geofences", tm.GetGeofencesAsync);

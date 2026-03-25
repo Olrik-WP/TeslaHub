@@ -19,6 +19,14 @@ public static class DrivesEndpoints
             return Results.Ok(drives);
         });
 
+        group.MapGet("/{carId:int}/stats", async (int carId, TeslaMateConnectionFactory tm, CacheService cache) =>
+        {
+            var stats = await cache.GetOrSetHistoricalAsync(
+                $"driveStats:{carId}",
+                () => tm.GetDriveStatsAsync(carId));
+            return Results.Ok(stats);
+        });
+
         group.MapGet("/positions/{driveId:int}", async (int driveId, TeslaMateConnectionFactory tm, CacheService cache) =>
         {
             var positions = await cache.GetOrSetHistoricalAsync(

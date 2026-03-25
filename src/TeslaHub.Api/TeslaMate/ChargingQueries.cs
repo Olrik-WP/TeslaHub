@@ -60,6 +60,22 @@ public static class ChargingQueries
             """, new { Id = chargingProcessId });
     }
 
+    public static async Task<ChargingStatsDto?> GetChargingStatsAsync(this TeslaMateConnectionFactory db, int carId)
+    {
+        using var conn = db.CreateConnection();
+        return await conn.QueryFirstOrDefaultAsync<ChargingStatsDto>("""
+            SELECT
+                COUNT(*) AS "ChargeCount",
+                COALESCE(SUM(charge_energy_added), 0) AS "TotalEnergyAdded",
+                COALESCE(SUM(GREATEST(charge_energy_added, charge_energy_used)), 0) AS "TotalEnergyUsed",
+                CASE WHEN SUM(GREATEST(charge_energy_added, charge_energy_used)) > 0
+                     THEN SUM(charge_energy_added) / SUM(GREATEST(charge_energy_added, charge_energy_used))
+                     ELSE 0 END AS "ChargingEfficiency"
+            FROM charging_processes
+            WHERE car_id = @CarId AND charge_energy_added > 0.01
+            """, new { CarId = carId });
+    }
+
     public static async Task<IEnumerable<GeofenceDto>> GetGeofencesAsync(this TeslaMateConnectionFactory db)
     {
         using var conn = db.CreateConnection();

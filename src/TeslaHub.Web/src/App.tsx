@@ -1,8 +1,9 @@
-import { lazy, Suspense, useState, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { isAuthenticated, tryInitialRefresh } from './api/client';
 import { useCars } from './hooks/useVehicle';
+import { getSettings } from './api/queries';
 import BottomNav from './components/BottomNav';
 import CarSelector from './components/CarSelector';
 
@@ -53,15 +54,33 @@ function ProtectedRoute() {
   return <Outlet />;
 }
 
+const CAR_STORAGE_KEY = 'teslahub_selected_car';
+
 function AppLayout() {
   const { data: cars } = useCars();
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings, staleTime: 5 * 60_000 });
   const [selectedCarId, setSelectedCarId] = useState<number | undefined>();
 
   useEffect(() => {
-    if (cars && cars.length > 0 && !selectedCarId) {
-      setSelectedCarId(cars[0].id);
+    if (!cars || cars.length === 0 || selectedCarId) return;
+
+    const stored = localStorage.getItem(CAR_STORAGE_KEY);
+    if (stored) {
+      const id = Number(stored);
+      if (cars.some(c => c.id === id)) { setSelectedCarId(id); return; }
     }
-  }, [cars, selectedCarId]);
+
+    if (settings?.defaultCarId && cars.some(c => c.id === settings.defaultCarId)) {
+      setSelectedCarId(settings.defaultCarId); return;
+    }
+
+    setSelectedCarId(cars[0].id);
+  }, [cars, settings, selectedCarId]);
+
+  const handleCarChange = useCallback((id: number) => {
+    setSelectedCarId(id);
+    localStorage.setItem(CAR_STORAGE_KEY, String(id));
+  }, []);
 
   return (
     <div className="min-h-dvh bg-[#0a0a0a] flex flex-col">
@@ -69,7 +88,7 @@ function AppLayout() {
         <CarSelector
           cars={cars}
           selectedId={selectedCarId}
-          onChange={setSelectedCarId}
+          onChange={handleCarChange}
         />
       )}
       <div className="flex-1 overflow-y-auto pb-20">

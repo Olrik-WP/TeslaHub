@@ -36,6 +36,24 @@ public static class DrivesQueries
             """, new { CarId = carId, Limit = limit, Offset = offset });
     }
 
+    public static async Task<DriveStatsDto?> GetDriveStatsAsync(this TeslaMateConnectionFactory db, int carId)
+    {
+        using var conn = db.CreateConnection();
+        return await conn.QueryFirstOrDefaultAsync<DriveStatsDto>("""
+            SELECT
+                COUNT(*) AS "DriveCount",
+                MAX(d.speed_max) AS "MaxSpeedKmh",
+                percentile_cont(0.5) WITHIN GROUP (ORDER BY d.distance) AS "MedianDistanceKm",
+                COALESCE(SUM(d.distance), 0) AS "TotalDistanceKm",
+                COALESCE(SUM((d.start_rated_range_km - d.end_rated_range_km) * c.efficiency), 0) AS "TotalNetEnergyKwh",
+                GREATEST(EXTRACT(epoch FROM (NOW() - MIN(d.start_date))) / 86400.0, 1) AS "TotalDays",
+                COALESCE(MAX(d.end_km) - MIN(d.start_km), 0) AS "TotalMileageKm"
+            FROM drives d
+            INNER JOIN cars c ON d.car_id = c.id
+            WHERE d.car_id = @CarId AND d.end_date IS NOT NULL
+            """, new { CarId = carId });
+    }
+
     public static async Task<IEnumerable<PositionDto>> GetDrivePositionsAsync(this TeslaMateConnectionFactory db, int driveId)
     {
         using var conn = db.CreateConnection();
