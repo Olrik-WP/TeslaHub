@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
-  ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Legend, Line, ComposedChart,
+  Scatter, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Line, ComposedChart,
   ZAxis,
 } from 'recharts';
 import { getChargingCurve } from '../api/queries';
-import type { ChargingCurvePoint, ChargingCurveMedian } from '../api/queries';
+import type { ChargingCurvePoint } from '../api/queries';
 
 interface Props {
   carId: number | undefined;
@@ -31,21 +32,32 @@ function buildSeriesBySession(points: ChargingCurvePoint[]) {
 }
 
 export default function ChargingStats({ carId }: Props) {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sessionFilter = searchParams.get('session') ? Number(searchParams.get('session')) : null;
+
   const { data, isLoading } = useQuery({
     queryKey: ['chargingCurve', carId],
     queryFn: () => getChargingCurve(carId!),
     enabled: !!carId,
   });
 
-  const points = data?.points ?? [];
+  const allPoints = data?.points ?? [];
   const median = data?.median ?? [];
+
+  const points = sessionFilter
+    ? allPoints.filter(p => p.chargingProcessId === sessionFilter)
+    : allPoints;
+
   const series = buildSeriesBySession(points);
+
+  const isSingleSession = sessionFilter != null;
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">Loading...</div>;
   }
 
-  if (points.length === 0) {
+  if (allPoints.length === 0) {
     return (
       <div className="p-4 sm:p-6 space-y-4">
         <h1 className="text-lg sm:text-xl font-bold text-white">DC Charging Curve</h1>
@@ -54,15 +66,49 @@ export default function ChargingStats({ carId }: Props) {
     );
   }
 
-  const maxPower = Math.max(...points.map(p => p.power), ...median.map(m => m.power));
+  if (isSingleSession && points.length === 0) {
+    return (
+      <div className="p-4 sm:p-6 space-y-4">
+        <button
+          onClick={() => setSearchParams({})}
+          className="text-sm text-[#f59e0b] hover:underline"
+        >
+          ← All sessions
+        </button>
+        <h1 className="text-lg sm:text-xl font-bold text-white">DC Charging Curve</h1>
+        <p className="text-[#9ca3af] text-sm">No DC data for this session.</p>
+      </div>
+    );
+  }
+
+  const maxPower = Math.max(...points.map(p => p.power), ...(isSingleSession ? [] : median.map(m => m.power)));
   const yMax = Math.ceil(maxPower / 10) * 10 + 10;
 
   return (
     <div className="p-4 sm:p-6 space-y-4">
-      <h1 className="text-lg sm:text-xl font-bold text-white">DC Charging Curve</h1>
+      {isSingleSession ? (
+        <button
+          onClick={() => setSearchParams({})}
+          className="text-sm text-[#f59e0b] hover:underline"
+        >
+          ← All sessions
+        </button>
+      ) : (
+        <button
+          onClick={() => navigate('/charging')}
+          className="text-sm text-[#9ca3af] hover:underline"
+        >
+          ← Charging
+        </button>
+      )}
+
+      <h1 className="text-lg sm:text-xl font-bold text-white">
+        {isSingleSession ? series[0]?.label ?? 'Session' : 'DC Charging Curve'}
+      </h1>
       <p className="text-[#6b7280] text-xs">
-        Power (kW) vs State of Charge (%). Each color represents a different charging session.
-        The white line shows the median power at each SoC level.
+        {isSingleSession
+          ? 'Power (kW) vs State of Charge (%) for this session.'
+          : 'Power (kW) vs State of Charge (%). Each color = a session. White line = median.'}
       </p>
 
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
@@ -109,34 +155,39 @@ export default function ChargingStats({ carId }: Props) {
               />
             ))}
 
-            <Line
-              data={median}
-              dataKey="power"
-              name="Median"
-              stroke="#ffffff"
-              strokeWidth={2}
-              dot={false}
-              type="monotone"
-              legendType="line"
-            />
+            {!isSingleSession && median.length > 0 && (
+              <Line
+                data={median}
+                dataKey="power"
+                name="Median"
+                stroke="#ffffff"
+                strokeWidth={2}
+                dot={false}
+                type="monotone"
+                legendType="line"
+              />
+            )}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
 
-      <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
-        <h2 className="text-sm font-semibold text-white mb-2">Sessions ({series.length})</h2>
-        <div className="flex flex-wrap gap-2">
-          {series.map((s) => (
-            <span
-              key={s.id}
-              className="inline-flex items-center gap-1.5 text-xs text-[#d1d5db] bg-[#1f1f1f] rounded-lg px-2 py-1"
-            >
-              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
-              {s.label}
-            </span>
-          ))}
+      {!isSingleSession && (
+        <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
+          <h2 className="text-sm font-semibold text-white mb-2">Sessions ({series.length})</h2>
+          <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto">
+            {series.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setSearchParams({ session: String(s.id) })}
+                className="inline-flex items-center gap-1.5 text-xs text-[#d1d5db] bg-[#1f1f1f] rounded-lg px-2 py-1 hover:bg-[#2a2a2a] transition-colors cursor-pointer"
+              >
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

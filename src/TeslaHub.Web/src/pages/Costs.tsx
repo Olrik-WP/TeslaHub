@@ -155,7 +155,7 @@ export default function Costs({ carId }: Props) {
                 <span className="text-sm font-bold text-white">{totalLocCost.toFixed(0)} {u.currencySymbol}</span>
               </div>
             </div>
-            <div className="flex-1 w-full space-y-2">
+            <div className="flex-1 w-full space-y-2 max-h-44 overflow-y-auto pr-1">
               {locationData.map((d, i) => {
                 const pct = totalLocCost > 0 ? (d.cost / totalLocCost * 100) : 0;
                 return (

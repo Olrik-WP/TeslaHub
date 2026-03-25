@@ -23,7 +23,6 @@ const PERIOD_OPTIONS: { key: PeriodKey; label: string; days?: number }[] = [
 ];
 
 export default function Charging({ carId }: Props) {
-  const navigate = useNavigate();
   const [period, setPeriod] = useState<PeriodKey>('90d');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const u = useUnits();
@@ -104,13 +103,6 @@ export default function Charging({ carId }: Props) {
             {t === 'all' ? 'All' : t}
           </button>
         ))}
-        <div className="w-px bg-[#2a2a2a] mx-1" />
-        <button
-          onClick={() => navigate('/charging-stats')}
-          className="px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] bg-[#1a1a1a] text-[#f59e0b] border border-[#f59e0b]/30 hover:bg-[#f59e0b]/10 transition-colors"
-        >
-          DC Curve ⚡
-        </button>
       </div>
 
       {/* Summary */}
@@ -199,6 +191,7 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
   carId: number | undefined;
   costSource: string;
 }) {
+  const navigate = useNavigate();
   const isTeslaHub = costSource !== 'teslamate';
   const queryClient = useQueryClient();
   const u = useUnits();
@@ -299,6 +292,14 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
           <span className={`text-xs px-2 py-0.5 rounded ${chargeType === 'DC' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' : 'bg-[#3b82f6]/20 text-[#3b82f6]'}`}>
             {chargeType}
           </span>
+          {chargeType === 'DC' && (
+            <button
+              onClick={(e) => { e.stopPropagation(); navigate(`/charging-stats?session=${session.id}`); }}
+              className="text-[10px] px-2 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30 hover:bg-[#f59e0b]/20 transition-colors"
+            >
+              Curve
+            </button>
+          )}
         </div>
       </div>
 

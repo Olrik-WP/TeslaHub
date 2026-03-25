@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 const links = [
   { to: '/', label: 'Accueil', icon: '⌂' },
   { to: '/charging', label: 'Charge', icon: '⚡' },
+  { to: '/charging-stats', label: 'DC Curve', icon: '⚡' },
   { to: '/trips', label: 'Trajets', icon: '⟿' },
   { to: '/map', label: 'Carte', icon: '◉' },
   { to: '/costs', label: 'Coûts', icon: '◆' },
