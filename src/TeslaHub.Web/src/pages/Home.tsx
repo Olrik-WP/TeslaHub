@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
 import { useVehicleStatus } from '../hooks/useVehicle';
 import { useChargingSessions } from '../hooks/useCharging';
@@ -7,6 +8,7 @@ import { useDrives } from '../hooks/useDrives';
 import { useUnits } from '../hooks/useUnits';
 import BatteryGauge from '../components/BatteryGauge';
 import StatCard from '../components/StatCard';
+import { getStats } from '../api/queries';
 import type { VehicleStatus } from '../api/queries';
 
 interface Props {
@@ -32,10 +34,10 @@ function useStickyVehicle(vehicle: VehicleStatus | undefined) {
     outsideTemp: vehicle.outsideTemp ?? lastKnown.current.outsideTemp ?? null,
     insideTemp: vehicle.insideTemp ?? lastKnown.current.insideTemp ?? null,
     ratedBatteryRangeKm: vehicle.ratedBatteryRangeKm ?? lastKnown.current.ratedBatteryRangeKm ?? null,
-    idealBatteryRangeKm: vehicle.idealBatteryRangeKm ?? lastKnown.current.idealBatteryRangeKm ?? null,
     batteryLevel: vehicle.batteryLevel ?? lastKnown.current.batteryLevel ?? null,
     latitude: vehicle.latitude ?? lastKnown.current.latitude ?? null,
     longitude: vehicle.longitude ?? lastKnown.current.longitude ?? null,
+    firmwareVersion: vehicle.firmwareVersion ?? lastKnown.current.firmwareVersion ?? null,
   };
 }
 
@@ -53,14 +55,39 @@ export default function Home({ carId }: Props) {
   const vehicle = useStickyVehicle(rawVehicle);
   const { data: charges } = useChargingSessions(carId, 5);
   const { data: drives } = useDrives(carId, 5);
+  const { data: stats } = useQuery({
+    queryKey: ['home-stats', carId],
+    queryFn: () => getStats(carId!),
+    enabled: !!carId,
+    staleTime: 5 * 60_000,
+  });
   const u = useUnits();
   const [imgError, setImgError] = useState(false);
+  const [address, setAddress] = useState<string | null>(null);
 
   const lastDrive = drives?.[0];
   const lastCharge = charges?.[0];
   const isCharging = lastCharge && !lastCharge.endDate;
-
   const imgSrc = carId ? `/api/vehicle/${carId}/image` : null;
+
+  const lat = vehicle?.latitude;
+  const lng = vehicle?.longitude;
+  useEffect(() => {
+    if (lat == null || lng == null) return;
+    const controller = new AbortController();
+    fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18`,
+      { signal: controller.signal, headers: { 'Accept-Language': 'fr' } }
+    )
+      .then(r => r.json())
+      .then(d => {
+        if (d.display_name) {
+          setAddress(d.display_name.split(',').slice(0, 3).join(',').trim());
+        }
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [lat, lng]);
 
   if (!vehicle) {
     return (
@@ -77,32 +104,28 @@ export default function Home({ carId }: Props) {
         <h1 className="text-xl font-bold">
           {vehicle.marketingName || vehicle.model || vehicle.name}
         </h1>
-        {vehicle.trimBadging && (
-          <p className="text-[#9ca3af] text-sm">{vehicle.trimBadging}</p>
-        )}
-        {vehicle.exteriorColor && (
-          <p className="text-[#6b7280] text-xs mt-0.5">{vehicle.exteriorColor}</p>
-        )}
-        {vehicle.vin && (
-          <p className="text-[#6b7280] text-xs mt-0.5">VIN {vehicle.vin}</p>
-        )}
+        <p className="text-sm text-[#9ca3af] mt-1">
+          {[vehicle.exteriorColor, vehicle.vin ? `VIN ${vehicle.vin}` : null]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
       </div>
 
-      {/* Row 1: Vehicle image + Battery gauge */}
-      <div className="flex gap-3 items-center">
-        <div className="flex-[3] flex items-center justify-center min-h-[140px] bg-[#141414] border border-[#2a2a2a] rounded-xl overflow-hidden">
+      {/* Hero: Vehicle image with battery gauge overlay */}
+      <div className="relative bg-[#141414] rounded-xl overflow-hidden">
+        <div className="flex items-center justify-center h-[220px]">
           {imgSrc && !imgError ? (
             <img
               src={imgSrc}
               alt={vehicle.name || 'Tesla'}
-              className="h-[130px] object-contain"
+              className="max-h-[200px] w-auto object-contain"
               onError={() => setImgError(true)}
             />
           ) : (
-            <span className="text-[#6b7280] text-xs">Vehicle image</span>
+            <span className="text-[#6b7280]">Vehicle image</span>
           )}
         </div>
-        <div className="flex-[2] flex justify-center">
+        <div className="absolute bottom-2 right-2 bg-black/60 rounded-xl p-1">
           <BatteryGauge
             level={vehicle.batteryLevel ?? 0}
             rangeKm={u.convertDistance(vehicle.ratedBatteryRangeKm)}
@@ -113,27 +136,21 @@ export default function Home({ carId }: Props) {
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <StatCard
           label="Odometer"
           value={vehicle.odometer ? Math.round(u.convertDistance(vehicle.odometer)!).toLocaleString() : '—'}
           unit={u.distanceUnit}
         />
         <StatCard
-          label="Rated range"
+          label="Range"
           value={vehicle.ratedBatteryRangeKm ? Math.round(u.convertDistance(vehicle.ratedBatteryRangeKm)!) : '—'}
           unit={u.distanceUnit}
           color="#22c55e"
         />
         <StatCard
-          label="Ideal range"
-          value={vehicle.idealBatteryRangeKm ? Math.round(u.convertDistance(vehicle.idealBatteryRangeKm)!) : '—'}
-          unit={u.distanceUnit}
-          color="#22c55e"
-        />
-        <StatCard
-          label="Efficiency"
-          value={vehicle.efficiency?.toFixed(3) ?? '—'}
+          label="Firmware"
+          value={vehicle.firmwareVersion?.split(' ')[0] ?? '—'}
         />
         <StatCard
           label="Ext. temp"
@@ -146,25 +163,26 @@ export default function Home({ carId }: Props) {
           unit={u.tempUnit}
         />
         <StatCard
-          label="Battery"
-          value={vehicle.batteryLevel ?? '—'}
-          unit="%"
-          color="#22c55e"
-        />
-        <StatCard
           label="State"
           value={vehicle.state ?? '—'}
         />
+        {stats?.avgConsumptionKWhPer100Km != null && stats.avgConsumptionKWhPer100Km > 0 && (
+          <StatCard
+            label="Avg. consumption"
+            value={u.fmtConsumption(stats.avgConsumptionKWhPer100Km)}
+            unit={u.consumptionUnit}
+          />
+        )}
       </div>
 
-      {/* Row 3: Mini-map + Last trip */}
-      <div className="flex gap-3" style={{ minHeight: 200 }}>
+      {/* Map + Last trip */}
+      <div className="flex gap-3" style={{ minHeight: 260 }}>
         {vehicle.latitude != null && vehicle.longitude != null && (
           <div className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl overflow-hidden">
-            <div className="px-2 pt-2 pb-1">
-              <span className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Position</span>
+            <div className="px-3 pt-2 pb-1">
+              <span className="text-xs text-[#9ca3af] uppercase tracking-wider">Position</span>
             </div>
-            <div className="h-[170px]">
+            <div className="h-[220px]">
               <MapContainer
                 center={[vehicle.latitude, vehicle.longitude]}
                 zoom={15}
@@ -194,39 +212,44 @@ export default function Home({ carId }: Props) {
                 </CircleMarker>
               </MapContainer>
             </div>
-            {vehicle.positionDate && (
-              <div className="px-2 py-1">
-                <span className="text-[10px] text-[#6b7280]">
+            <div className="px-3 py-2">
+              {address && (
+                <p className="text-sm text-white truncate">{address}</p>
+              )}
+              {vehicle.positionDate && (
+                <p className="text-xs text-[#6b7280] mt-0.5">
                   {new Date(vehicle.positionDate).toLocaleString()}
-                </span>
-              </div>
-            )}
+                </p>
+              )}
+            </div>
           </div>
         )}
 
         {/* Last trip */}
         <div
-          className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 flex flex-col cursor-pointer active:bg-[#1a1a1a] transition-colors overflow-hidden"
+          className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 flex flex-col cursor-pointer active:bg-[#1a1a1a] transition-colors overflow-hidden"
           onClick={() => lastDrive && navigate(`/map?driveId=${lastDrive.id}`)}
         >
-          <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider mb-1">Latest trip</div>
+          <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2">Latest trip</div>
           {lastDrive ? (
             <div className="flex-1 flex flex-col justify-center min-w-0">
-              <div className="text-xs font-medium truncate">
+              <div className="text-sm font-medium truncate">
                 {lastDrive.startAddress?.split(',')[0] ?? '?'} → {lastDrive.endAddress?.split(',')[0] ?? '?'}
               </div>
-              <div className="text-[#9ca3af] text-[11px] mt-1">
+              <div className="text-[#9ca3af] text-sm mt-1">
                 {u.fmtDist(lastDrive.distance)} {u.distanceUnit} · {lastDrive.durationMin ?? '?'} min
               </div>
               {lastDrive.consumptionKWhPer100Km != null && (
-                <div className="text-[#9ca3af] text-[11px]">
+                <div className="text-[#9ca3af] text-sm">
                   {u.fmtConsumption(lastDrive.consumptionKWhPer100Km)} {u.consumptionUnit}
                 </div>
               )}
-              <div className="text-[#6b7280] text-[10px] mt-1">{new Date(lastDrive.startDate).toLocaleDateString()}</div>
+              <div className="text-[#6b7280] text-xs mt-2">
+                {new Date(lastDrive.startDate).toLocaleDateString()}
+              </div>
             </div>
           ) : (
-            <div className="text-[#6b7280] text-xs text-center flex-1 flex items-center justify-center">
+            <div className="text-[#6b7280] text-sm text-center flex-1 flex items-center justify-center">
               No trips yet
             </div>
           )}

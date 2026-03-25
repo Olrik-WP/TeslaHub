@@ -34,7 +34,8 @@ public static class VehicleQueries
                 p.inside_temp AS "InsideTemp", p.outside_temp AS "OutsideTemp",
                 p.speed AS "Speed", p.power AS "Power",
                 p.date AS "PositionDate",
-                s.state AS "State"
+                s.state AS "State",
+                u.version AS "FirmwareVersion"
             FROM cars c
             LEFT JOIN LATERAL (
                 SELECT * FROM positions
@@ -48,6 +49,12 @@ public static class VehicleQueries
                 ORDER BY start_date DESC
                 LIMIT 1
             ) s ON true
+            LEFT JOIN LATERAL (
+                SELECT version FROM updates
+                WHERE car_id = c.id
+                ORDER BY start_date DESC
+                LIMIT 1
+            ) u ON true
             WHERE c.id = @CarId
             """, new { CarId = carId });
     }

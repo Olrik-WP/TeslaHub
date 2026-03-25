@@ -25,6 +25,7 @@ public record VehicleDto
     public int? Power { get; init; }
     public DateTime? PositionDate { get; init; }
     public string? State { get; init; }
+    public string? FirmwareVersion { get; init; }
 }
 
 public record DriveDto

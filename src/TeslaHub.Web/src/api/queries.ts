@@ -31,6 +31,7 @@ export interface VehicleStatus {
   power: number | null;
   positionDate: string | null;
   state: string | null;
+  firmwareVersion: string | null;
 }
 
 export interface Drive {
