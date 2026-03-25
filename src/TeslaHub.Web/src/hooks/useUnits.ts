@@ -14,11 +14,17 @@ export function useUnits() {
   const isF = settings?.unitOfTemperature === 'F';
   const currency = settings?.currency ?? 'EUR';
 
-  const currencySymbol =
-    currency === 'EUR' ? '€' :
-    currency === 'USD' ? '$' :
-    currency === 'GBP' ? '£' :
-    currency;
+  const CURRENCY_SYMBOLS: Record<string, string> = {
+    EUR: '€', USD: '$', GBP: '£', CHF: 'CHF',
+    NOK: 'kr', SEK: 'kr', DKK: 'kr',
+    CAD: 'CA$', AUD: 'A$', NZD: 'NZ$',
+    PLN: 'zł', CZK: 'Kč', HUF: 'Ft',
+    CNY: '¥', JPY: '¥', KRW: '₩',
+    ILS: '₪', AED: 'AED', SGD: 'S$', HKD: 'HK$',
+    TWD: 'NT$', THB: '฿', MXN: 'MX$', BRL: 'R$',
+    INR: '₹', TRY: '₺', ZAR: 'R',
+  };
+  const currencySymbol = CURRENCY_SYMBOLS[currency] ?? currency;
 
   const distanceUnit = isMi ? 'mi' : 'km';
   const speedUnit = isMi ? 'mph' : 'km/h';

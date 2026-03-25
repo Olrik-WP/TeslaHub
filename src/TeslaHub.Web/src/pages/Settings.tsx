@@ -80,8 +80,29 @@ export default function Settings({ carId }: Props) {
             <option value="USD">USD ($)</option>
             <option value="GBP">GBP (£)</option>
             <option value="CHF">CHF</option>
-            <option value="NOK">NOK</option>
-            <option value="SEK">SEK</option>
+            <option value="NOK">NOK (kr)</option>
+            <option value="SEK">SEK (kr)</option>
+            <option value="DKK">DKK (kr)</option>
+            <option value="CAD">CAD (CA$)</option>
+            <option value="AUD">AUD (A$)</option>
+            <option value="NZD">NZD (NZ$)</option>
+            <option value="PLN">PLN (zł)</option>
+            <option value="CZK">CZK (Kč)</option>
+            <option value="HUF">HUF (Ft)</option>
+            <option value="CNY">CNY (¥)</option>
+            <option value="JPY">JPY (¥)</option>
+            <option value="KRW">KRW (₩)</option>
+            <option value="ILS">ILS (₪)</option>
+            <option value="AED">AED</option>
+            <option value="SGD">SGD (S$)</option>
+            <option value="HKD">HKD (HK$)</option>
+            <option value="TWD">TWD (NT$)</option>
+            <option value="THB">THB (฿)</option>
+            <option value="MXN">MXN (MX$)</option>
+            <option value="BRL">BRL (R$)</option>
+            <option value="INR">INR (₹)</option>
+            <option value="TRY">TRY (₺)</option>
+            <option value="ZAR">ZAR (R)</option>
           </select>
         </div>
         <div>
