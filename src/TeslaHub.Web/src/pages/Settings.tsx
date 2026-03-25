@@ -146,113 +146,6 @@ export default function Settings({ carId }: Props) {
     <div className="p-4 space-y-4">
       <h1 className="text-xl font-bold">Settings</h1>
 
-      {/* Vehicle Image Section */}
-      {carId && (
-        <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-4">
-          <div className="text-xs text-[#9ca3af] uppercase tracking-wider">Vehicle image</div>
-
-          {/* Preview */}
-          <div className="flex justify-center bg-[#0a0a0a] rounded-lg p-3">
-            {imageInfo?.isCustomUpload ? (
-              <img src={`/api/vehicle/${carId}/image?t=${Date.now()}`} alt="Custom" className="h-[100px] object-contain" />
-            ) : previewUrl ? (
-              <img src={previewUrl} alt="Preview" className="h-[100px] object-contain" />
-            ) : (
-              <span className="text-[#6b7280] text-xs">Select color and wheels</span>
-            )}
-          </div>
-
-          {/* Color swatches */}
-          {!imageInfo?.isCustomUpload && (
-            <>
-              <div>
-                <div className="text-xs text-[#6b7280] mb-2">Color</div>
-                <div className="flex flex-wrap gap-2">
-                  {PAINT_OPTIONS.map((p) => (
-                    <button
-                      key={p.code}
-                      onClick={() => setSelectedPaint(p.code)}
-                      className="flex flex-col items-center gap-1"
-                    >
-                      <div
-                        className="w-10 h-10 rounded-full border-2 transition-all"
-                        style={{
-                          backgroundColor: p.hex,
-                          borderColor: selectedPaint === p.code ? '#e31937' : '#2a2a2a',
-                          boxShadow: selectedPaint === p.code ? '0 0 0 2px #e31937' : 'none',
-                        }}
-                      />
-                      <span className={`text-[9px] leading-tight text-center max-w-[48px] ${selectedPaint === p.code ? 'text-white' : 'text-[#6b7280]'}`}>
-                        {p.name}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Wheel selector */}
-              <div>
-                <div className="text-xs text-[#6b7280] mb-2">Wheels ({vehicle?.model ? `Model ${vehicle.model}` : 'Model 3'})</div>
-                <div className="flex flex-wrap gap-2">
-                  {wheels.map((w) => (
-                    <button
-                      key={w.code}
-                      onClick={() => setSelectedWheel(w.code)}
-                      className={`px-3 py-2 rounded-lg text-xs border transition-all min-h-[36px] ${
-                        selectedWheel === w.code
-                          ? 'border-[#e31937] text-white bg-[#e31937]/10'
-                          : 'border-[#2a2a2a] text-[#9ca3af] bg-[#0a0a0a]'
-                      }`}
-                    >
-                      {w.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Save appearance */}
-              <button
-                onClick={handleSaveAppearance}
-                disabled={saving}
-                className="bg-[#e31937] text-white px-6 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f] disabled:opacity-50 w-full"
-              >
-                {saving ? 'Downloading image...' : 'Save appearance'}
-              </button>
-            </>
-          )}
-
-          {/* Upload / Remove */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              className="flex-1 bg-[#1a1a1a] border border-[#2a2a2a] text-white py-2 rounded-lg text-sm min-h-[44px] active:bg-[#2a2a2a] disabled:opacity-50"
-            >
-              {uploading ? 'Uploading...' : 'Upload my photo'}
-            </button>
-            {imageInfo?.hasImage && (
-              <button
-                onClick={handleDeleteImage}
-                className="px-4 bg-[#1a1a1a] border border-[#2a2a2a] text-[#ef4444] py-2 rounded-lg text-sm min-h-[44px] active:bg-[#2a2a2a]"
-              >
-                Remove
-              </button>
-            )}
-          </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleUpload(file);
-              e.target.value = '';
-            }}
-          />
-        </div>
-      )}
-
       {/* General settings */}
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-4">
         <div>
@@ -305,6 +198,108 @@ export default function Settings({ carId }: Props) {
           {save.isPending ? 'Saving...' : 'Save settings'}
         </button>
       </div>
+
+      {/* Vehicle Image Section */}
+      {carId && (
+        <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-4">
+          <div className="text-xs text-[#9ca3af] uppercase tracking-wider">Vehicle image</div>
+
+          <div className="flex justify-center bg-[#0a0a0a] rounded-lg p-3">
+            {imageInfo?.isCustomUpload ? (
+              <img src={`/api/vehicle/${carId}/image?t=${Date.now()}`} alt="Custom" className="h-[100px] object-contain" />
+            ) : previewUrl ? (
+              <img src={previewUrl} alt="Preview" className="h-[100px] object-contain" />
+            ) : (
+              <span className="text-[#6b7280] text-xs">Select color and wheels</span>
+            )}
+          </div>
+
+          {!imageInfo?.isCustomUpload && (
+            <>
+              <div>
+                <div className="text-xs text-[#6b7280] mb-2">Color</div>
+                <div className="flex flex-wrap gap-2">
+                  {PAINT_OPTIONS.map((p) => (
+                    <button
+                      key={p.code}
+                      onClick={() => setSelectedPaint(p.code)}
+                      className="flex flex-col items-center gap-1"
+                    >
+                      <div
+                        className="w-10 h-10 rounded-full border-2 transition-all"
+                        style={{
+                          backgroundColor: p.hex,
+                          borderColor: selectedPaint === p.code ? '#e31937' : '#2a2a2a',
+                          boxShadow: selectedPaint === p.code ? '0 0 0 2px #e31937' : 'none',
+                        }}
+                      />
+                      <span className={`text-[9px] leading-tight text-center max-w-[48px] ${selectedPaint === p.code ? 'text-white' : 'text-[#6b7280]'}`}>
+                        {p.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs text-[#6b7280] mb-2">Wheels ({vehicle?.model ? `Model ${vehicle.model}` : 'Model 3'})</div>
+                <div className="flex flex-wrap gap-2">
+                  {wheels.map((w) => (
+                    <button
+                      key={w.code}
+                      onClick={() => setSelectedWheel(w.code)}
+                      className={`px-3 py-2 rounded-lg text-xs border transition-all min-h-[36px] ${
+                        selectedWheel === w.code
+                          ? 'border-[#e31937] text-white bg-[#e31937]/10'
+                          : 'border-[#2a2a2a] text-[#9ca3af] bg-[#0a0a0a]'
+                      }`}
+                    >
+                      {w.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={handleSaveAppearance}
+                disabled={saving}
+                className="bg-[#e31937] text-white px-6 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f] disabled:opacity-50 w-full"
+              >
+                {saving ? 'Downloading image...' : 'Save appearance'}
+              </button>
+            </>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="flex-1 bg-[#1a1a1a] border border-[#2a2a2a] text-white py-2 rounded-lg text-sm min-h-[44px] active:bg-[#2a2a2a] disabled:opacity-50"
+            >
+              {uploading ? 'Uploading...' : 'Upload my photo'}
+            </button>
+            {imageInfo?.hasImage && (
+              <button
+                onClick={handleDeleteImage}
+                className="px-4 bg-[#1a1a1a] border border-[#2a2a2a] text-[#ef4444] py-2 rounded-lg text-sm min-h-[44px] active:bg-[#2a2a2a]"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleUpload(file);
+              e.target.value = '';
+            }}
+          />
+        </div>
+      )}
 
       {/* Charging locations */}
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">

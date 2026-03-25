@@ -14,7 +14,7 @@ public static class VehicleImageEndpoints
     {
         var group = app.MapGroup("/api/vehicle").RequireAuthorization();
 
-        group.MapGet("/{carId:int}/image", GetImage);
+        group.MapGet("/{carId:int}/image", GetImage).AllowAnonymous();
         group.MapGet("/{carId:int}/image/info", GetImageInfo);
         group.MapPut("/{carId:int}/image/compositor", SaveCompositorImage);
         group.MapPost("/{carId:int}/image/upload", UploadCustomImage);

@@ -33,7 +33,8 @@ public static class VehicleQueries
                 p.latitude AS "Latitude", p.longitude AS "Longitude",
                 p.inside_temp AS "InsideTemp", p.outside_temp AS "OutsideTemp",
                 p.speed AS "Speed", p.power AS "Power",
-                p.date AS "PositionDate"
+                p.date AS "PositionDate",
+                s.state AS "State"
             FROM cars c
             LEFT JOIN LATERAL (
                 SELECT * FROM positions
@@ -41,6 +42,12 @@ public static class VehicleQueries
                 ORDER BY date DESC
                 LIMIT 1
             ) p ON true
+            LEFT JOIN LATERAL (
+                SELECT state FROM states
+                WHERE car_id = c.id
+                ORDER BY start_date DESC
+                LIMIT 1
+            ) s ON true
             WHERE c.id = @CarId
             """, new { CarId = carId });
     }
