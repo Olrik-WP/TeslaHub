@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useDrives } from '../hooks/useDrives';
+import { useUnits } from '../hooks/useUnits';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 export default function Trips({ carId }: Props) {
   const { data: drives, isLoading } = useDrives(carId, 30);
   const navigate = useNavigate();
+  const u = useUnits();
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">Loading...</div>;
@@ -19,12 +21,12 @@ export default function Trips({ carId }: Props) {
   const dailyData: Record<string, number> = {};
   driveList.forEach((d) => {
     const day = new Date(d.startDate).toLocaleDateString(undefined, { weekday: 'short', day: '2-digit' });
-    dailyData[day] = (dailyData[day] ?? 0) + (d.distance ?? 0);
+    dailyData[day] = (dailyData[day] ?? 0) + (u.convertDistance(d.distance) ?? 0);
   });
 
   const chartData = Object.entries(dailyData)
     .slice(-7)
-    .map(([day, km]) => ({ day, km: Math.round(km * 10) / 10 }));
+    .map(([day, dist]) => ({ day, dist: Math.round(dist * 10) / 10 }));
 
   return (
     <div className="p-4 space-y-4">
@@ -32,13 +34,13 @@ export default function Trips({ carId }: Props) {
 
       {chartData.length > 0 && (
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
-          <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">Distance per day (km)</div>
+          <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">Distance per day ({u.distanceUnit})</div>
           <ResponsiveContainer width="100%" height={160}>
             <BarChart data={chartData}>
               <XAxis dataKey="day" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
               <Tooltip contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, color: '#fff' }} />
-              <Bar dataKey="km" fill="#e31937" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="dist" fill="#e31937" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -60,13 +62,13 @@ export default function Trips({ carId }: Props) {
               </span>
             </div>
             <div className="flex items-center gap-4 text-sm text-[#9ca3af]">
-              <span>{drive.distance != null ? drive.distance.toFixed(1) : '—'} km</span>
+              <span>{u.fmtDist(drive.distance)} {u.distanceUnit}</span>
               <span>{drive.durationMin ?? '—'} min</span>
               {drive.consumptionKWhPer100Km != null && (
-                <span>{drive.consumptionKWhPer100Km.toFixed(1)} kWh/100km</span>
+                <span>{u.fmtConsumption(drive.consumptionKWhPer100Km)} {u.consumptionUnit}</span>
               )}
-              {drive.outsideTempAvg != null && <span>{Math.round(drive.outsideTempAvg)}°C</span>}
-              {drive.speedMax != null && <span>Max {drive.speedMax} km/h</span>}
+              {drive.outsideTempAvg != null && <span>{u.fmtTemp(drive.outsideTempAvg)}{u.tempUnit}</span>}
+              {drive.speedMax != null && <span>Max {u.fmtSpeed(drive.speedMax)} {u.speedUnit}</span>}
             </div>
           </div>
         ))}

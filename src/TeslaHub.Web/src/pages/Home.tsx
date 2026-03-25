@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { useVehicleStatus } from '../hooks/useVehicle';
 import { useChargingSessions } from '../hooks/useCharging';
 import { useDrives } from '../hooks/useDrives';
+import { useUnits } from '../hooks/useUnits';
 import BatteryGauge from '../components/BatteryGauge';
 import StatCard from '../components/StatCard';
 import type { VehicleStatus } from '../api/queries';
@@ -38,6 +39,7 @@ export default function Home({ carId }: Props) {
   const vehicle = useStickyVehicle(rawVehicle);
   const { data: charges } = useChargingSessions(carId, 5);
   const { data: drives } = useDrives(carId, 5);
+  const u = useUnits();
 
   const lastDrive = drives?.[0];
   const lastCharge = charges?.[0];
@@ -65,7 +67,8 @@ export default function Home({ carId }: Props) {
       <div className="flex justify-center">
         <BatteryGauge
           level={vehicle.batteryLevel ?? 0}
-          rangeKm={vehicle.ratedBatteryRangeKm}
+          rangeKm={u.convertDistance(vehicle.ratedBatteryRangeKm)}
+          rangeUnit={u.distanceUnit}
           isCharging={isCharging}
         />
       </div>
@@ -73,23 +76,23 @@ export default function Home({ carId }: Props) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           label="Odometer"
-          value={vehicle.odometer ? Math.round(vehicle.odometer).toLocaleString() : '—'}
-          unit="km"
+          value={vehicle.odometer ? Math.round(u.convertDistance(vehicle.odometer)!).toLocaleString() : '—'}
+          unit={u.distanceUnit}
         />
         <StatCard
           label="Ext. temp"
-          value={vehicle.outsideTemp != null ? Math.round(vehicle.outsideTemp) : '—'}
-          unit="°C"
+          value={u.fmtTemp(vehicle.outsideTemp)}
+          unit={u.tempUnit}
         />
         <StatCard
           label="Int. temp"
-          value={vehicle.insideTemp != null ? Math.round(vehicle.insideTemp) : '—'}
-          unit="°C"
+          value={u.fmtTemp(vehicle.insideTemp)}
+          unit={u.tempUnit}
         />
         <StatCard
           label="Range"
-          value={vehicle.ratedBatteryRangeKm ? Math.round(vehicle.ratedBatteryRangeKm) : '—'}
-          unit="km"
+          value={vehicle.ratedBatteryRangeKm ? Math.round(u.convertDistance(vehicle.ratedBatteryRangeKm)!) : '—'}
+          unit={u.distanceUnit}
           color="#22c55e"
         />
       </div>
@@ -131,11 +134,11 @@ export default function Home({ carId }: Props) {
                 {lastDrive.endAddress?.split(',')[0] ?? '?'}
               </div>
               <div className="text-[#9ca3af] text-xs mt-1">
-                {lastDrive.distance ? (lastDrive.distance / 1000).toFixed(1) : '?'} km
+                {u.fmtDist(lastDrive.distance)} {u.distanceUnit}
                 {' · '}
                 {lastDrive.durationMin ?? '?'} min
                 {lastDrive.consumptionKWhPer100Km != null && (
-                  <> · {lastDrive.consumptionKWhPer100Km.toFixed(1)} kWh/100km</>
+                  <> · {u.fmtConsumption(lastDrive.consumptionKWhPer100Km)} {u.consumptionUnit}</>
                 )}
               </div>
             </div>

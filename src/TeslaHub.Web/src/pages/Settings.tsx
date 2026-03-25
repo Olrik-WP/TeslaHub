@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSettings, getChargingLocations } from '../api/queries';
+import { useUnits } from '../hooks/useUnits';
 import { api, logout } from '../api/client';
 import { useNavigate } from 'react-router-dom';
 import type { GlobalSettings, ChargingLocation } from '../api/queries';
@@ -12,6 +13,7 @@ interface Props {
 export default function Settings({ carId }: Props) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const u = useUnits();
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings });
   const { data: locations } = useQuery({
@@ -45,13 +47,13 @@ export default function Settings({ carId }: Props) {
   const pricingLabel = (loc: ChargingLocation) => {
     if (loc.pricingType === 'home') {
       const parts = [];
-      if (loc.peakPricePerKwh != null) parts.push(`HP: ${loc.peakPricePerKwh} €/kWh`);
-      if (loc.offPeakPricePerKwh != null) parts.push(`HC: ${loc.offPeakPricePerKwh} €/kWh`);
+      if (loc.peakPricePerKwh != null) parts.push(`HP: ${loc.peakPricePerKwh} ${u.currencySymbol}/kWh`);
+      if (loc.offPeakPricePerKwh != null) parts.push(`HC: ${loc.offPeakPricePerKwh} ${u.currencySymbol}/kWh`);
       if (loc.offPeakStart && loc.offPeakEnd) parts.push(`${loc.offPeakStart}–${loc.offPeakEnd}`);
       return parts.join(' · ');
     }
     if (loc.pricingType === 'subscription') {
-      return `${loc.monthlySubscription ?? 0} €/month`;
+      return `${loc.monthlySubscription ?? 0} ${u.currencySymbol}/month`;
     }
     return 'Manual entry';
   };

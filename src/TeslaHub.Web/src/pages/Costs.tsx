@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getCostSummary, getCostOverrides } from '../api/queries';
+import { useUnits } from '../hooks/useUnits';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import StatCard from '../components/StatCard';
 
@@ -11,6 +12,7 @@ interface Props {
 const COLORS = ['#e31937', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'];
 
 export default function Costs({ carId }: Props) {
+  const u = useUnits();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -57,13 +59,13 @@ export default function Costs({ carId }: Props) {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Total cost" value={summary?.totalCost.toFixed(2) ?? '—'} unit="€" accent />
+        <StatCard label="Total cost" value={summary?.totalCost.toFixed(2) ?? '—'} unit={u.currencySymbol} accent />
         <StatCard label="Sessions" value={summary?.sessionCount ?? 0} />
         <StatCard label="Free" value={summary?.freeSessionCount ?? 0} color="#22c55e" />
         <StatCard
-          label="Avg €/kWh"
+          label={`Avg ${u.currencySymbol}/kWh`}
           value={summary?.avgPricePerKwh ? summary.avgPricePerKwh.toFixed(4) : '—'}
-          unit="€"
+          unit={u.currencySymbol}
         />
       </div>
 
@@ -89,7 +91,7 @@ export default function Costs({ carId }: Props) {
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
                     <span className="text-[#9ca3af]">{d.name}</span>
                   </div>
-                  <span className="font-medium">{d.cost.toFixed(2)} €</span>
+                  <span className="font-medium">{d.cost.toFixed(2)} {u.currencySymbol}</span>
                 </div>
               ))}
             </div>

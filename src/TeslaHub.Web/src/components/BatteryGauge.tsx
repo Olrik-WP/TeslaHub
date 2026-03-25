@@ -1,10 +1,11 @@
 interface Props {
   level: number;
   rangeKm?: number | null;
+  rangeUnit?: string;
   isCharging?: boolean;
 }
 
-export default function BatteryGauge({ level, rangeKm, isCharging }: Props) {
+export default function BatteryGauge({ level, rangeKm, rangeUnit = 'km', isCharging }: Props) {
   const clampedLevel = Math.max(0, Math.min(100, level));
   const color = clampedLevel <= 20 ? '#ef4444' : clampedLevel <= 50 ? '#f59e0b' : '#22c55e';
   const radius = 60;
@@ -32,7 +33,7 @@ export default function BatteryGauge({ level, rangeKm, isCharging }: Props) {
         </text>
         {rangeKm != null && (
           <text x={80} y={100} textAnchor="middle" fill="#9ca3af" fontSize={14}>
-            {Math.round(rangeKm)} km
+            {Math.round(rangeKm)} {rangeUnit}
           </text>
         )}
         {isCharging && (

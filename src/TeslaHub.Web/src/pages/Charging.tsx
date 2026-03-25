@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { useChargingSessions } from '../hooks/useCharging';
+import { useUnits } from '../hooks/useUnits';
 import { getCostOverrides, getSuggestedPrice, getMatchingLocation } from '../api/queries';
 import { api } from '../api/client';
 import type { ChargingSession, CostOverride, ChargingLocation } from '../api/queries';
@@ -94,6 +95,7 @@ function SessionCard({ session, override: costOverride, carId }: {
   carId: number | undefined;
 }) {
   const queryClient = useQueryClient();
+  const u = useUnits();
   const [expanded, setExpanded] = useState(false);
   const [inputMode, setInputMode] = useState<'total' | 'kwh'>('total');
   const [priceInput, setPriceInput] = useState(costOverride?.totalCost?.toString() ?? '');
@@ -147,7 +149,7 @@ function SessionCard({ session, override: costOverride, carId }: {
   const displayCost = costOverride
     ? costOverride.isFree
       ? 'Free'
-      : `${costOverride.totalCost.toFixed(2)} €`
+      : `${costOverride.totalCost.toFixed(2)} ${u.currencySymbol}`
     : null;
 
   const previewText = (() => {
@@ -155,9 +157,9 @@ function SessionCard({ session, override: costOverride, carId }: {
     if (isNaN(value)) return null;
     if (inputMode === 'total') {
       const effectiveKwh = kwh > 0 ? (value / kwh).toFixed(4) : '—';
-      return `${value.toFixed(2)} € — effective ${effectiveKwh} €/kWh`;
+      return `${value.toFixed(2)} ${u.currencySymbol} — effective ${effectiveKwh} ${u.currencySymbol}/kWh`;
     }
-    return `Total: ${(value * kwh).toFixed(2)} € for ${kwh.toFixed(1)} kWh`;
+    return `Total: ${(value * kwh).toFixed(2)} ${u.currencySymbol} for ${kwh.toFixed(1)} kWh`;
   })();
 
   return (
@@ -184,7 +186,7 @@ function SessionCard({ session, override: costOverride, carId }: {
         <span>{kwh.toFixed(1)} kWh</span>
         <span>{session.durationMin ?? '—'} min</span>
         <span>{session.startBatteryLevel}% → {session.endBatteryLevel}%</span>
-        {session.outsideTempAvg != null && <span>{Math.round(session.outsideTempAvg)}°C</span>}
+        {session.outsideTempAvg != null && <span>{u.fmtTemp(session.outsideTempAvg)}{u.tempUnit}</span>}
       </div>
 
       {expanded && (
@@ -195,14 +197,14 @@ function SessionCard({ session, override: costOverride, carId }: {
               onClick={() => { setInputMode('total'); setPriceInput(costOverride?.totalCost?.toString() ?? ''); }}
               className={`flex-1 py-1.5 rounded-lg text-xs font-medium min-h-[36px] ${inputMode === 'total' ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'}`}
             >
-              Total (€)
+              Total ({u.currencySymbol})
             </button>
             <button
               type="button"
               onClick={() => { setInputMode('kwh'); setPriceInput(costOverride?.pricePerKwh?.toString() ?? ''); }}
               className={`flex-1 py-1.5 rounded-lg text-xs font-medium min-h-[36px] ${inputMode === 'kwh' ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'}`}
             >
-              €/kWh
+              {u.currencySymbol}/kWh
             </button>
           </div>
 
@@ -210,7 +212,7 @@ function SessionCard({ session, override: costOverride, carId }: {
             <input
               type="number"
               step={inputMode === 'total' ? '0.01' : '0.0001'}
-              placeholder={inputMode === 'total' ? 'Total € (from invoice)' : '€/kWh'}
+              placeholder={inputMode === 'total' ? `Total ${u.currencySymbol} (from invoice)` : `${u.currencySymbol}/kWh`}
               value={priceInput}
               onChange={(e) => setPriceInput(e.target.value)}
               className="flex-1 bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[44px]"
@@ -267,6 +269,7 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
   onDone: () => void;
 }) {
   const queryClient = useQueryClient();
+  const u = useUnits();
   const [name, setName] = useState(defaultName);
   const [pricingType, setPricingType] = useState('manual');
   const [peakPrice, setPeakPrice] = useState('');
@@ -349,8 +352,8 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
       {pricingType === 'home' && (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <input className={inputClass} type="number" step="0.0001" placeholder="Peak €/kWh" value={peakPrice} onChange={(e) => setPeakPrice(e.target.value)} />
-            <input className={inputClass} type="number" step="0.0001" placeholder="Off-peak €/kWh" value={offPeakPrice} onChange={(e) => setOffPeakPrice(e.target.value)} />
+            <input className={inputClass} type="number" step="0.0001" placeholder={`Peak ${u.currencySymbol}/kWh`} value={peakPrice} onChange={(e) => setPeakPrice(e.target.value)} />
+            <input className={inputClass} type="number" step="0.0001" placeholder={`Off-peak ${u.currencySymbol}/kWh`} value={offPeakPrice} onChange={(e) => setOffPeakPrice(e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <input className={inputClass} type="time" value={offPeakStart} onChange={(e) => setOffPeakStart(e.target.value)} />
@@ -360,7 +363,7 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
       )}
 
       {pricingType === 'subscription' && (
-        <input className={inputClass} type="number" step="0.01" placeholder="Monthly amount (€)" value={monthlyAmount} onChange={(e) => setMonthlyAmount(e.target.value)} />
+        <input className={inputClass} type="number" step="0.01" placeholder={`Monthly amount (${u.currencySymbol})`} value={monthlyAmount} onChange={(e) => setMonthlyAmount(e.target.value)} />
       )}
 
       <input className={inputClass} type="number" placeholder="Radius (m)" value={radius} onChange={(e) => setRadius(e.target.value)} />

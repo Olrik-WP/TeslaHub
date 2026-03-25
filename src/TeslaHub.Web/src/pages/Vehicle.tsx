@@ -1,4 +1,5 @@
 import { useVehicleStatus } from '../hooks/useVehicle';
+import { useUnits } from '../hooks/useUnits';
 import BatteryGauge from '../components/BatteryGauge';
 import StatCard from '../components/StatCard';
 
@@ -8,6 +9,7 @@ interface Props {
 
 export default function Vehicle({ carId }: Props) {
   const { data: vehicle, isLoading } = useVehicleStatus(carId);
+  const u = useUnits();
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">Loading...</div>;
@@ -28,16 +30,16 @@ export default function Vehicle({ carId }: Props) {
       </div>
 
       <div className="flex justify-center">
-        <BatteryGauge level={vehicle.batteryLevel ?? 0} rangeKm={vehicle.ratedBatteryRangeKm} />
+        <BatteryGauge level={vehicle.batteryLevel ?? 0} rangeKm={u.convertDistance(vehicle.ratedBatteryRangeKm)} rangeUnit={u.distanceUnit} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <StatCard label="Odometer" value={vehicle.odometer ? Math.round(vehicle.odometer).toLocaleString() : '—'} unit="km" />
-        <StatCard label="Ext. temp" value={vehicle.outsideTemp != null ? Math.round(vehicle.outsideTemp) : '—'} unit="°C" />
-        <StatCard label="Int. temp" value={vehicle.insideTemp != null ? Math.round(vehicle.insideTemp) : '—'} unit="°C" />
+        <StatCard label="Odometer" value={vehicle.odometer ? Math.round(u.convertDistance(vehicle.odometer)!).toLocaleString() : '—'} unit={u.distanceUnit} />
+        <StatCard label="Ext. temp" value={u.fmtTemp(vehicle.outsideTemp)} unit={u.tempUnit} />
+        <StatCard label="Int. temp" value={u.fmtTemp(vehicle.insideTemp)} unit={u.tempUnit} />
         <StatCard label="Battery" value={vehicle.batteryLevel ?? '—'} unit="%" color="#22c55e" />
-        <StatCard label="Rated range" value={vehicle.ratedBatteryRangeKm ? Math.round(vehicle.ratedBatteryRangeKm) : '—'} unit="km" />
-        <StatCard label="Ideal range" value={vehicle.idealBatteryRangeKm ? Math.round(vehicle.idealBatteryRangeKm) : '—'} unit="km" />
+        <StatCard label="Rated range" value={vehicle.ratedBatteryRangeKm ? Math.round(u.convertDistance(vehicle.ratedBatteryRangeKm)!) : '—'} unit={u.distanceUnit} />
+        <StatCard label="Ideal range" value={vehicle.idealBatteryRangeKm ? Math.round(u.convertDistance(vehicle.idealBatteryRangeKm)!) : '—'} unit={u.distanceUnit} />
         <StatCard label="Efficiency" value={vehicle.efficiency?.toFixed(3) ?? '—'} />
         <StatCard label="Color" value={vehicle.exteriorColor ?? '—'} />
       </div>
