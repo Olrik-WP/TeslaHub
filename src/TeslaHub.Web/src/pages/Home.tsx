@@ -157,15 +157,31 @@ export default function Home({ carId }: Props) {
           </div>
         )}
 
-        {/* Middle row: Vehicle info + Max Speed | Car Image | Battery Gauge */}
-        <div className="relative flex items-center h-[220px]">
-          <div className="absolute left-3 top-2 z-10 bg-black/60 rounded-xl px-3 py-2">
+        {/* Mobile: vehicle info + max speed as inline row */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-[#2a2a2a] sm:hidden">
+          <div>
+            <div className="text-sm font-bold">{vehicle.marketingName || vehicle.model || vehicle.name}</div>
+            <div className="text-[10px] text-[#9ca3af]">
+              {[vehicle.exteriorColor, vehicle.vin].filter(Boolean).join(' · ')}
+            </div>
+          </div>
+          {driveStats && driveStats.maxSpeedKmh != null && (
+            <div className="text-right">
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Max Speed</div>
+              <div className="text-base font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.maxSpeedKmh)!)} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit === 'mi' ? 'mph' : 'km/h'}</span></div>
+            </div>
+          )}
+        </div>
+
+        {/* Middle row: Car Image + overlays (overlays visible on sm+ only) */}
+        <div className="relative flex items-center justify-center h-[180px] sm:h-[220px]">
+          <div className="hidden sm:block absolute left-3 top-2 z-10 bg-black/60 rounded-xl px-3 py-2">
             <div className="text-sm font-bold">{vehicle.marketingName || vehicle.model || vehicle.name}</div>
             {vehicle.exteriorColor && <div className="text-[10px] text-[#9ca3af]">{vehicle.exteriorColor}</div>}
             {vehicle.vin && <div className="text-[10px] text-[#9ca3af] tabular-nums">{vehicle.vin}</div>}
           </div>
           {driveStats && driveStats.maxSpeedKmh != null && (
-            <div className="absolute left-3 bottom-2 z-10 bg-black/60 rounded-xl px-3 py-2 text-center">
+            <div className="hidden sm:block absolute left-3 bottom-2 z-10 bg-black/60 rounded-xl px-3 py-2 text-center">
               <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">Max Speed</div>
               <div className="text-xl font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.maxSpeedKmh)!)}</div>
               <div className="text-[10px] text-[#9ca3af]">{u.distanceUnit === 'mi' ? 'mph' : 'km/h'}</div>
@@ -176,7 +192,7 @@ export default function Home({ carId }: Props) {
               <img
                 src={imgSrc}
                 alt={vehicle.name || 'Tesla'}
-                className="max-h-[200px] w-auto object-contain"
+                className="max-h-[160px] sm:max-h-[200px] w-auto object-contain"
                 onError={() => setImgError(true)}
               />
             ) : (
