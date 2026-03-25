@@ -23,8 +23,8 @@ export default function StatCard({ label, value, unit, accent, color, progress, 
       <span className="text-[#9ca3af] text-xs uppercase tracking-wider">{label}</span>
       <div className="mt-2 min-w-0">
         <span
-          className="text-2xl sm:text-3xl font-bold tabular-nums break-all"
-          style={{ color: accent ? '#e31937' : color || '#ffffff' }}
+          className="text-xl sm:text-3xl font-bold tabular-nums"
+          style={{ color: accent ? '#e31937' : color || '#ffffff', wordBreak: 'break-word' }}
         >
           {value}
         </span>

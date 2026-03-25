@@ -199,7 +199,7 @@ export default function Home({ carId }: Props) {
               <span className="text-[#6b7280]">Vehicle image</span>
             )}
           </div>
-          <div className="absolute right-2 bottom-2 z-10 bg-black/60 rounded-xl p-1">
+          <div className="absolute right-2 bottom-2 z-10 bg-black/60 rounded-xl p-1 w-[100px] h-[100px] sm:w-auto sm:h-auto">
             <BatteryGauge
               level={vehicle.batteryLevel ?? 0}
               rangeKm={u.convertDistance(vehicle.ratedBatteryRangeKm)}
