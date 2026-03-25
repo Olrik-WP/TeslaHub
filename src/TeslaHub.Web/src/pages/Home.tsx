@@ -293,7 +293,7 @@ export default function Home({ carId }: Props) {
               <div className="mt-2 h-2 rounded-full bg-[#2a2a2a] overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-700"
-                  style={{ width: `${health}%`, background: 'linear-gradient(90deg, #ef4444, #f97316, #eab308, #22c55e)' }}
+                  style={{ width: `${health}%`, backgroundColor: healthColor }}
                 />
               </div>
             </div>
@@ -303,46 +303,33 @@ export default function Home({ carId }: Props) {
 
       {/* Charging stats */}
       {chargingStats && chargingStats.chargeCount > 0 && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
-            <span className="text-xs text-[#9ca3af] uppercase tracking-wider">Charges</span>
-            <div className="mt-3 space-y-2">
-              <div className="flex justify-between items-baseline">
-                <span className="text-sm text-[#9ca3af]"># of charges</span>
-                <span className="text-lg font-bold tabular-nums">{chargingStats.chargeCount}</span>
-              </div>
-              <div className="flex justify-between items-baseline">
-                <span className="text-sm text-[#9ca3af]">Cycles</span>
-                <span className="text-lg font-bold tabular-nums">
-                  {maxCapacity && maxCapacity > 0 ? Math.floor(chargingStats.totalEnergyAdded / maxCapacity) : '—'}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
-            <span className="text-xs text-[#9ca3af] uppercase tracking-wider">Energy</span>
-            <div className="mt-3 space-y-2">
-              <div className="flex justify-between items-baseline">
-                <span className="text-sm text-[#9ca3af]">Added</span>
-                <span className="text-lg font-bold tabular-nums text-[#eab308]">{Math.round(chargingStats.totalEnergyAdded)} <span className="text-sm font-normal text-[#9ca3af]">kWh</span></span>
-              </div>
-              <div className="flex justify-between items-baseline">
-                <span className="text-sm text-[#9ca3af]">Used</span>
-                <span className="text-lg font-bold tabular-nums text-[#eab308]">{Math.round(chargingStats.totalEnergyUsed)} <span className="text-sm font-normal text-[#9ca3af]">kWh</span></span>
-              </div>
-              <div className="flex justify-between items-baseline">
-                <span className="text-sm text-[#9ca3af]">Efficiency</span>
-                <span className="text-lg font-bold tabular-nums text-[#22c55e]">{(chargingStats.chargingEfficiency * 100).toFixed(1)}%</span>
-              </div>
-            </div>
-          </div>
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard
+            label="Charges / Cycles"
+            value={`${chargingStats.chargeCount} / ${maxCapacity && maxCapacity > 0 ? Math.floor(chargingStats.totalEnergyAdded / maxCapacity) : '—'}`}
+          />
+          <StatCard
+            label="Energy added"
+            value={Math.round(chargingStats.totalEnergyAdded)}
+            unit="kWh"
+            color="#eab308"
+          />
+          <StatCard
+            label="Charge efficiency"
+            value={(chargingStats.chargingEfficiency * 100).toFixed(1)}
+            unit="%"
+            color="#22c55e"
+          />
         </div>
       )}
 
       {/* Map + Last trip */}
       <div className="flex gap-3" style={{ minHeight: 260 }}>
         {vehicle.latitude != null && vehicle.longitude != null && (
-          <div className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl overflow-hidden">
+          <div
+            className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl overflow-hidden cursor-pointer active:bg-[#1a1a1a] transition-colors"
+            onClick={() => navigate('/map')}
+          >
             <div className="px-3 pt-2 pb-1">
               <span className="text-xs text-[#9ca3af] uppercase tracking-wider">Position</span>
             </div>
