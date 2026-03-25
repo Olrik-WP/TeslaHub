@@ -308,19 +308,18 @@ export default function Home({ carId }: Props) {
 
       {/* Charging stats */}
       {chargingStats && chargingStats.chargeCount > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <StatCard
-            label="Charges"
+            label="Charge sessions"
             value={chargingStats.chargeCount}
+            subtitle={`Eq. full charges: ${maxCapacity && maxCapacity > 0 ? Math.floor(chargingStats.totalEnergyAdded / maxCapacity) : '—'}`}
           />
           <StatCard
-            label="Cycles"
-            value={maxCapacity && maxCapacity > 0 ? Math.floor(chargingStats.totalEnergyAdded / maxCapacity) : '—'}
-          />
-          <StatCard
-            label="Energy / Efficiency"
-            value={`${Math.round(chargingStats.totalEnergyAdded)} kWh · ${(chargingStats.chargingEfficiency * 100).toFixed(1)}%`}
+            label="Energy added"
+            value={`${Math.round(chargingStats.totalEnergyAdded)} kWh`}
             color="#eab308"
+            subtitle={`Efficiency ${(chargingStats.chargingEfficiency * 100).toFixed(1)}%`}
+            subtitleColor="#22c55e"
           />
         </div>
       )}

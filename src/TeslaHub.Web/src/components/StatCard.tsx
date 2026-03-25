@@ -5,6 +5,8 @@ interface Props {
   accent?: boolean;
   color?: string;
   progress?: number | null;
+  subtitle?: string;
+  subtitleColor?: string;
 }
 
 function progressColor(pct: number) {
@@ -14,7 +16,7 @@ function progressColor(pct: number) {
   return '#22c55e';
 }
 
-export default function StatCard({ label, value, unit, accent, color, progress }: Props) {
+export default function StatCard({ label, value, unit, accent, color, progress, subtitle, subtitleColor }: Props) {
   const hasBar = progress != null && progress >= 0;
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 flex flex-col justify-between min-h-[100px]">
@@ -28,6 +30,9 @@ export default function StatCard({ label, value, unit, accent, color, progress }
         </span>
         {unit && <span className="text-[#9ca3af] text-sm ml-1">{unit}</span>}
       </div>
+      {subtitle && (
+        <span className="text-xs font-semibold mt-1" style={{ color: subtitleColor || '#9ca3af' }}>{subtitle}</span>
+      )}
       {hasBar && (
         <div className="mt-2 h-2 rounded-full bg-[#2a2a2a] overflow-hidden">
           <div
