@@ -67,8 +67,24 @@ public class CostService
         var existing = await _db.ChargingCostOverrides
             .FirstOrDefaultAsync(c => c.ChargingProcessId == dto.ChargingProcessId && c.CarId == dto.CarId);
 
-        var pricePerKwh = dto.IsFree ? 0 : dto.PricePerKwh;
-        var totalCost = dto.IsFree ? 0 : (pricePerKwh ?? 0) * (decimal)(energyKwh ?? 0);
+        decimal? pricePerKwh;
+        decimal totalCost;
+
+        if (dto.IsFree)
+        {
+            pricePerKwh = 0;
+            totalCost = 0;
+        }
+        else if (dto.TotalCost.HasValue)
+        {
+            totalCost = dto.TotalCost.Value;
+            pricePerKwh = energyKwh > 0 ? Math.Round(totalCost / (decimal)energyKwh.Value, 4) : dto.PricePerKwh;
+        }
+        else
+        {
+            pricePerKwh = dto.PricePerKwh;
+            totalCost = (pricePerKwh ?? 0) * (decimal)(energyKwh ?? 0);
+        }
 
         if (existing != null)
         {

@@ -95,7 +95,8 @@ function SessionCard({ session, override: costOverride, carId }: {
 }) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
-  const [priceInput, setPriceInput] = useState(costOverride?.pricePerKwh?.toString() ?? '');
+  const [inputMode, setInputMode] = useState<'total' | 'kwh'>('total');
+  const [priceInput, setPriceInput] = useState(costOverride?.totalCost?.toString() ?? '');
   const [showLocationForm, setShowLocationForm] = useState(false);
 
   useQuery({
@@ -104,19 +105,21 @@ function SessionCard({ session, override: costOverride, carId }: {
     enabled: expanded && !costOverride && session.latitude != null && session.longitude != null && !!carId,
     onSuccess: (data: { suggestedPrice: number | null }) => {
       if (data.suggestedPrice != null && !priceInput) {
+        setInputMode('kwh');
         setPriceInput(data.suggestedPrice.toString());
       }
     },
   } as any);
 
   const saveCost = useMutation({
-    mutationFn: (data: { pricePerKwh: number | null; isFree: boolean }) =>
+    mutationFn: (data: { pricePerKwh?: number | null; totalCost?: number | null; isFree: boolean }) =>
       api('/costs/session', {
         method: 'POST',
         body: JSON.stringify({
           chargingProcessId: session.id,
           carId: session.carId,
-          pricePerKwh: data.pricePerKwh,
+          pricePerKwh: data.pricePerKwh ?? null,
+          totalCost: data.totalCost ?? null,
           isFree: data.isFree,
         }),
       }),
@@ -126,15 +129,18 @@ function SessionCard({ session, override: costOverride, carId }: {
     },
   });
 
-  const handleSavePrice = () => {
-    const price = parseFloat(priceInput);
-    if (!isNaN(price)) {
-      saveCost.mutate({ pricePerKwh: price, isFree: false });
+  const handleSave = () => {
+    const value = parseFloat(priceInput);
+    if (isNaN(value)) return;
+    if (inputMode === 'total') {
+      saveCost.mutate({ totalCost: value, isFree: false });
+    } else {
+      saveCost.mutate({ pricePerKwh: value, isFree: false });
     }
   };
 
   const handleFree = () => {
-    saveCost.mutate({ pricePerKwh: 0, isFree: true });
+    saveCost.mutate({ isFree: true });
   };
 
   const kwh = session.chargeEnergyAdded ?? session.chargeEnergyUsed ?? 0;
@@ -143,6 +149,16 @@ function SessionCard({ session, override: costOverride, carId }: {
       ? 'Free'
       : `${costOverride.totalCost.toFixed(2)} €`
     : null;
+
+  const previewText = (() => {
+    const value = parseFloat(priceInput);
+    if (isNaN(value)) return null;
+    if (inputMode === 'total') {
+      const effectiveKwh = kwh > 0 ? (value / kwh).toFixed(4) : '—';
+      return `${value.toFixed(2)} € — effective ${effectiveKwh} €/kWh`;
+    }
+    return `Total: ${(value * kwh).toFixed(2)} € for ${kwh.toFixed(1)} kWh`;
+  })();
 
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
@@ -173,17 +189,34 @@ function SessionCard({ session, override: costOverride, carId }: {
 
       {expanded && (
         <div className="mt-3 pt-3 border-t border-[#2a2a2a] space-y-3">
+          <div className="flex gap-1 mb-1">
+            <button
+              type="button"
+              onClick={() => { setInputMode('total'); setPriceInput(costOverride?.totalCost?.toString() ?? ''); }}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-medium min-h-[36px] ${inputMode === 'total' ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'}`}
+            >
+              Total (€)
+            </button>
+            <button
+              type="button"
+              onClick={() => { setInputMode('kwh'); setPriceInput(costOverride?.pricePerKwh?.toString() ?? ''); }}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-medium min-h-[36px] ${inputMode === 'kwh' ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'}`}
+            >
+              €/kWh
+            </button>
+          </div>
+
           <div className="flex items-center gap-2">
             <input
               type="number"
-              step="0.0001"
-              placeholder="€/kWh"
+              step={inputMode === 'total' ? '0.01' : '0.0001'}
+              placeholder={inputMode === 'total' ? 'Total € (from invoice)' : '€/kWh'}
               value={priceInput}
               onChange={(e) => setPriceInput(e.target.value)}
               className="flex-1 bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[44px]"
             />
             <button
-              onClick={handleSavePrice}
+              onClick={handleSave}
               disabled={saveCost.isPending}
               className="bg-[#e31937] text-white px-4 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f]"
             >
@@ -198,10 +231,8 @@ function SessionCard({ session, override: costOverride, carId }: {
             </button>
           </div>
 
-          {priceInput && !isNaN(parseFloat(priceInput)) && (
-            <div className="text-xs text-[#9ca3af]">
-              Total: {(parseFloat(priceInput) * kwh).toFixed(2)} € for {kwh.toFixed(1)} kWh
-            </div>
+          {previewText && (
+            <div className="text-xs text-[#9ca3af]">{previewText}</div>
           )}
 
           {session.latitude != null && session.longitude != null && (

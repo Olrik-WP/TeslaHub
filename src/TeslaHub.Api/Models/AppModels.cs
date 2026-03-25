@@ -141,6 +141,7 @@ public record SessionCostDto
     public int ChargingProcessId { get; init; }
     public int CarId { get; init; }
     public decimal? PricePerKwh { get; init; }
+    public decimal? TotalCost { get; init; }
     public bool IsFree { get; init; }
     public string? Notes { get; init; }
 }
