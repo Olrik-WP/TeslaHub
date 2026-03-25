@@ -1,3 +1,8 @@
+# ⚠️  EXAMPLE ONLY — for fresh installs where you want everything in one stack.
+# If you already have TeslaMate running, do NOT use this file.
+# Instead, add the teslahub services to YOUR existing docker-compose.yml.
+# See README.md for instructions.
+
 services:
   teslamate:
     image: teslamate/teslamate:latest
