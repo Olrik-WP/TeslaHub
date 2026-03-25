@@ -48,10 +48,6 @@ log "Docker disk usage before: ${DISK_BEFORE:-unknown}"
 log "Pulling latest code from git..."
 git pull --ff-only
 
-# ── Pull updated base images ─────────────────────────────────────
-log "Pulling updated base images (teslamate, postgres, grafana)..."
-docker compose pull teslamate database grafana 2>/dev/null || true
-
 # ── Build TeslaHub containers ────────────────────────────────────
 log "Building TeslaHub API and Web..."
 docker compose build --no-cache teslahub-api teslahub-web
