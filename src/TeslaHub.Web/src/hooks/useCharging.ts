@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { getChargingSessions, getChargePoints } from '../api/queries';
 
 export function useChargingSessions(carId: number | undefined, limit = 20) {
@@ -7,6 +7,7 @@ export function useChargingSessions(carId: number | undefined, limit = 20) {
     queryFn: () => getChargingSessions(carId!, limit),
     enabled: !!carId,
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -15,5 +16,6 @@ export function useChargePoints(carId: number | undefined, processId: number | u
     queryKey: ['chargePoints', carId, processId],
     queryFn: () => getChargePoints(carId!, processId!),
     enabled: !!carId && !!processId,
+    placeholderData: keepPreviousData,
   });
 }

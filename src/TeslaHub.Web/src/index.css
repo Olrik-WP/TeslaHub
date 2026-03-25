@@ -26,6 +26,12 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   user-select: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: none;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
 }
 
 .leaflet-container {

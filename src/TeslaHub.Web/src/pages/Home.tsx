@@ -1,15 +1,41 @@
+import { useRef } from 'react';
 import { useVehicleStatus } from '../hooks/useVehicle';
 import { useChargingSessions } from '../hooks/useCharging';
 import { useDrives } from '../hooks/useDrives';
 import BatteryGauge from '../components/BatteryGauge';
 import StatCard from '../components/StatCard';
+import type { VehicleStatus } from '../api/queries';
 
 interface Props {
   carId: number | undefined;
 }
 
+function useStickyVehicle(vehicle: VehicleStatus | undefined) {
+  const lastKnown = useRef<Partial<VehicleStatus>>({});
+
+  if (vehicle) {
+    for (const key of Object.keys(vehicle) as (keyof VehicleStatus)[]) {
+      if (vehicle[key] != null) {
+        (lastKnown.current as any)[key] = vehicle[key];
+      }
+    }
+  }
+
+  if (!vehicle) return undefined;
+
+  return {
+    ...vehicle,
+    odometer: vehicle.odometer ?? lastKnown.current.odometer ?? null,
+    outsideTemp: vehicle.outsideTemp ?? lastKnown.current.outsideTemp ?? null,
+    insideTemp: vehicle.insideTemp ?? lastKnown.current.insideTemp ?? null,
+    ratedBatteryRangeKm: vehicle.ratedBatteryRangeKm ?? lastKnown.current.ratedBatteryRangeKm ?? null,
+    batteryLevel: vehicle.batteryLevel ?? lastKnown.current.batteryLevel ?? null,
+  };
+}
+
 export default function Home({ carId }: Props) {
-  const { data: vehicle } = useVehicleStatus(carId);
+  const { data: rawVehicle } = useVehicleStatus(carId);
+  const vehicle = useStickyVehicle(rawVehicle);
   const { data: charges } = useChargingSessions(carId, 5);
   const { data: drives } = useDrives(carId, 5);
 

@@ -73,7 +73,7 @@ public static class AuthEndpoints
         {
             HttpOnly = true,
             Secure = true,
-            SameSite = SameSiteMode.Strict,
+            SameSite = SameSiteMode.Lax,
             Path = "/api/auth",
             MaxAge = TimeSpan.FromDays(expiresInDays)
         });

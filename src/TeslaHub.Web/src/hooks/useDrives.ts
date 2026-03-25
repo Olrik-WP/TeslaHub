@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { getDrives, getDrivePositions } from '../api/queries';
 
 export function useDrives(carId: number | undefined, limit = 20) {
@@ -7,6 +7,7 @@ export function useDrives(carId: number | undefined, limit = 20) {
     queryFn: () => getDrives(carId!, limit),
     enabled: !!carId,
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -15,5 +16,6 @@ export function useDrivePositions(driveId: number | undefined) {
     queryKey: ['drivePositions', driveId],
     queryFn: () => getDrivePositions(driveId!),
     enabled: !!driveId,
+    placeholderData: keepPreviousData,
   });
 }

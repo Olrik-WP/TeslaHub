@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { getCars, getVehicleStatus } from '../api/queries';
+import { usePageVisible } from './usePageVisible';
 
 export function useCars() {
   return useQuery({
@@ -10,11 +11,14 @@ export function useCars() {
 }
 
 export function useVehicleStatus(carId: number | undefined) {
+  const visible = usePageVisible();
+
   return useQuery({
     queryKey: ['vehicle', carId],
     queryFn: () => getVehicleStatus(carId!),
     enabled: !!carId,
-    refetchInterval: 30_000,
-    staleTime: 10_000,
+    refetchInterval: visible ? 60_000 : false,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 }

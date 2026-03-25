@@ -33,6 +33,11 @@ async function tryRefresh(): Promise<boolean> {
   }
 }
 
+export async function tryInitialRefresh(): Promise<boolean> {
+  if (accessToken) return true;
+  return tryRefresh();
+}
+
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const doFetch = () =>
     fetch(`${API_BASE}${path}`, {
