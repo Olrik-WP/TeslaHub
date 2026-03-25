@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getCostSummary, getCostOverrides } from '../api/queries';
+import { getCostSummary, getCostOverrides, getSettings, getTeslaMateCostSummary, getTeslaMateMonthlyTrend } from '../api/queries';
 import { useUnits } from '../hooks/useUnits';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import StatCard from '../components/StatCard';
@@ -17,16 +17,26 @@ export default function Costs({ carId }: Props) {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
 
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings });
+  const costSource = settings?.costSource ?? 'teslahub';
+  const isTeslaHub = costSource !== 'teslamate';
+
   const { data: summary } = useQuery({
-    queryKey: ['costSummary', carId, year, month],
-    queryFn: () => getCostSummary(carId!, year, month),
+    queryKey: [isTeslaHub ? 'costSummary' : 'tmCostSummary', carId, year, month],
+    queryFn: () => isTeslaHub ? getCostSummary(carId!, year, month) : getTeslaMateCostSummary(carId!, year, month),
     enabled: !!carId,
   });
 
   const { data: overrides } = useQuery({
     queryKey: ['costOverrides', carId],
     queryFn: () => getCostOverrides(carId!),
-    enabled: !!carId,
+    enabled: !!carId && isTeslaHub,
+  });
+
+  const { data: tmTrend } = useQuery({
+    queryKey: ['tmCostTrend', carId],
+    queryFn: () => getTeslaMateMonthlyTrend(carId!),
+    enabled: !!carId && !isTeslaHub,
   });
 
   const locationData = Object.entries(summary?.costByLocation ?? {}).map(([name, cost]) => ({
@@ -34,7 +44,13 @@ export default function Costs({ carId }: Props) {
     cost,
   }));
 
-  const monthlyData = buildMonthlyData(overrides ?? []);
+  const monthlyData = isTeslaHub
+    ? buildMonthlyData(overrides ?? [])
+    : (tmTrend ?? [])
+        .slice()
+        .sort((a, b) => a.month.localeCompare(b.month))
+        .slice(-6)
+        .map((t) => ({ month: t.month.slice(2), cost: Math.round(t.cost * 100) / 100 }));
 
   const handlePrevMonth = () => {
     if (month === 1) { setMonth(12); setYear(year - 1); }
@@ -116,7 +132,11 @@ export default function Costs({ carId }: Props) {
       {(!summary || summary.sessionCount === 0) && (
         <div className="text-center text-[#6b7280] py-8">
           <p className="text-sm">No cost data for this month.</p>
-          <p className="text-xs mt-1">Set prices on your charging sessions to see analytics here.</p>
+          <p className="text-xs mt-1">
+            {isTeslaHub
+              ? 'Set prices on your charging sessions to see analytics here.'
+              : 'Costs come from TeslaMate geofence data.'}
+          </p>
         </div>
       )}
     </div>

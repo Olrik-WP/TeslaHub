@@ -135,7 +135,7 @@ public class CostService
             .Where(c => c.PricePerKwh > 0 && !c.IsFree)
             .Sum(c => c.PricePerKwh > 0 ? c.TotalCost / c.PricePerKwh.Value : 0);
         var sessionCount = overrides.Count;
-        var freeCount = overrides.Count(c => c.IsFree);
+        var freeCount = overrides.Count(c => c.IsFree || c.TotalCost == 0);
 
         var costByLocation = overrides
             .GroupBy(c => c.Location?.Name ?? "Other")

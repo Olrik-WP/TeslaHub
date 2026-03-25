@@ -180,6 +180,18 @@ export default function Settings({ carId }: Props) {
             <option value="F">Fahrenheit (°F)</option>
           </select>
         </div>
+        <div>
+          <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">Cost source</label>
+          <select className={inputClass} value={form.costSource ?? 'teslahub'} onChange={(e) => setForm({ ...form, costSource: e.target.value })}>
+            <option value="teslahub">TeslaHub (manual)</option>
+            <option value="teslamate">TeslaMate (geofence)</option>
+          </select>
+          <p className="text-xs text-[#6b7280] mt-1">
+            {(form.costSource ?? 'teslahub') === 'teslahub'
+              ? 'Costs are manually entered per charging session in TeslaHub.'
+              : 'Costs come from TeslaMate geofence data. Manual cost entry is disabled.'}
+          </p>
+        </div>
         <button onClick={() => save.mutate()} className="bg-[#e31937] text-white px-6 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f]">
           {save.isPending ? 'Saving...' : 'Save settings'}
         </button>

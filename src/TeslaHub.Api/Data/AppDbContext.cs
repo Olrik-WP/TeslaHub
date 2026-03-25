@@ -37,7 +37,8 @@ public class AppDbContext : DbContext
             Id = 1,
             Currency = "EUR",
             UnitOfLength = "km",
-            UnitOfTemperature = "C"
+            UnitOfTemperature = "C",
+            CostSource = "teslahub"
         });
     }
 }

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TeslaHub.Api.Data;
 using TeslaHub.Api.Models;
 using TeslaHub.Api.Services;
+using TeslaHub.Api.TeslaMate;
 
 namespace TeslaHub.Api.Endpoints;
 
@@ -114,6 +115,28 @@ public static class CostsEndpoints
             return Results.Ok(summary);
         });
 
+        // ─── TeslaMate cost analytics ────────────────────────────────
+
+        group.MapGet("/teslamate-summary/{carId:int}", async (int carId, int? year, int? month,
+            TeslaMateConnectionFactory tm, CacheService cache) =>
+        {
+            var y = year ?? DateTime.UtcNow.Year;
+            var m = month ?? DateTime.UtcNow.Month;
+            var summary = await cache.GetOrSetHistoricalAsync(
+                $"tmCostSummary:{carId}:{y}:{m}",
+                () => tm.GetTeslaMateCostSummaryAsync(carId, y, m));
+            return Results.Ok(summary);
+        });
+
+        group.MapGet("/teslamate-trend/{carId:int}", async (int carId,
+            TeslaMateConnectionFactory tm, CacheService cache) =>
+        {
+            var trend = await cache.GetOrSetHistoricalAsync(
+                $"tmCostTrend:{carId}",
+                () => tm.GetTeslaMateMonthlyTrendAsync(carId));
+            return Results.Ok(trend);
+        });
+
         // ─── Settings ──────────────────────────────────────────────
 
         group.MapGet("/settings", async (AppDbContext db) =>
@@ -131,6 +154,7 @@ public static class CostsEndpoints
             settings.UnitOfLength = update.UnitOfLength;
             settings.UnitOfTemperature = update.UnitOfTemperature;
             settings.DefaultCarId = update.DefaultCarId;
+            settings.CostSource = update.CostSource;
 
             await db.SaveChangesAsync();
             return Results.Ok(settings);

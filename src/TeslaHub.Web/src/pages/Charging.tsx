@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts';
 import { useUnits } from '../hooks/useUnits';
-import { getChargingSessions, getChargingSummary, getCostOverrides, getSuggestedPrice, getMatchingLocation } from '../api/queries';
+import { getChargingSessions, getChargingSummary, getCostOverrides, getSuggestedPrice, getMatchingLocation, getSettings } from '../api/queries';
 import { api } from '../api/client';
 import type { ChargingSession, CostOverride, ChargingLocation } from '../api/queries';
 import StatCard from '../components/StatCard';
@@ -26,6 +26,9 @@ export default function Charging({ carId }: Props) {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const u = useUnits();
 
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings });
+  const costSource = settings?.costSource ?? 'teslahub';
+
   const selectedPeriod = PERIOD_OPTIONS.find((p) => p.key === period)!;
   const chargeTypeParam = typeFilter === 'all' ? undefined : typeFilter;
 
@@ -45,7 +48,7 @@ export default function Charging({ carId }: Props) {
   const { data: overrides } = useQuery({
     queryKey: ['costOverrides', carId],
     queryFn: () => getCostOverrides(carId!),
-    enabled: !!carId,
+    enabled: !!carId && costSource === 'teslahub',
   });
 
   if (isLoading) {
@@ -102,14 +105,19 @@ export default function Charging({ carId }: Props) {
       </div>
 
       {/* Summary */}
-      {summary && summary.chargeCount > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Energy added" value={Math.round(summary.totalEnergyAdded)} unit="kWh" color="#eab308" />
-          <StatCard label="Total cost" value={summary.totalCost > 0 ? summary.totalCost.toFixed(2) : '—'} unit={summary.totalCost > 0 ? u.currencySymbol : undefined} />
-          <StatCard label="Ø Duration" value={Math.round(summary.avgDurationMin)} unit="min" />
-          <StatCard label="Efficiency" value={`${(summary.avgEfficiency * 100).toFixed(0)}%`} color="#22c55e" />
-        </div>
-      )}
+      {summary && summary.chargeCount > 0 && (() => {
+        const totalCost = costSource === 'teslamate'
+          ? summary.totalCost
+          : filteredSessions.reduce((sum, s) => sum + (overrideMap.get(s.id)?.totalCost ?? 0), 0);
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <StatCard label="Energy added" value={Math.round(summary.totalEnergyAdded)} unit="kWh" color="#eab308" />
+            <StatCard label="Total cost" value={totalCost > 0 ? totalCost.toFixed(2) : '—'} unit={totalCost > 0 ? u.currencySymbol : undefined} />
+            <StatCard label="Ø Duration" value={Math.round(summary.avgDurationMin)} unit="min" />
+            <StatCard label="Efficiency" value={`${(summary.avgEfficiency * 100).toFixed(0)}%`} color="#22c55e" />
+          </div>
+        );
+      })()}
 
       {/* Charging now */}
       {activeSession && (
@@ -165,6 +173,7 @@ export default function Charging({ carId }: Props) {
             session={session}
             override={overrideMap.get(session.id)}
             carId={carId}
+            costSource={costSource}
           />
         ))}
         {filteredSessions.length === 0 && (
@@ -175,11 +184,13 @@ export default function Charging({ carId }: Props) {
   );
 }
 
-function SessionCard({ session, override: costOverride, carId }: {
+function SessionCard({ session, override: costOverride, carId, costSource }: {
   session: ChargingSession;
   override: CostOverride | undefined;
   carId: number | undefined;
+  costSource: string;
 }) {
+  const isTeslaHub = costSource !== 'teslamate';
   const queryClient = useQueryClient();
   const u = useUnits();
   const [expanded, setExpanded] = useState(false);
@@ -238,13 +249,13 @@ function SessionCard({ session, override: costOverride, carId }: {
     saveCost.mutate({ isFree: true });
   };
 
-  const displayCost = costOverride
-    ? costOverride.isFree
-      ? 'Free'
-      : `${costOverride.totalCost.toFixed(2)} ${u.currencySymbol}`
-    : session.cost != null
-      ? `${session.cost.toFixed(2)} ${u.currencySymbol}`
-      : null;
+  const displayCost = isTeslaHub
+    ? (costOverride
+        ? (costOverride.isFree || costOverride.totalCost === 0) ? 'Free' : `${costOverride.totalCost.toFixed(2)} ${u.currencySymbol}`
+        : null)
+    : (session.cost != null && session.cost > 0
+        ? `${session.cost.toFixed(2)} ${u.currencySymbol}`
+        : session.cost === 0 ? 'Free' : null);
 
   const previewText = (() => {
     const value = parseFloat(priceInput);
@@ -262,7 +273,7 @@ function SessionCard({ session, override: costOverride, carId }: {
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
       {/* Header row */}
-      <div className="flex items-center justify-between mb-2 cursor-pointer" onClick={() => setExpanded(!expanded)}>
+      <div className="flex items-center justify-between mb-2 cursor-pointer" onClick={() => isTeslaHub && setExpanded(!expanded)}>
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-sm font-medium truncate">
             {new Date(session.startDate).toLocaleDateString()}
@@ -272,7 +283,7 @@ function SessionCard({ session, override: costOverride, carId }: {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {displayCost && (
-            <span className={`text-sm font-medium ${costOverride?.isFree ? 'text-[#22c55e]' : 'text-white'}`}>
+            <span className={`text-sm font-medium ${displayCost === 'Free' ? 'text-[#22c55e]' : 'text-white'}`}>
               {displayCost}
             </span>
           )}
@@ -315,13 +326,15 @@ function SessionCard({ session, override: costOverride, carId }: {
       {session.outsideTempAvg != null && (
         <div className="text-xs text-[#9ca3af] mt-1">
           {u.fmtTemp(session.outsideTempAvg)}{u.tempUnit}
-          {session.costPerKwh != null && ` · ${session.costPerKwh.toFixed(2)} ${u.currencySymbol}/kWh`}
+          {isTeslaHub
+            ? costOverride?.pricePerKwh != null && ` · ${costOverride.pricePerKwh.toFixed(2)} ${u.currencySymbol}/kWh`
+            : session.costPerKwh != null && ` · ${session.costPerKwh.toFixed(2)} ${u.currencySymbol}/kWh`}
           {session.chargeRateKmPerHour != null && session.chargeRateKmPerHour > 0 && ` · ${Math.round(u.convertDistance(session.chargeRateKmPerHour)!)} ${u.distanceUnit}/h`}
         </div>
       )}
 
-      {/* Expanded: cost input + location form (unchanged logic) */}
-      {expanded && (
+      {/* Expanded: cost input + location form (TeslaHub mode only) */}
+      {isTeslaHub && expanded && (
         <div className="mt-3 pt-3 border-t border-[#2a2a2a] space-y-3">
           <div className="flex gap-1 mb-1">
             <button

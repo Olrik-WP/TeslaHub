@@ -156,6 +156,12 @@ export interface GlobalSettings {
   unitOfTemperature: string;
   defaultCarId: number | null;
   mapTileUrl: string;
+  costSource: string;
+}
+
+export interface MonthlyTrend {
+  month: string;
+  cost: number;
 }
 
 export interface Stats {
@@ -243,6 +249,16 @@ export interface CarImageInfo {
 }
 
 export const getCarImageInfo = (carId: number) => api<CarImageInfo>(`/vehicle/${carId}/image/info`);
+
+// ─── TeslaMate cost analytics ────────────────────────────────────
+export const getTeslaMateCostSummary = (carId: number, year?: number, month?: number) => {
+  const params = new URLSearchParams();
+  if (year) params.set('year', String(year));
+  if (month) params.set('month', String(month));
+  return api<CostSummary>(`/costs/teslamate-summary/${carId}?${params}`);
+};
+export const getTeslaMateMonthlyTrend = (carId: number) =>
+  api<MonthlyTrend[]>(`/costs/teslamate-trend/${carId}`);
 
 // ─── Settings ───────────────────────────────────────────────────
 export const getSettings = () => api<GlobalSettings>('/costs/settings');

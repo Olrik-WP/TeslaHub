@@ -123,4 +123,73 @@ public static class ChargingQueries
             ORDER BY name
             """);
     }
+
+    public static async Task<CostSummaryDto> GetTeslaMateCostSummaryAsync(
+        this TeslaMateConnectionFactory db, int carId, int year, int month)
+    {
+        using var conn = db.CreateConnection();
+        var monthStart = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var monthEnd = monthStart.AddMonths(1);
+
+        var row = await conn.QueryFirstOrDefaultAsync<(
+            decimal TotalCost,
+            decimal TotalKwh,
+            int SessionCount,
+            int FreeCount
+        )>("""
+            SELECT
+                COALESCE(SUM(CASE WHEN cost > 0 THEN cost ELSE 0 END), 0),
+                COALESCE(SUM(charge_energy_added), 0),
+                COUNT(*),
+                COUNT(*) FILTER (WHERE cost IS NULL OR cost <= 0)
+            FROM charging_processes
+            WHERE car_id = @CarId
+              AND charge_energy_added > 0.01
+              AND start_date >= @Start AND start_date < @End
+            """, new { CarId = carId, Start = monthStart, End = monthEnd });
+
+        var locationRows = await conn.QueryAsync<(string Name, decimal Cost)>("""
+            SELECT
+                COALESCE(g.name, SPLIT_PART(a.display_name, ',', 1), 'Other') AS "Name",
+                SUM(cp.cost) AS "Cost"
+            FROM charging_processes cp
+            LEFT JOIN geofences g ON cp.geofence_id = g.id
+            LEFT JOIN addresses a ON cp.address_id = a.id
+            WHERE cp.car_id = @CarId
+              AND cp.charge_energy_added > 0.01
+              AND cp.cost > 0
+              AND cp.start_date >= @Start AND cp.start_date < @End
+            GROUP BY COALESCE(g.name, SPLIT_PART(a.display_name, ',', 1), 'Other')
+            ORDER BY "Cost" DESC
+            """, new { CarId = carId, Start = monthStart, End = monthEnd });
+
+        return new CostSummaryDto
+        {
+            Period = $"{year}-{month:D2}",
+            TotalCost = row.TotalCost,
+            TotalKwh = row.TotalKwh,
+            AvgPricePerKwh = row.TotalKwh > 0 ? Math.Round(row.TotalCost / row.TotalKwh, 4) : 0,
+            SessionCount = row.SessionCount,
+            FreeSessionCount = row.FreeCount,
+            CostByLocation = locationRows.ToDictionary(r => r.Name, r => r.Cost)
+        };
+    }
+
+    public static async Task<IEnumerable<MonthlyTrendDto>> GetTeslaMateMonthlyTrendAsync(
+        this TeslaMateConnectionFactory db, int carId)
+    {
+        using var conn = db.CreateConnection();
+        return await conn.QueryAsync<MonthlyTrendDto>("""
+            SELECT
+                TO_CHAR(start_date, 'YYYY-MM') AS "Month",
+                COALESCE(SUM(cost), 0) AS "Cost"
+            FROM charging_processes
+            WHERE car_id = @CarId
+              AND charge_energy_added > 0.01
+              AND cost > 0
+            GROUP BY TO_CHAR(start_date, 'YYYY-MM')
+            ORDER BY "Month" DESC
+            LIMIT 12
+            """, new { CarId = carId });
+    }
 }

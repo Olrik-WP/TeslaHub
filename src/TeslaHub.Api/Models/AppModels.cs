@@ -35,6 +35,9 @@ public class GlobalSettings
 
     [MaxLength(500)]
     public string MapTileUrl { get; set; } = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+    [MaxLength(20)]
+    public string CostSource { get; set; } = "teslahub";
 }
 
 public class CarConfig
@@ -183,4 +186,10 @@ public record CostSummaryDto
     public int SessionCount { get; init; }
     public int FreeSessionCount { get; init; }
     public Dictionary<string, decimal> CostByLocation { get; init; } = new();
+}
+
+public record MonthlyTrendDto
+{
+    public string Month { get; init; } = string.Empty;
+    public decimal Cost { get; init; }
 }
