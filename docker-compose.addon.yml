@@ -1,27 +1,30 @@
-# TeslaHub addon — add this to your existing TeslaMate docker-compose.yml
+# TeslaHub addon — runs alongside your existing TeslaMate stack.
 #
-# Prerequisites:
-# 1. Create read-only user and TeslaHub database (run once):
+# Your existing ~/teslamate/docker-compose.yml stays UNTOUCHED.
+# TeslaHub connects to its network to reach the database.
 #
-#    docker exec -it <your-postgres-container> psql -U tm_user -d teslamate
+# Prerequisites (run once):
 #
-#    CREATE USER teslahub_reader WITH PASSWORD 'your_reader_password';
-#    GRANT CONNECT ON DATABASE teslamate TO teslahub_reader;
-#    GRANT USAGE ON SCHEMA public TO teslahub_reader;
-#    GRANT SELECT ON ALL TABLES IN SCHEMA public TO teslahub_reader;
-#    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO teslahub_reader;
+#   docker exec -it teslamate-database-1 psql -U tm_user -d teslamate
 #
-#    CREATE DATABASE teslahub;
-#    CREATE USER teslahub_app WITH PASSWORD 'your_app_password';
-#    GRANT ALL PRIVILEGES ON DATABASE teslahub TO teslahub_app;
-#    \c teslahub
-#    GRANT ALL ON SCHEMA public TO teslahub_app;
+#   CREATE USER teslahub_reader WITH PASSWORD 'your_reader_password';
+#   GRANT CONNECT ON DATABASE teslamate TO teslahub_reader;
+#   GRANT USAGE ON SCHEMA public TO teslahub_reader;
+#   GRANT SELECT ON ALL TABLES IN SCHEMA public TO teslahub_reader;
+#   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO teslahub_reader;
 #
-# 2. Add these services to your existing docker-compose.yml
-# 3. Add the environment variables to your .env file
+#   CREATE DATABASE teslahub;
+#   CREATE USER teslahub_app WITH PASSWORD 'your_app_password';
+#   GRANT ALL PRIVILEGES ON DATABASE teslahub TO teslahub_app;
+#   \c teslahub
+#   GRANT ALL ON SCHEMA public TO teslahub_app;
+#   \q
 
+services:
   teslahub-api:
-    image: teslahub/api:latest
+    build:
+      context: ./src/TeslaHub.Api
+      dockerfile: Dockerfile
     restart: always
     environment:
       - TM_DB_HOST=database
@@ -43,13 +46,22 @@
       - TZ=${TZ:-Europe/Paris}
     ports:
       - "127.0.0.1:4001:8080"
-    depends_on:
-      - database
+    networks:
+      - teslamate
 
   teslahub-web:
-    image: teslahub/web:latest
+    build:
+      context: ./src/TeslaHub.Web
+      dockerfile: Dockerfile
     restart: always
     ports:
       - "127.0.0.1:4002:80"
     depends_on:
       - teslahub-api
+    networks:
+      - teslamate
+
+networks:
+  teslamate:
+    external: true
+    name: ${TESLAMATE_NETWORK:-teslamate_default}
