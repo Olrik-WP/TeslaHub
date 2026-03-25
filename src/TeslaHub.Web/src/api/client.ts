@@ -79,7 +79,10 @@ export async function login(username: string, password: string) {
   });
 
   if (!res.ok) {
-    if (res.status === 429) throw new Error('Too many attempts. Try again later.');
+    if (res.status === 429) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.detail ?? 'Too many attempts. Try again later.');
+    }
     throw new Error('Invalid credentials');
   }
 
