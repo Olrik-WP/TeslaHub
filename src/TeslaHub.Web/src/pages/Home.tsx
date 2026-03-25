@@ -38,7 +38,8 @@ function useStickyVehicle(vehicle: VehicleStatus | undefined) {
     latitude: vehicle.latitude ?? lastKnown.current.latitude ?? null,
     longitude: vehicle.longitude ?? lastKnown.current.longitude ?? null,
     firmwareVersion: vehicle.firmwareVersion ?? lastKnown.current.firmwareVersion ?? null,
-    maxFullRangeKm: vehicle.maxFullRangeKm ?? lastKnown.current.maxFullRangeKm ?? null,
+    currentCapacityKwh: vehicle.currentCapacityKwh ?? lastKnown.current.currentCapacityKwh ?? null,
+    maxCapacityKwh: vehicle.maxCapacityKwh ?? lastKnown.current.maxCapacityKwh ?? null,
   };
 }
 
@@ -71,27 +72,19 @@ export default function Home({ carId }: Props) {
   const isCharging = lastCharge && !lastCharge.endDate;
   const imgSrc = carId ? `/api/vehicle/${carId}/image` : null;
 
+  const currentCapacity = vehicle?.currentCapacityKwh ?? null;
+  const maxCapacity = vehicle?.maxCapacityKwh ?? null;
+
   const storedEnergy =
-    vehicle?.ratedBatteryRangeKm != null && vehicle?.efficiency != null
-      ? vehicle.ratedBatteryRangeKm * vehicle.efficiency
-      : null;
-
-  const usableCapacity =
-    vehicle?.ratedBatteryRangeKm != null &&
-    vehicle?.batteryLevel != null &&
-    vehicle.batteryLevel > 0 &&
-    vehicle?.efficiency != null
-      ? (vehicle.ratedBatteryRangeKm / vehicle.batteryLevel) * 100 * vehicle.efficiency
-      : null;
-
-  const originalCapacity =
-    vehicle?.maxFullRangeKm != null && vehicle?.efficiency != null
-      ? vehicle.maxFullRangeKm * vehicle.efficiency
-      : null;
+    currentCapacity != null && vehicle?.usableBatteryLevel != null
+      ? vehicle.usableBatteryLevel * currentCapacity / 100
+      : currentCapacity != null && vehicle?.batteryLevel != null
+        ? vehicle.batteryLevel * currentCapacity / 100
+        : null;
 
   const degradation =
-    usableCapacity != null && originalCapacity != null && originalCapacity > 0
-      ? (1 - usableCapacity / originalCapacity) * 100
+    currentCapacity != null && maxCapacity != null && maxCapacity > 0
+      ? Math.max(0, 100 - (currentCapacity * 100 / maxCapacity))
       : null;
 
   const degradationColor =
@@ -177,6 +170,7 @@ export default function Home({ carId }: Props) {
           value={vehicle.ratedBatteryRangeKm ? Math.round(u.convertDistance(vehicle.ratedBatteryRangeKm)!) : '—'}
           unit={u.distanceUnit}
           color="#22c55e"
+          progress={vehicle.batteryLevel}
         />
         <StatCard
           label="Firmware"
@@ -211,10 +205,10 @@ export default function Home({ carId }: Props) {
             color="#3b82f6"
           />
         )}
-        {usableCapacity != null && (
+        {currentCapacity != null && (
           <StatCard
             label="Usable (100%)"
-            value={usableCapacity.toFixed(1)}
+            value={currentCapacity.toFixed(1)}
             unit="kWh"
           />
         )}

@@ -32,7 +32,8 @@ export interface VehicleStatus {
   positionDate: string | null;
   state: string | null;
   firmwareVersion: string | null;
-  maxFullRangeKm: number | null;
+  currentCapacityKwh: number | null;
+  maxCapacityKwh: number | null;
 }
 
 export interface Drive {
