@@ -24,8 +24,9 @@ public class CompositorService
         ["Pinwheel18"] = "W38B", ["Aero18"] = "W38B",
         ["Stiletto19"] = "W39B", ["Sport19"] = "W39B",
         ["Stiletto20"] = "W32B", ["Performance20"] = "W32B",
-        ["Photon18"] = "W38A", ["Photon"] = "W38A",
-        ["Nova19"] = "W40B", ["Nova"] = "W40B",
+        ["Photon18"] = "W40B", ["Photon"] = "W40B",
+        ["Nova19"] = "W41B", ["Nova"] = "W41B",
+        ["Warp20"] = "W38A", ["Warp"] = "W38A",
         ["Gemini19"] = "WY19B", ["Gemini"] = "WY19B",
         ["Induction20"] = "WY20P", ["Induction"] = "WY20P",
         ["Uberturbine19"] = "W41B", ["Uberturbine"] = "W41B",
@@ -58,7 +59,7 @@ public class CompositorService
 
     private static readonly HashSet<string> HighlandM3Wheels = new(StringComparer.OrdinalIgnoreCase)
     {
-        "W38A", "W40B"
+        "W38A", "W40B", "W41B"
     };
 
     public string BuildUrl(string modelCode, string paintCode, string wheelCode, string? variantCode = null)

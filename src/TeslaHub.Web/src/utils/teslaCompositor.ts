@@ -27,9 +27,10 @@ const WHEELS_BY_MODEL: Record<string, WheelOption[]> = {
   m3: [
     { code: 'W38B', name: 'Aero 18"' },
     { code: 'W39B', name: 'Sport 19"' },
-    { code: 'W32B', name: 'Performance 20"' },
-    { code: 'W38A', name: 'Photon 18" (Highland)' },
-    { code: 'W40B', name: 'Nova 19" (Highland)' },
+    { code: 'W32B', name: 'Überturbine 20"' },
+    { code: 'W40B', name: 'Photon 18" (Highland)' },
+    { code: 'W41B', name: 'Nova 19" (Highland)' },
+    { code: 'W38A', name: 'Warp 20" (Highland Perf)' },
   ],
   my: [
     { code: 'WY19B', name: 'Gemini 19"' },
@@ -59,7 +60,7 @@ export function getWheelsForModel(modelCode: string): WheelOption[] {
   return WHEELS_BY_MODEL[modelCode] ?? WHEELS_BY_MODEL.m3;
 }
 
-export const HIGHLAND_M3_WHEELS = new Set(['W38A', 'W40B']);
+export const HIGHLAND_M3_WHEELS = new Set(['W38A', 'W40B', 'W41B']);
 
 export interface VariantOption {
   code: string;
