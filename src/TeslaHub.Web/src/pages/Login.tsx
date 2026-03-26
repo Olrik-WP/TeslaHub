@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../api/client';
 
+const SAVED_USER_KEY = 'teslahub_saved_user';
+
 export default function Login() {
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(() => localStorage.getItem(SAVED_USER_KEY) ?? '');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(() => !!localStorage.getItem(SAVED_USER_KEY));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -16,6 +19,11 @@ export default function Login() {
 
     try {
       await login(username, password);
+      if (remember) {
+        localStorage.setItem(SAVED_USER_KEY, username);
+      } else {
+        localStorage.removeItem(SAVED_USER_KEY);
+      }
       navigate('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -27,6 +35,7 @@ export default function Login() {
   return (
     <div className="min-h-dvh flex items-center justify-center bg-[#0a0a0a] p-4">
       <form
+        name="login"
         onSubmit={handleSubmit}
         className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-8 w-full max-w-sm"
       >
@@ -42,6 +51,8 @@ export default function Login() {
         )}
 
         <input
+          id="username"
+          name="username"
           type="text"
           placeholder="Username"
           value={username}
@@ -50,13 +61,25 @@ export default function Login() {
           autoComplete="username"
         />
         <input
+          id="password"
+          name="password"
           type="password"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-4 py-3 mb-6 text-white placeholder-[#6b7280] focus:border-[#e31937] focus:outline-none text-base"
+          className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-4 py-3 mb-4 text-white placeholder-[#6b7280] focus:border-[#e31937] focus:outline-none text-base"
           autoComplete="current-password"
         />
+
+        <label className="flex items-center gap-2 mb-6 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+            className="w-4 h-4 rounded border-[#2a2a2a] bg-[#0a0a0a] accent-[#e31937]"
+          />
+          <span className="text-sm text-[#9ca3af]">Remember me</span>
+        </label>
 
         <button
           type="submit"
