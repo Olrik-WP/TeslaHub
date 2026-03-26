@@ -209,6 +209,17 @@
     "minIdle": "Min. idle",
     "noData": "No vampire drain data for this period.",
     "noDataSub": "Try reducing the minimum idle time or extending the time range.",
-    "perSession": "per session"
+    "perSession": "per session",
+    "healthLabel": "Sleep health",
+    "healthExcellent": "Excellent",
+    "healthGood": "Good",
+    "healthMonitor": "Monitor",
+    "healthPoor": "Problematic",
+    "healthDesc": "Your car consumes on avg. {{watts}} W at rest — like a {{analogy}}.",
+    "analogyNightLight": "night light",
+    "analogyLedBulb": "LED bulb",
+    "analogyTv": "TV set",
+    "analogyDesktop": "desktop PC",
+    "analogyHairDryer": "hair dryer"
   }
 }

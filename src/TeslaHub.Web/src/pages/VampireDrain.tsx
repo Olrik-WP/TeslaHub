@@ -30,6 +30,29 @@ function drainColor(kwh: number | null): string {
   return '#ef4444';
 }
 
+function powerColor(w: number | null): string {
+  if (w == null) return '#6b7280';
+  if (w < 50) return '#22c55e';
+  if (w < 100) return '#f59e0b';
+  if (w < 200) return '#f97316';
+  return '#ef4444';
+}
+
+function powerAnalogyKey(w: number): string {
+  if (w < 50) return 'vampire.analogyNightLight';
+  if (w < 100) return 'vampire.analogyLedBulb';
+  if (w < 200) return 'vampire.analogyTv';
+  if (w < 500) return 'vampire.analogyDesktop';
+  return 'vampire.analogyHairDryer';
+}
+
+function healthVerdictKey(w: number): string {
+  if (w < 50) return 'vampire.healthExcellent';
+  if (w < 100) return 'vampire.healthGood';
+  if (w < 200) return 'vampire.healthMonitor';
+  return 'vampire.healthPoor';
+}
+
 function socColor(diff: number | null): string {
   if (diff == null) return '#6b7280';
   const abs = Math.abs(diff);
@@ -86,6 +109,34 @@ export default function VampireDrain({ carId }: Props) {
     <div className="p-4 space-y-4">
       <h1 className="text-xl font-bold">🧛 {t('vampire.title')}</h1>
 
+      {/* Health verdict banner */}
+      {summary && summary.sessionCount > 0 && summary.avgPowerW > 0 && (() => {
+        const avgW = Math.round(summary.avgPowerW);
+        const color = powerColor(avgW);
+        return (
+          <div
+            className="rounded-xl p-3 sm:p-4 flex items-start gap-3"
+            style={{ backgroundColor: `${color}10`, border: `1px solid ${color}30` }}
+          >
+            <span className="w-3 h-3 rounded-full mt-0.5 flex-shrink-0" style={{ backgroundColor: color }} />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-semibold" style={{ color }}>{t('vampire.healthLabel')}</span>
+                <span
+                  className="text-xs font-bold px-2 py-0.5 rounded"
+                  style={{ color, backgroundColor: `${color}20` }}
+                >
+                  {t(healthVerdictKey(avgW))}
+                </span>
+              </div>
+              <p className="text-xs text-[#9ca3af] mt-1">
+                {t('vampire.healthDesc', { watts: avgW, analogy: t(powerAnalogyKey(avgW)) })}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Summary stat cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label={t('vampire.sessions')} value={summary?.sessionCount ?? 0} />
@@ -105,7 +156,7 @@ export default function VampireDrain({ carId }: Props) {
           label={t('vampire.avgPower')}
           value={summary ? (summary.avgPowerW > 0 ? Math.round(summary.avgPowerW).toString() : '0') : '—'}
           unit="W"
-          color="#8b5cf6"
+          color={summary ? powerColor(summary.avgPowerW) : '#6b7280'}
         />
       </div>
 
@@ -244,11 +295,11 @@ export default function VampireDrain({ carId }: Props) {
                     </span>
                   )}
 
-                  {/* Energy */}
+                  {/* Energy — colored by avg power */}
                   {item.consumptionKwh != null && !item.hasReducedRange && (
                     <span className="flex items-center gap-1">
                       <span className="text-[#6b7280] text-xs">⚡</span>
-                      <span className="font-medium" style={{ color: drainColor(item.consumptionKwh) }}>
+                      <span className="font-medium" style={{ color: powerColor(item.avgPowerW) }}>
                         {item.consumptionKwh < 1
                           ? `${Math.round(item.consumptionKwh * 1000)} Wh`
                           : `${item.consumptionKwh.toFixed(2)} kWh`}
@@ -256,11 +307,12 @@ export default function VampireDrain({ carId }: Props) {
                     </span>
                   )}
 
-                  {/* Avg power */}
+                  {/* Avg power + analogy badge */}
                   {item.avgPowerW != null && !item.hasReducedRange && (
                     <span className="flex items-center gap-1">
                       <span className="text-[#6b7280] text-xs">∅</span>
-                      <span className="text-[#d1d5db]">{Math.round(item.avgPowerW)} W</span>
+                      <span className="font-medium" style={{ color: powerColor(item.avgPowerW) }}>{Math.round(item.avgPowerW)} W</span>
+                      <span className="text-[10px] text-[#6b7280]">~ {t(powerAnalogyKey(item.avgPowerW))}</span>
                     </span>
                   )}
 

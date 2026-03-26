@@ -209,6 +209,17 @@
     "minIdle": "Inactif min.",
     "noData": "Aucune donnée de vampire drain pour cette période.",
     "noDataSub": "Réduisez le temps inactif minimum ou étendez la plage de dates.",
-    "perSession": "par session"
+    "perSession": "par session",
+    "healthLabel": "Santé veille",
+    "healthExcellent": "Excellent",
+    "healthGood": "Bon",
+    "healthMonitor": "À surveiller",
+    "healthPoor": "Problématique",
+    "healthDesc": "Votre voiture consomme en moy. {{watts}} W au repos — comme une {{analogy}}.",
+    "analogyNightLight": "veilleuse",
+    "analogyLedBulb": "ampoule LED",
+    "analogyTv": "télévision",
+    "analogyDesktop": "ordinateur",
+    "analogyHairDryer": "sèche-cheveux"
   }
 }
