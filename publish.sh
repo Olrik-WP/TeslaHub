@@ -32,6 +32,25 @@ if [ "$BRANCH" != "main" ]; then
   fi
 fi
 
+# Sync with remote — never push commits from this machine
+log "Checking sync with remote..."
+git fetch origin
+LOCAL=$(git rev-parse HEAD)
+REMOTE=$(git rev-parse "origin/$BRANCH")
+
+if [ "$LOCAL" = "$REMOTE" ]; then
+  log "In sync with origin/$BRANCH ($(git rev-parse --short HEAD))"
+elif git merge-base --is-ancestor "$LOCAL" "$REMOTE"; then
+  log "Local is behind remote, pulling..."
+  git pull --ff-only origin "$BRANCH"
+  log "Pulled to $(git rev-parse --short HEAD)"
+else
+  err "Local has commits not on GitHub. This machine must not push commits."
+  err "Push your commits from Windows first, then re-run this script."
+  git log "origin/$BRANCH..HEAD" --oneline
+  exit 1
+fi
+
 # Ask for version
 echo -n "New version (e.g. 1.2.0): v"
 read -r VERSION
@@ -51,9 +70,8 @@ fi
 # Confirm
 echo ""
 log "This will:"
-echo "  1. Push latest commits to origin"
-echo "  2. Create tag $TAG"
-echo "  3. Push tag → triggers Docker Hub build"
+echo "  1. Create tag $TAG on commit $(git rev-parse --short HEAD)"
+echo "  2. Push tag → triggers GitHub Actions → Docker Hub build"
 echo ""
 echo -n "Proceed? (y/N) "
 read -r CONFIRM
@@ -63,11 +81,7 @@ if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
   exit 0
 fi
 
-# Push commits
-log "Pushing commits..."
-git push origin "$BRANCH"
-
-# Create and push tag
+# Create and push tag only (commits already on GitHub)
 log "Creating tag $TAG..."
 git tag "$TAG"
 git push origin "$TAG"
