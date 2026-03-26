@@ -275,7 +275,7 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
       {/* Header row */}
-      <div className="flex items-center justify-between mb-2 cursor-pointer" onClick={() => isTeslaHub && setExpanded(!expanded)}>
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-sm font-medium truncate">
             {new Date(session.startDate).toLocaleDateString()}
@@ -294,10 +294,19 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
           </span>
           {chargeType === 'DC' && (
             <button
-              onClick={(e) => { e.stopPropagation(); navigate(`/charging-stats?session=${session.id}`); }}
+              onClick={() => navigate(`/charging-stats?session=${session.id}`)}
               className="text-[10px] px-2 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30 hover:bg-[#f59e0b]/20 transition-colors"
             >
               Curve
+            </button>
+          )}
+          {isTeslaHub && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] text-[#9ca3af] active:bg-[#2a2a2a] transition-colors flex-shrink-0"
+              aria-label={expanded ? 'Collapse' : 'Expand'}
+            >
+              <span className={`text-sm transition-transform duration-200 inline-block ${expanded ? 'rotate-180' : ''}`}>▼</span>
             </button>
           )}
         </div>
