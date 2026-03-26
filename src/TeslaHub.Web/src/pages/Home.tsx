@@ -15,32 +15,51 @@ interface Props {
   carId: number | undefined;
 }
 
+const STICKY_KEY = 'teslahub_sticky_vehicle';
+const STICKY_FIELDS: (keyof VehicleStatus)[] = [
+  'odometer', 'outsideTemp', 'insideTemp', 'ratedBatteryRangeKm',
+  'batteryLevel', 'latitude', 'longitude', 'firmwareVersion',
+  'currentCapacityKwh', 'maxCapacityKwh', 'usableBatteryLevel',
+];
+
+function loadSticky(): Partial<VehicleStatus> {
+  try {
+    const raw = localStorage.getItem(STICKY_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
 function useStickyVehicle(vehicle: VehicleStatus | undefined) {
-  const lastKnown = useRef<Partial<VehicleStatus>>({});
+  const lastKnown = useRef<Partial<VehicleStatus>>(loadSticky());
 
   if (vehicle) {
-    for (const key of Object.keys(vehicle) as (keyof VehicleStatus)[]) {
+    let changed = false;
+    for (const key of STICKY_FIELDS) {
       if (vehicle[key] != null) {
-        (lastKnown.current as any)[key] = vehicle[key];
+        if ((lastKnown.current as any)[key] !== vehicle[key]) {
+          (lastKnown.current as any)[key] = vehicle[key];
+          changed = true;
+        }
       }
+    }
+    if (changed) {
+      const toSave: Record<string, unknown> = {};
+      for (const key of STICKY_FIELDS) {
+        if (lastKnown.current[key] != null) toSave[key] = lastKnown.current[key];
+      }
+      localStorage.setItem(STICKY_KEY, JSON.stringify(toSave));
     }
   }
 
   if (!vehicle) return undefined;
 
-  return {
-    ...vehicle,
-    odometer: vehicle.odometer ?? lastKnown.current.odometer ?? null,
-    outsideTemp: vehicle.outsideTemp ?? lastKnown.current.outsideTemp ?? null,
-    insideTemp: vehicle.insideTemp ?? lastKnown.current.insideTemp ?? null,
-    ratedBatteryRangeKm: vehicle.ratedBatteryRangeKm ?? lastKnown.current.ratedBatteryRangeKm ?? null,
-    batteryLevel: vehicle.batteryLevel ?? lastKnown.current.batteryLevel ?? null,
-    latitude: vehicle.latitude ?? lastKnown.current.latitude ?? null,
-    longitude: vehicle.longitude ?? lastKnown.current.longitude ?? null,
-    firmwareVersion: vehicle.firmwareVersion ?? lastKnown.current.firmwareVersion ?? null,
-    currentCapacityKwh: vehicle.currentCapacityKwh ?? lastKnown.current.currentCapacityKwh ?? null,
-    maxCapacityKwh: vehicle.maxCapacityKwh ?? lastKnown.current.maxCapacityKwh ?? null,
-  };
+  const result = { ...vehicle };
+  for (const key of STICKY_FIELDS) {
+    if (result[key] == null && lastKnown.current[key] != null) {
+      (result as any)[key] = lastKnown.current[key];
+    }
+  }
+  return result;
 }
 
 function RecenterMap({ lat, lng }: { lat: number; lng: number }) {
