@@ -1,6 +1,8 @@
 import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import i18n from './i18n';
 import { isAuthenticated, tryInitialRefresh } from './api/client';
 import { useCars } from './hooks/useVehicle';
 import { getSettings } from './api/queries';
@@ -29,6 +31,7 @@ const queryClient = new QueryClient({
 });
 
 function ProtectedRoute() {
+  const { t } = useTranslation();
   const [authState, setAuthState] = useState<'checking' | 'ok' | 'denied'>(
     isAuthenticated() ? 'ok' : 'checking'
   );
@@ -45,7 +48,7 @@ function ProtectedRoute() {
   }, [authState]);
 
   if (authState === 'checking') {
-    return <div className="flex items-center justify-center h-dvh text-[#9ca3af]">Connecting...</div>;
+    return <div className="flex items-center justify-center h-dvh text-[#9ca3af]">{t('app.connecting')}</div>;
   }
 
   if (authState === 'denied') {
@@ -58,6 +61,7 @@ function ProtectedRoute() {
 const CAR_STORAGE_KEY = 'teslahub_selected_car';
 
 function AppLayout() {
+  const { t } = useTranslation();
   const { data: cars } = useCars();
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings, staleTime: 5 * 60_000 });
   const [selectedCarId, setSelectedCarId] = useState<number | undefined>();
@@ -93,7 +97,7 @@ function AppLayout() {
         />
       )}
       <div className="flex-1 overflow-y-auto pb-20">
-        <Suspense fallback={<div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">Loading...</div>}>
+        <Suspense fallback={<div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>}>
           <Routes>
             <Route path="/" element={<Home carId={selectedCarId} />} />
             <Route path="/charging" element={<Charging carId={selectedCarId} />} />
@@ -114,7 +118,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Suspense fallback={<div className="flex items-center justify-center h-dvh text-[#9ca3af]">Loading...</div>}>
+        <Suspense fallback={<div className="flex items-center justify-center h-dvh text-[#9ca3af]">{i18n.t('app.loading')}</div>}>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route element={<ProtectedRoute />}>

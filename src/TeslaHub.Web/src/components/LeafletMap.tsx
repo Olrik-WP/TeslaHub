@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup, useMap } from 'react-leaflet';
+import { useTranslation } from 'react-i18next';
 import L from 'leaflet';
 
 interface ChargeMarker {
@@ -38,6 +39,7 @@ function FitBounds({ points }: { points: [number, number][] }) {
 }
 
 export default function LeafletMap({ routePoints, chargeMarkers }: LeafletMapProps) {
+  const { t } = useTranslation();
   const fallback: [number, number] = routePoints.length > 0 ? routePoints[routePoints.length - 1] : [48.8566, 2.3522];
 
   return (
@@ -69,7 +71,7 @@ export default function LeafletMap({ routePoints, chargeMarkers }: LeafletMapPro
           color="#ffffff"
           weight={2}
         >
-          <Popup>Last position</Popup>
+          <Popup>{t('map.lastPosition')}</Popup>
         </CircleMarker>
       )}
 
@@ -82,7 +84,7 @@ export default function LeafletMap({ routePoints, chargeMarkers }: LeafletMapPro
           color="#ffffff"
           weight={2}
         >
-          <Popup>Start</Popup>
+          <Popup>{t('map.start')}</Popup>
         </CircleMarker>
       )}
 

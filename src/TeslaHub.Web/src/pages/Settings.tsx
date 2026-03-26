@@ -4,6 +4,8 @@ import { getSettings, getChargingLocations, getCarImageInfo } from '../api/queri
 import { useUnits } from '../hooks/useUnits';
 import { api, logout } from '../api/client';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { LANGUAGES } from '../i18n';
 import type { GlobalSettings, ChargingLocation } from '../api/queries';
 
 interface Props {
@@ -13,6 +15,7 @@ interface Props {
 export default function Settings({ carId }: Props) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const u = useUnits();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -56,7 +59,7 @@ export default function Settings({ carId }: Props) {
     if (!carId || !teslaUrl.trim()) return;
 
     if (!teslaUrl.includes('static-assets.tesla.com') || !teslaUrl.includes('compositor')) {
-      setUrlError('Invalid URL. Must be a Tesla compositor URL.');
+      setUrlError(t('settings.invalidUrl'));
       return;
     }
 
@@ -70,7 +73,7 @@ export default function Settings({ carId }: Props) {
       queryClient.invalidateQueries({ queryKey: ['carImageInfo', carId] });
       setTeslaUrl('');
     } catch {
-      setUrlError('Failed to download image. Check the URL.');
+      setUrlError(t('settings.downloadFailed'));
     } finally {
       setSaving(false);
     }
@@ -120,14 +123,14 @@ export default function Settings({ carId }: Props) {
     if (loc.pricingType === 'subscription') {
       return `${loc.monthlySubscription ?? 0} ${u.currencySymbol}/month`;
     }
-    return 'Manual entry';
+    return t('settings.manualEntry');
   };
 
   const pricingBadge = (type: string) => {
     const map: Record<string, { bg: string; text: string; label: string }> = {
-      home: { bg: 'bg-[#3b82f6]/20', text: 'text-[#3b82f6]', label: 'Home' },
-      subscription: { bg: 'bg-[#8b5cf6]/20', text: 'text-[#8b5cf6]', label: 'Subscription' },
-      manual: { bg: 'bg-[#9ca3af]/20', text: 'text-[#9ca3af]', label: 'Manual' },
+      home: { bg: 'bg-[#3b82f6]/20', text: 'text-[#3b82f6]', label: t('settings.home') },
+      subscription: { bg: 'bg-[#8b5cf6]/20', text: 'text-[#8b5cf6]', label: t('charging.subscription') },
+      manual: { bg: 'bg-[#9ca3af]/20', text: 'text-[#9ca3af]', label: t('charging.manual') },
     };
     const s = map[type] ?? map.manual;
     return <span className={`text-xs px-2 py-0.5 rounded ${s.bg} ${s.text}`}>{s.label}</span>;
@@ -135,12 +138,12 @@ export default function Settings({ carId }: Props) {
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-xl font-bold">Settings</h1>
+      <h1 className="text-xl font-bold">{t('settings.title')}</h1>
 
       {/* General settings */}
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-4">
         <div>
-          <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">Currency</label>
+          <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.currency')}</label>
           <select className={inputClass} value={form.currency ?? 'EUR'} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
             <option value="EUR">EUR (€)</option>
             <option value="USD">USD ($)</option>
@@ -172,40 +175,55 @@ export default function Settings({ carId }: Props) {
           </select>
         </div>
         <div>
-          <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">Unit of length</label>
+          <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.unitOfLength')}</label>
           <select className={inputClass} value={form.unitOfLength ?? 'km'} onChange={(e) => setForm({ ...form, unitOfLength: e.target.value })}>
-            <option value="km">Kilometers (km)</option>
-            <option value="mi">Miles (mi)</option>
+            <option value="km">{t('settings.km')}</option>
+            <option value="mi">{t('settings.mi')}</option>
           </select>
         </div>
         <div>
-          <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">Temperature</label>
+          <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.temperature')}</label>
           <select className={inputClass} value={form.unitOfTemperature ?? 'C'} onChange={(e) => setForm({ ...form, unitOfTemperature: e.target.value })}>
-            <option value="C">Celsius (°C)</option>
-            <option value="F">Fahrenheit (°F)</option>
+            <option value="C">{t('settings.celsius')}</option>
+            <option value="F">{t('settings.fahrenheit')}</option>
           </select>
         </div>
         <div>
-          <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">Cost source</label>
+          <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.costSource')}</label>
           <select className={inputClass} value={form.costSource ?? 'teslahub'} onChange={(e) => setForm({ ...form, costSource: e.target.value })}>
-            <option value="teslahub">TeslaHub (manual)</option>
-            <option value="teslamate">TeslaMate (geofence)</option>
+            <option value="teslahub">{t('settings.teslahubManual')}</option>
+            <option value="teslamate">{t('settings.teslaMateGeofence')}</option>
           </select>
           <p className="text-xs text-[#6b7280] mt-1">
             {(form.costSource ?? 'teslahub') === 'teslahub'
-              ? 'Costs are manually entered per charging session in TeslaHub.'
-              : 'Costs come from TeslaMate geofence data. Manual cost entry is disabled.'}
+              ? t('settings.costSourceTeslahub')
+              : t('settings.costSourceTeslamate')}
           </p>
         </div>
+        <div>
+          <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.language')}</label>
+          <select
+            className={inputClass}
+            value={i18n.language}
+            onChange={(e) => {
+              i18n.changeLanguage(e.target.value);
+              localStorage.setItem('teslahub_lang', e.target.value);
+            }}
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>{l.label}</option>
+            ))}
+          </select>
+        </div>
         <button onClick={() => save.mutate()} className="bg-[#e31937] text-white px-6 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f]">
-          {save.isPending ? 'Saving...' : 'Save settings'}
+          {save.isPending ? t('settings.saving') : t('settings.saveSettings')}
         </button>
       </div>
 
       {/* Vehicle Image Section */}
       {carId && (
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-4">
-          <div className="text-xs text-[#9ca3af] uppercase tracking-wider">Vehicle image</div>
+          <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('settings.vehicleImage')}</div>
 
           {imageInfo?.hasImage && (
             <div className="flex justify-center bg-[#0a0a0a] rounded-lg p-3">
@@ -219,12 +237,12 @@ export default function Settings({ carId }: Props) {
 
           {/* Tesla URL input */}
           <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3 space-y-3">
-            <div className="text-xs text-[#9ca3af] font-medium">Import from Tesla account</div>
+            <div className="text-xs text-[#9ca3af] font-medium">{t('settings.importTesla')}</div>
             <div className="text-xs text-[#6b7280] leading-relaxed space-y-1">
-              <p>1. Go to <span className="text-white">tesla.com</span> and sign in</p>
-              <p>2. Right-click on your car image</p>
-              <p>3. Select <span className="text-white">"Copy image address"</span></p>
-              <p>4. Paste the URL below</p>
+              <p>{t('settings.step1')}</p>
+              <p>{t('settings.step2')}</p>
+              <p>{t('settings.step3')}</p>
+              <p>{t('settings.step4')}</p>
             </div>
             <input
               className={inputClass}
@@ -239,7 +257,7 @@ export default function Settings({ carId }: Props) {
               disabled={saving || !teslaUrl.trim()}
               className="bg-[#e31937] text-white px-6 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f] disabled:opacity-50 w-full"
             >
-              {saving ? 'Downloading...' : 'Save image'}
+              {saving ? t('settings.downloading') : t('settings.saveImage')}
             </button>
           </div>
 
@@ -250,14 +268,14 @@ export default function Settings({ carId }: Props) {
               disabled={uploading}
               className="flex-1 bg-[#1a1a1a] border border-[#2a2a2a] text-white py-2 rounded-lg text-sm min-h-[44px] active:bg-[#2a2a2a] disabled:opacity-50"
             >
-              {uploading ? 'Uploading...' : 'Upload my photo'}
+              {uploading ? t('settings.uploading') : t('settings.uploadPhoto')}
             </button>
             {imageInfo?.hasImage && (
               <button
                 onClick={handleDeleteImage}
                 className="px-4 bg-[#1a1a1a] border border-[#2a2a2a] text-[#ef4444] py-2 rounded-lg text-sm min-h-[44px] active:bg-[#2a2a2a]"
               >
-                Remove
+                {t('settings.remove')}
               </button>
             )}
           </div>
@@ -277,7 +295,7 @@ export default function Settings({ carId }: Props) {
 
       {/* Charging locations */}
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
-        <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">Charging locations</div>
+        <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">{t('settings.chargingLocations')}</div>
         <div className="space-y-2">
           {(locations ?? []).map((loc) => (
             <div key={loc.id} className="flex items-center justify-between bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3">
@@ -287,19 +305,19 @@ export default function Settings({ carId }: Props) {
                   {pricingBadge(loc.pricingType)}
                 </div>
                 <div className="text-xs text-[#6b7280]">{pricingLabel(loc)}</div>
-                <div className="text-xs text-[#4b5563] mt-0.5">Radius: {loc.radiusMeters}m</div>
+                <div className="text-xs text-[#4b5563] mt-0.5">{t('settings.radiusLine', { meters: loc.radiusMeters })}</div>
               </div>
               <button
                 onClick={() => deleteLocation.mutate(loc.id)}
                 className="text-[#ef4444] text-xs px-2 py-1 rounded min-h-[32px] ml-2 active:bg-[#ef4444]/10"
               >
-                Delete
+                {t('settings.delete')}
               </button>
             </div>
           ))}
           {(!locations || locations.length === 0) && (
             <p className="text-[#6b7280] text-sm text-center py-4">
-              No locations configured. Tap "Define this location" on a charging session to add one.
+              {t('settings.noLocations')}
             </p>
           )}
         </div>
@@ -307,11 +325,11 @@ export default function Settings({ carId }: Props) {
 
       {/* Change password */}
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-3">
-        <div className="text-xs text-[#9ca3af] uppercase tracking-wider">Change password</div>
+        <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('settings.changePassword')}</div>
         <input
           className={inputClass}
           type="password"
-          placeholder="Current password"
+          placeholder={t('settings.currentPassword')}
           autoComplete="current-password"
           value={currentPw}
           onChange={(e) => { setCurrentPw(e.target.value); setPwMsg(null); }}
@@ -319,7 +337,7 @@ export default function Settings({ carId }: Props) {
         <input
           className={inputClass}
           type="password"
-          placeholder="New password (min. 6 characters)"
+          placeholder={t('settings.newPassword')}
           autoComplete="new-password"
           value={newPw}
           onChange={(e) => { setNewPw(e.target.value); setPwMsg(null); }}
@@ -327,7 +345,7 @@ export default function Settings({ carId }: Props) {
         <input
           className={inputClass}
           type="password"
-          placeholder="Confirm new password"
+          placeholder={t('settings.confirmNewPassword')}
           autoComplete="new-password"
           value={confirmPw}
           onChange={(e) => { setConfirmPw(e.target.value); setPwMsg(null); }}
@@ -338,37 +356,37 @@ export default function Settings({ carId }: Props) {
         <button
           disabled={pwSaving || !currentPw || !newPw || !confirmPw}
           onClick={async () => {
-            if (newPw.length < 6) { setPwMsg({ text: 'Password must be at least 6 characters.', ok: false }); return; }
-            if (newPw !== confirmPw) { setPwMsg({ text: 'New passwords do not match.', ok: false }); return; }
+            if (newPw.length < 6) { setPwMsg({ text: t('settings.pwMinLength'), ok: false }); return; }
+            if (newPw !== confirmPw) { setPwMsg({ text: t('settings.pwMismatch'), ok: false }); return; }
             setPwSaving(true);
             try {
               await api('/auth/change-password', {
                 method: 'POST',
                 body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
               });
-              setPwMsg({ text: 'Password changed successfully.', ok: true });
+              setPwMsg({ text: t('settings.pwChanged'), ok: true });
               setCurrentPw(''); setNewPw(''); setConfirmPw('');
             } catch {
-              setPwMsg({ text: 'Current password is incorrect.', ok: false });
+              setPwMsg({ text: t('settings.pwIncorrect'), ok: false });
             } finally {
               setPwSaving(false);
             }
           }}
           className="bg-[#e31937] text-white px-6 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f] disabled:opacity-50 w-full"
         >
-          {pwSaving ? 'Saving...' : 'Change password'}
+          {pwSaving ? t('settings.saving') : t('settings.changePassword')}
         </button>
       </div>
 
       {/* About */}
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
-        <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2">About</div>
-        <p className="text-sm text-[#9ca3af]">TeslaHub — TeslaMate companion app</p>
-        <p className="text-xs text-[#6b7280] mt-1">Self-hosted, privacy-first</p>
+        <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2">{t('settings.about')}</div>
+        <p className="text-sm text-[#9ca3af]">{t('settings.aboutDesc')}</p>
+        <p className="text-xs text-[#6b7280] mt-1">{t('settings.aboutSub')}</p>
       </div>
 
       <button onClick={handleLogout} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-[#ef4444] py-3 rounded-xl text-sm font-medium min-h-[48px] active:bg-[#2a2a2a]">
-        Logout
+        {t('auth.logout')}
       </button>
     </div>
   );

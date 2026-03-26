@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { getRecentPositions, getPositionsInRange, getChargingSessions, getDrivePositions } from '../api/queries';
@@ -10,12 +11,12 @@ interface Props {
 
 type RangeKey = '24h' | '48h' | '7d' | '30d' | 'custom';
 
-const RANGE_OPTIONS: { key: RangeKey; label: string; hours?: number }[] = [
-  { key: '24h', label: '24h', hours: 24 },
-  { key: '48h', label: '48h', hours: 48 },
-  { key: '7d', label: '7 days', hours: 168 },
-  { key: '30d', label: '30 days', hours: 720 },
-  { key: 'custom', label: 'Custom' },
+const RANGE_OPTIONS: { key: RangeKey; labelKey: string; hours?: number }[] = [
+  { key: '24h', labelKey: '24h', hours: 24 },
+  { key: '48h', labelKey: '48h', hours: 48 },
+  { key: '7d', labelKey: 'map.7days', hours: 168 },
+  { key: '30d', labelKey: 'map.30days', hours: 720 },
+  { key: 'custom', labelKey: 'map.custom' },
 ];
 
 function formatDateForInput(d: Date): string {
@@ -25,6 +26,7 @@ function formatDateForInput(d: Date): string {
 
 export default function MapPage({ carId }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { t } = useTranslation();
   const driveIdParam = searchParams.get('driveId');
   const driveId = driveIdParam ? parseInt(driveIdParam, 10) : null;
   const latParam = searchParams.get('lat');
@@ -97,9 +99,9 @@ export default function MapPage({ carId }: Props) {
             onClick={clearParams}
             className="px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] bg-[#1a1a1a] text-[#9ca3af] active:bg-[#2a2a2a]"
           >
-            ← Back
+            {t('map.back')}
           </button>
-          <span className="text-sm text-white font-medium">Current position</span>
+          <span className="text-sm text-white font-medium">{t('map.currentPosition')}</span>
         </div>
       ) : driveId != null ? (
         <div className="flex items-center gap-2 p-2 bg-[#0a0a0a]">
@@ -107,10 +109,10 @@ export default function MapPage({ carId }: Props) {
             onClick={clearParams}
             className="px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] bg-[#1a1a1a] text-[#9ca3af] active:bg-[#2a2a2a]"
           >
-            ← Back
+            {t('map.back')}
           </button>
-          <span className="text-sm text-white font-medium">Trip #{driveId}</span>
-          <span className="text-xs text-[#9ca3af] ml-auto">{routePoints.length} points</span>
+          <span className="text-sm text-white font-medium">{`${t('map.trip')} #${driveId}`}</span>
+          <span className="text-xs text-[#9ca3af] ml-auto">{routePoints.length} {t('map.points')}</span>
         </div>
       ) : (
         <>
@@ -124,7 +126,7 @@ export default function MapPage({ carId }: Props) {
                   rangeKey === opt.key ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
                 }`}
               >
-                {opt.label}
+                {opt.labelKey.startsWith('map.') ? t(opt.labelKey) : opt.labelKey}
               </button>
             ))}
           </div>
@@ -149,8 +151,8 @@ export default function MapPage({ carId }: Props) {
 
           {/* Info bar */}
           <div className="flex items-center justify-between px-3 py-1.5 bg-[#141414] border-b border-[#2a2a2a] text-xs text-[#9ca3af]">
-            <span>{routePoints.length > 0 ? `${routePoints.length} points` : 'No data'}</span>
-            <span>{chargeMarkers.length} charges</span>
+            <span>{routePoints.length > 0 ? `${routePoints.length} ${t('map.points')}` : t('map.noData')}</span>
+            <span>{chargeMarkers.length} {t('map.charges')}</span>
           </div>
         </>
       )}

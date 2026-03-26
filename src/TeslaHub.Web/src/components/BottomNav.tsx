@@ -1,16 +1,19 @@
 import { NavLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 const links = [
-  { to: '/', label: 'Accueil', icon: '⌂' },
-  { to: '/charging', label: 'Charge', icon: '⚡' },
-  { to: '/charging-stats', label: 'DC Curve', icon: '⚡' },
-  { to: '/trips', label: 'Trajets', icon: '⟿' },
-  { to: '/map', label: 'Carte', icon: '◉' },
-  { to: '/costs', label: 'Coûts', icon: '◆' },
-  { to: '/settings', label: 'Config', icon: '⚙' },
+  { to: '/', labelKey: 'nav.home', icon: '⌂' },
+  { to: '/charging', labelKey: 'nav.charging', icon: '⚡' },
+  { to: '/charging-stats', labelKey: 'nav.dcCurve', icon: '⚡' },
+  { to: '/trips', labelKey: 'nav.trips', icon: '⟿' },
+  { to: '/map', labelKey: 'nav.map', icon: '◉' },
+  { to: '/costs', labelKey: 'nav.costs', icon: '◆' },
+  { to: '/settings', labelKey: 'nav.settings', icon: '⚙' },
 ];
 
 export default function BottomNav() {
+  const { t } = useTranslation();
+
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-[9999] flex items-center justify-around bg-[#141414] border-t border-[#2a2a2a] h-16 px-1"
@@ -34,7 +37,7 @@ export default function BottomNav() {
           style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
         >
           <span className="text-lg leading-none mb-0.5">{link.icon}</span>
-          <span className="text-[10px]">{link.label}</span>
+          <span className="text-[10px]">{t(link.labelKey)}</span>
         </NavLink>
       ))}
     </nav>

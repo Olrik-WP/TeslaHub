@@ -273,4 +273,4 @@ npm run dev
 
 ## License
 
-[MIT](LICENSE)
+[GNU AGPLv3](LICENSE) — Free and open-source. Modifications and network-deployed forks must remain open-source under the same license.

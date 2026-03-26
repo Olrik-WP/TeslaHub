@@ -5,6 +5,7 @@ import {
   Tooltip, ResponsiveContainer, Line, ComposedChart,
   ZAxis,
 } from 'recharts';
+import { useTranslation } from 'react-i18next';
 import { getChargingCurve } from '../api/queries';
 import type { ChargingCurvePoint } from '../api/queries';
 
@@ -42,6 +43,8 @@ export default function ChargingStats({ carId }: Props) {
     enabled: !!carId,
   });
 
+  const { t } = useTranslation();
+
   const allPoints = data?.points ?? [];
   const median = data?.median ?? [];
 
@@ -54,14 +57,14 @@ export default function ChargingStats({ carId }: Props) {
   const isSingleSession = sessionFilter != null;
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">Loading...</div>;
+    return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>;
   }
 
   if (allPoints.length === 0) {
     return (
       <div className="p-4 sm:p-6 space-y-4">
-        <h1 className="text-lg sm:text-xl font-bold text-white">DC Charging Curve</h1>
-        <p className="text-[#9ca3af] text-sm">No DC charging data available yet.</p>
+        <h1 className="text-lg sm:text-xl font-bold text-white">{t('chargingStats.dcChargingCurve')}</h1>
+        <p className="text-[#9ca3af] text-sm">{t('chargingStats.noDcData')}</p>
       </div>
     );
   }
@@ -73,10 +76,10 @@ export default function ChargingStats({ carId }: Props) {
           onClick={() => setSearchParams({})}
           className="text-sm text-[#f59e0b] hover:underline"
         >
-          ← All sessions
+          {t('chargingStats.allSessions')}
         </button>
-        <h1 className="text-lg sm:text-xl font-bold text-white">DC Charging Curve</h1>
-        <p className="text-[#9ca3af] text-sm">No DC data for this session.</p>
+        <h1 className="text-lg sm:text-xl font-bold text-white">{t('chargingStats.dcChargingCurve')}</h1>
+        <p className="text-[#9ca3af] text-sm">{t('chargingStats.noDcSession')}</p>
       </div>
     );
   }
@@ -91,24 +94,24 @@ export default function ChargingStats({ carId }: Props) {
           onClick={() => setSearchParams({})}
           className="text-sm text-[#f59e0b] hover:underline"
         >
-          ← All sessions
+          {t('chargingStats.allSessions')}
         </button>
       ) : (
         <button
           onClick={() => navigate('/charging')}
           className="text-sm text-[#9ca3af] hover:underline"
         >
-          ← Charging
+          {t('chargingStats.backCharging')}
         </button>
       )}
 
       <h1 className="text-lg sm:text-xl font-bold text-white">
-        {isSingleSession ? series[0]?.label ?? 'Session' : 'DC Charging Curve'}
+        {isSingleSession ? series[0]?.label ?? t('chargingStats.session') : t('chargingStats.dcChargingCurve')}
       </h1>
       <p className="text-[#6b7280] text-xs">
         {isSingleSession
-          ? 'Power (kW) vs State of Charge (%) for this session.'
-          : 'Power (kW) vs State of Charge (%). Each color = a session. White line = median.'}
+          ? t('chargingStats.descSingle')
+          : t('chargingStats.descAll')}
       </p>
 
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
@@ -120,7 +123,7 @@ export default function ChargingStats({ carId }: Props) {
               type="number"
               domain={[0, 100]}
               tickCount={11}
-              label={{ value: 'SoC %', position: 'insideBottom', offset: -10, fill: '#9ca3af', fontSize: 12 }}
+              label={{ value: t('chargingStats.socPercent'), position: 'insideBottom', offset: -10, fill: '#9ca3af', fontSize: 12 }}
               tick={{ fill: '#9ca3af', fontSize: 11 }}
               stroke="#2a2a2a"
             />
@@ -159,7 +162,7 @@ export default function ChargingStats({ carId }: Props) {
               <Line
                 data={median}
                 dataKey="power"
-                name="Median"
+                name={t('chargingStats.median')}
                 stroke="#ffffff"
                 strokeWidth={2}
                 dot={false}
@@ -173,7 +176,7 @@ export default function ChargingStats({ carId }: Props) {
 
       {!isSingleSession && (
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
-          <h2 className="text-sm font-semibold text-white mb-2">Sessions ({series.length})</h2>
+          <h2 className="text-sm font-semibold text-white mb-2">{`${t('chargingStats.sessions')} (${series.length})`}</h2>
           <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto">
             {series.map((s) => (
               <button

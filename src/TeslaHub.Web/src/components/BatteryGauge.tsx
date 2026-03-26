@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 interface Props {
   level: number;
   rangeKm?: number | null;
@@ -6,6 +8,7 @@ interface Props {
 }
 
 export default function BatteryGauge({ level, rangeKm, rangeUnit = 'km', isCharging }: Props) {
+  const { t } = useTranslation();
   const clampedLevel = Math.max(0, Math.min(100, level));
   const color = clampedLevel < 20 ? '#ef4444' : clampedLevel < 30 ? '#f97316' : clampedLevel < 50 ? '#eab308' : '#22c55e';
   const radius = 60;
@@ -38,7 +41,7 @@ export default function BatteryGauge({ level, rangeKm, rangeUnit = 'km', isCharg
         )}
         {isCharging && (
           <text x={80} y={120} textAnchor="middle" fill="#3b82f6" fontSize={12}>
-            ⚡ Charge
+            ⚡ {t('battery.charging')}
           </text>
         )}
       </svg>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { login } from '../api/client';
 
@@ -10,6 +11,7 @@ export default function Login() {
   const [remember, setRemember] = useState(() => !!localStorage.getItem(SAVED_USER_KEY));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -26,7 +28,7 @@ export default function Login() {
       }
       navigate('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      setError(err instanceof Error ? err.message : t('auth.invalidCredentials'));
     } finally {
       setLoading(false);
     }
@@ -41,7 +43,7 @@ export default function Login() {
       >
         <h1 className="text-2xl font-bold text-center mb-2">TeslaHub</h1>
         <p className="text-[#9ca3af] text-center text-sm mb-8">
-          Connect to your dashboard
+          {t('auth.subtitle')}
         </p>
 
         {error && (
@@ -54,7 +56,7 @@ export default function Login() {
           id="username"
           name="username"
           type="text"
-          placeholder="Username"
+          placeholder={t('auth.username')}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-4 py-3 mb-3 text-white placeholder-[#6b7280] focus:border-[#e31937] focus:outline-none text-base"
@@ -64,7 +66,7 @@ export default function Login() {
           id="password"
           name="password"
           type="password"
-          placeholder="Password"
+          placeholder={t('auth.password')}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-4 py-3 mb-4 text-white placeholder-[#6b7280] focus:border-[#e31937] focus:outline-none text-base"
@@ -78,7 +80,7 @@ export default function Login() {
             onChange={(e) => setRemember(e.target.checked)}
             className="w-4 h-4 rounded border-[#2a2a2a] bg-[#0a0a0a] accent-[#e31937]"
           />
-          <span className="text-sm text-[#9ca3af]">Remember me</span>
+          <span className="text-sm text-[#9ca3af]">{t('auth.rememberMe')}</span>
         </label>
 
         <button
@@ -86,7 +88,7 @@ export default function Login() {
           disabled={loading || !username || !password}
           className="w-full bg-[#e31937] text-white rounded-lg py-3 font-medium text-base disabled:opacity-50 min-h-[48px] active:bg-[#c0152f] transition-colors duration-150"
         >
-          {loading ? 'Connecting...' : 'Login'}
+          {loading ? t('auth.loggingIn') : t('auth.login')}
         </button>
       </form>
     </div>

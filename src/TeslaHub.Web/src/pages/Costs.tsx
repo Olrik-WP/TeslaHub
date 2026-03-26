@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { getCostSummary, getCostOverrides, getSettings, getTeslaMateCostSummary, getTeslaMateMonthlyTrend } from '../api/queries';
 import { useUnits } from '../hooks/useUnits';
@@ -15,6 +16,7 @@ type PeriodMode = 'month' | 'year' | 'all';
 
 export default function Costs({ carId }: Props) {
   const u = useUnits();
+  const { t } = useTranslation();
   const now = new Date();
   const [periodMode, setPeriodMode] = useState<PeriodMode>('month');
   const [year, setYear] = useState(now.getFullYear());
@@ -80,14 +82,14 @@ export default function Costs({ carId }: Props) {
     ? new Date(year, month - 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
     : periodMode === 'year'
       ? String(year)
-      : 'All time';
+      : t('costs.allTime');
 
   const costPerKm = summary?.costPerKm ?? 0;
   const totalKwh = summary?.totalKwh ?? 0;
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-xl font-bold">Costs</h1>
+      <h1 className="text-xl font-bold">{t('costs.title')}</h1>
 
       {/* Period selector */}
       <div className="flex flex-wrap gap-1">
@@ -99,7 +101,7 @@ export default function Costs({ carId }: Props) {
               periodMode === p ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
             }`}
           >
-            {p === 'month' ? 'Month' : p === 'year' ? 'Year' : 'All time'}
+            {p === 'month' ? t('costs.month') : p === 'year' ? t('costs.year') : t('costs.allTime')}
           </button>
         ))}
       </div>
@@ -115,18 +117,18 @@ export default function Costs({ carId }: Props) {
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard label="Total cost" value={summary ? summary.totalCost.toFixed(2) : '—'} unit={u.currencySymbol} accent />
-        <StatCard label="Sessions" value={summary?.sessionCount ?? 0} />
-        <StatCard label="Free" value={summary?.freeSessionCount ?? 0} color="#22c55e" />
-        <StatCard label={`Avg ${u.currencySymbol}/kWh`} value={summary?.avgPricePerKwh ? summary.avgPricePerKwh.toFixed(4) : '—'} />
-        <StatCard label="Total kWh" value={totalKwh > 0 ? totalKwh.toFixed(1) : '—'} unit="kWh" color="#eab308" />
+        <StatCard label={t('costs.totalCost')} value={summary ? summary.totalCost.toFixed(2) : '—'} unit={u.currencySymbol} accent />
+        <StatCard label={t('costs.sessions')} value={summary?.sessionCount ?? 0} />
+        <StatCard label={t('costs.free')} value={summary?.freeSessionCount ?? 0} color="#22c55e" />
+        <StatCard label={`${t('costs.avgPerKwh')} ${u.currencySymbol}/kWh`} value={summary?.avgPricePerKwh ? summary.avgPricePerKwh.toFixed(4) : '—'} />
+        <StatCard label={t('costs.totalKwh')} value={totalKwh > 0 ? totalKwh.toFixed(1) : '—'} unit="kWh" color="#eab308" />
         <StatCard label={`${u.currencySymbol}/${u.distanceUnit}`} value={costPerKm > 0 ? costPerKm.toFixed(4) : '—'} />
       </div>
 
       {/* Cost by location */}
       {locationData.length > 0 && (
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
-          <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">Cost by location</div>
+          <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">{t('costs.costByLocation')}</div>
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <div className="w-40 h-40 sm:w-44 sm:h-44 flex-shrink-0 relative">
               <ResponsiveContainer width="100%" height="100%">
@@ -177,14 +179,14 @@ export default function Costs({ carId }: Props) {
       {/* Monthly trend */}
       {monthlyData.length > 1 && (
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
-          <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">Monthly trend</div>
+          <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">{t('costs.monthlyTrend')}</div>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={monthlyData}>
               <XAxis dataKey="month" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} width={40} />
               <Tooltip
                 contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, color: '#fff', fontSize: 12 }}
-                formatter={(value) => [`${Number(value).toFixed(2)} ${u.currencySymbol}`, 'Cost']}
+                formatter={(value) => [`${Number(value).toFixed(2)} ${u.currencySymbol}`, t('costs.cost')]}
               />
               <Bar dataKey="cost" fill="#e31937" radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -195,11 +197,11 @@ export default function Costs({ carId }: Props) {
       {/* Empty state */}
       {(!summary || summary.sessionCount === 0) && (
         <div className="text-center text-[#6b7280] py-8">
-          <p className="text-sm">No cost data for this period.</p>
+          <p className="text-sm">{t('costs.noData')}</p>
           <p className="text-xs mt-1">
             {isTeslaHub
-              ? 'Set prices on your charging sessions to see analytics here.'
-              : 'Costs come from TeslaMate geofence data.'}
+              ? t('costs.setPrices')
+              : t('costs.geofenceCosts')}
           </p>
         </div>
       )}

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useDrives } from '../hooks/useDrives';
 import { useUnits } from '../hooks/useUnits';
@@ -11,9 +12,10 @@ export default function Trips({ carId }: Props) {
   const { data: drives, isLoading } = useDrives(carId, 30);
   const navigate = useNavigate();
   const u = useUnits();
+  const { t } = useTranslation();
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">Loading...</div>;
+    return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>;
   }
 
   const driveList = drives ?? [];
@@ -30,11 +32,11 @@ export default function Trips({ carId }: Props) {
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-xl font-bold">Trips</h1>
+      <h1 className="text-xl font-bold">{t('trips.title')}</h1>
 
       {chartData.length > 0 && (
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
-          <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">Distance per day ({u.distanceUnit})</div>
+          <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">{`${t('trips.distPerDay')} (${u.distanceUnit})`}</div>
           <ResponsiveContainer width="100%" height={160}>
             <BarChart data={chartData}>
               <XAxis dataKey="day" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -68,7 +70,7 @@ export default function Trips({ carId }: Props) {
                 <span>{u.fmtConsumption(drive.consumptionKWhPer100Km)} {u.consumptionUnit}</span>
               )}
               {drive.outsideTempAvg != null && <span>{u.fmtTemp(drive.outsideTempAvg)}{u.tempUnit}</span>}
-              {drive.speedMax != null && <span>Max {u.fmtSpeed(drive.speedMax)} {u.speedUnit}</span>}
+              {drive.speedMax != null && <span>{t('trips.max')} {u.fmtSpeed(drive.speedMax)} {u.speedUnit}</span>}
             </div>
           </div>
         ))}

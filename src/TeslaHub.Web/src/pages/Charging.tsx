@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts';
+import { useTranslation } from 'react-i18next';
 import { useUnits } from '../hooks/useUnits';
 import { getChargingSessions, getChargingSummary, getCostOverrides, getSuggestedPrice, getMatchingLocation, getSettings } from '../api/queries';
 import { api } from '../api/client';
@@ -15,17 +16,18 @@ interface Props {
 type PeriodKey = '7d' | '30d' | '90d' | 'all';
 type TypeFilter = 'all' | 'AC' | 'DC';
 
-const PERIOD_OPTIONS: { key: PeriodKey; label: string; days?: number }[] = [
-  { key: '7d', label: '7 days', days: 7 },
-  { key: '30d', label: '30 days', days: 30 },
-  { key: '90d', label: '90 days', days: 90 },
-  { key: 'all', label: 'All' },
+const PERIOD_OPTIONS: { key: PeriodKey; labelKey: string; days?: number }[] = [
+  { key: '7d', labelKey: 'charging.7days', days: 7 },
+  { key: '30d', labelKey: 'charging.30days', days: 30 },
+  { key: '90d', labelKey: 'charging.90days', days: 90 },
+  { key: 'all', labelKey: 'charging.all' },
 ];
 
 export default function Charging({ carId }: Props) {
   const [period, setPeriod] = useState<PeriodKey>('90d');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const u = useUnits();
+  const { t } = useTranslation();
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings });
   const costSource = settings?.costSource ?? 'teslahub';
@@ -53,7 +55,7 @@ export default function Charging({ carId }: Props) {
   });
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">Loading...</div>;
+    return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>;
   }
 
   const overrideMap = new Map(overrides?.map((o) => [o.chargingProcessId, o]));
@@ -88,19 +90,19 @@ export default function Charging({ carId }: Props) {
               period === opt.key ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
             }`}
           >
-            {opt.label}
+            {t(opt.labelKey)}
           </button>
         ))}
         <div className="w-px bg-[#2a2a2a] mx-1" />
-        {(['all', 'AC', 'DC'] as const).map((t) => (
+        {(['all', 'AC', 'DC'] as const).map((tf) => (
           <button
-            key={t}
-            onClick={() => setTypeFilter(t)}
+            key={tf}
+            onClick={() => setTypeFilter(tf)}
             className={`px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors ${
-              typeFilter === t ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
+              typeFilter === tf ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
             }`}
           >
-            {t === 'all' ? 'All' : t}
+            {tf === 'all' ? t('charging.all') : tf}
           </button>
         ))}
       </div>
@@ -112,10 +114,10 @@ export default function Charging({ carId }: Props) {
           : filteredSessions.reduce((sum, s) => sum + (overrideMap.get(s.id)?.totalCost ?? 0), 0);
         return (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard label="Energy added" value={Math.round(summary.totalEnergyAdded)} unit="kWh" color="#eab308" />
-            <StatCard label="Total cost" value={totalCost > 0 ? totalCost.toFixed(2) : '—'} unit={totalCost > 0 ? u.currencySymbol : undefined} />
-            <StatCard label="Ø Duration" value={Math.round(summary.avgDurationMin)} unit="min" />
-            <StatCard label="Efficiency" value={`${(summary.avgEfficiency * 100).toFixed(0)}%`} color="#22c55e" />
+            <StatCard label={t('charging.energyAdded')} value={Math.round(summary.totalEnergyAdded)} unit="kWh" color="#eab308" />
+            <StatCard label={t('charging.totalCost')} value={totalCost > 0 ? totalCost.toFixed(2) : '—'} unit={totalCost > 0 ? u.currencySymbol : undefined} />
+            <StatCard label={t('charging.avgDuration')} value={Math.round(summary.avgDurationMin)} unit="min" />
+            <StatCard label={t('charging.efficiency')} value={`${(summary.avgEfficiency * 100).toFixed(0)}%`} color="#22c55e" />
           </div>
         );
       })()}
@@ -125,18 +127,18 @@ export default function Charging({ carId }: Props) {
         <div className="bg-[#141414] border border-[#3b82f6]/30 rounded-xl p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-[#3b82f6] text-xl">⚡</span>
-            <span className="font-medium">Charging now</span>
+            <span className="font-medium">{t('charging.chargingNow')}</span>
             {activeSession.address && (
               <span className="text-[#9ca3af] text-sm ml-auto truncate max-w-[50%]">{activeSession.address.split(',')[0]}</span>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-4 text-sm">
             <div>
-              <span className="text-[#9ca3af]">Added: </span>
+              <span className="text-[#9ca3af]">{t('charging.addedLabel')} </span>
               <span className="font-medium">{activeSession.chargeEnergyAdded?.toFixed(1) ?? '—'} kWh</span>
             </div>
             <div>
-              <span className="text-[#9ca3af]">Battery: </span>
+              <span className="text-[#9ca3af]">{t('charging.batteryLabel')} </span>
               <span className="font-medium">{activeSession.startBatteryLevel}% → ?%</span>
             </div>
           </div>
@@ -146,7 +148,7 @@ export default function Charging({ carId }: Props) {
       {/* Chart */}
       {chartData.length > 0 && (
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
-          <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">Energy added (kWh)</div>
+          <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">{t('charging.energyAddedKwh')}</div>
           <ResponsiveContainer width="100%" height={160}>
             <BarChart data={chartData}>
               <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
@@ -160,8 +162,8 @@ export default function Charging({ carId }: Props) {
             </BarChart>
           </ResponsiveContainer>
           <div className="flex items-center gap-4 mt-2 text-[10px] text-[#9ca3af]">
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#3b82f6] inline-block" /> AC</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#f59e0b] inline-block" /> DC / Supercharger</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#3b82f6] inline-block" /> {t('charging.ac')}</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#f59e0b] inline-block" /> {t('charging.dcSupercharger')}</span>
           </div>
         </div>
       )}
@@ -178,7 +180,7 @@ export default function Charging({ carId }: Props) {
           />
         ))}
         {filteredSessions.length === 0 && (
-          <div className="text-center text-[#9ca3af] py-8">No charging sessions for this period</div>
+          <div className="text-center text-[#9ca3af] py-8">{t('charging.noSessions')}</div>
         )}
       </div>
     </div>
@@ -195,6 +197,7 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
   const isTeslaHub = costSource !== 'teslamate';
   const queryClient = useQueryClient();
   const u = useUnits();
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [inputMode, setInputMode] = useState<'total' | 'kwh'>('total');
   const [priceInput, setPriceInput] = useState(costOverride?.totalCost?.toString() ?? '');
@@ -251,13 +254,15 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
     saveCost.mutate({ isFree: true });
   };
 
-  const displayCost = isTeslaHub
+  const displayCostRaw = isTeslaHub
     ? (costOverride
         ? (costOverride.isFree || costOverride.totalCost === 0) ? 'Free' : `${costOverride.totalCost.toFixed(2)} ${u.currencySymbol}`
         : null)
     : (session.cost != null && session.cost > 0
         ? `${session.cost.toFixed(2)} ${u.currencySymbol}`
         : session.cost === 0 ? 'Free' : null);
+
+  const displayCost = displayCostRaw === 'Free' ? t('charging.free') : displayCostRaw;
 
   const previewText = (() => {
     const value = parseFloat(priceInput);
@@ -285,7 +290,7 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {displayCost && (
-            <span className={`text-sm font-medium ${displayCost === 'Free' ? 'text-[#22c55e]' : 'text-white'}`}>
+            <span className={`text-sm font-medium ${displayCostRaw === 'Free' ? 'text-[#22c55e]' : 'text-white'}`}>
               {displayCost}
             </span>
           )}
@@ -297,7 +302,7 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
               onClick={() => navigate(`/charging-stats?session=${session.id}`)}
               className="text-[10px] px-2 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/30 hover:bg-[#f59e0b]/20 transition-colors"
             >
-              Curve
+              {t('charging.curve')}
             </button>
           )}
           {isTeslaHub && (
@@ -326,7 +331,7 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
         {effPct != null && (
           <div className="flex items-center gap-1">
             <span className="font-medium" style={{ color: effColor }}>{effPct}%</span>
-            <span>eff.</span>
+            <span>{t('charging.eff')}</span>
           </div>
         )}
         {session.avgPowerKw != null && (
@@ -361,7 +366,7 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
               onClick={() => { setInputMode('total'); setPriceInput(costOverride?.totalCost?.toString() ?? ''); }}
               className={`flex-1 py-1.5 rounded-lg text-xs font-medium min-h-[36px] ${inputMode === 'total' ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'}`}
             >
-              Total ({u.currencySymbol})
+              {t('charging.total')} ({u.currencySymbol})
             </button>
             <button
               type="button"
@@ -386,14 +391,14 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
               disabled={saveCost.isPending}
               className="bg-[#e31937] text-white px-4 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f]"
             >
-              {saveCost.isPending ? '...' : 'Save'}
+              {saveCost.isPending ? '...' : t('charging.save')}
             </button>
             <button
               onClick={handleFree}
               disabled={saveCost.isPending}
               className="bg-[#22c55e]/20 text-[#22c55e] px-4 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#22c55e]/30"
             >
-              Free
+              {t('charging.free')}
             </button>
           </div>
 
@@ -406,7 +411,7 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
               onClick={() => setShowLocationForm(!showLocationForm)}
               className="text-xs text-[#3b82f6] underline"
             >
-              {showLocationForm ? 'Hide' : 'Define this location'}
+              {showLocationForm ? t('charging.hideLocation') : t('charging.defineLocation')}
             </button>
           )}
 
@@ -434,6 +439,7 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
 }) {
   const queryClient = useQueryClient();
   const u = useUnits();
+  const { t } = useTranslation();
   const [name, setName] = useState(defaultName);
   const [pricingType, setPricingType] = useState('manual');
   const [peakPrice, setPeakPrice] = useState('');
@@ -496,19 +502,19 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
 
   return (
     <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3 sm:p-4 space-y-3">
-      <input className={inputClass} placeholder="Location name" value={name} onChange={(e) => setName(e.target.value)} />
+      <input className={inputClass} placeholder={t('charging.locationName')} value={name} onChange={(e) => setName(e.target.value)} />
 
       <div className="flex gap-2">
-        {(['manual', 'home', 'subscription'] as const).map((t) => (
+        {(['manual', 'home', 'subscription'] as const).map((pt) => (
           <button
-            key={t}
+            key={pt}
             type="button"
-            onClick={() => setPricingType(t)}
+            onClick={() => setPricingType(pt)}
             className={`flex-1 py-2 rounded-lg text-xs font-medium min-h-[40px] transition-colors ${
-              pricingType === t ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
+              pricingType === pt ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
             }`}
           >
-            {t === 'manual' ? 'Manual' : t === 'home' ? 'Home (HC/HP)' : 'Subscription'}
+            {pt === 'manual' ? t('charging.manual') : pt === 'home' ? t('charging.homeHcHp') : t('charging.subscription')}
           </button>
         ))}
       </div>
@@ -516,8 +522,8 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
       {pricingType === 'home' && (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <input className={inputClass} type="number" step="0.0001" placeholder={`Peak ${u.currencySymbol}/kWh`} value={peakPrice} onChange={(e) => setPeakPrice(e.target.value)} />
-            <input className={inputClass} type="number" step="0.0001" placeholder={`Off-peak ${u.currencySymbol}/kWh`} value={offPeakPrice} onChange={(e) => setOffPeakPrice(e.target.value)} />
+            <input className={inputClass} type="number" step="0.0001" placeholder={`${t('charging.peak')} ${u.currencySymbol}/kWh`} value={peakPrice} onChange={(e) => setPeakPrice(e.target.value)} />
+            <input className={inputClass} type="number" step="0.0001" placeholder={`${t('charging.offPeak')} ${u.currencySymbol}/kWh`} value={offPeakPrice} onChange={(e) => setOffPeakPrice(e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <input className={inputClass} type="time" value={offPeakStart} onChange={(e) => setOffPeakStart(e.target.value)} />
@@ -527,17 +533,17 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
       )}
 
       {pricingType === 'subscription' && (
-        <input className={inputClass} type="number" step="0.01" placeholder={`Monthly amount (${u.currencySymbol})`} value={monthlyAmount} onChange={(e) => setMonthlyAmount(e.target.value)} />
+        <input className={inputClass} type="number" step="0.01" placeholder={`${t('charging.monthlyAmount')} (${u.currencySymbol})`} value={monthlyAmount} onChange={(e) => setMonthlyAmount(e.target.value)} />
       )}
 
-      <input className={inputClass} type="number" placeholder="Radius (m)" value={radius} onChange={(e) => setRadius(e.target.value)} />
+      <input className={inputClass} type="number" placeholder={t('charging.radius')} value={radius} onChange={(e) => setRadius(e.target.value)} />
 
       <div className="flex gap-2">
         <button onClick={() => save.mutate()} disabled={save.isPending} className="bg-[#e31937] text-white px-4 py-2 rounded-lg text-sm min-h-[40px] active:bg-[#c0152f]">
-          {save.isPending ? 'Saving...' : existingLocation ? 'Update location' : 'Save location'}
+          {save.isPending ? t('charging.savingLocation') : existingLocation ? t('charging.updateLocation') : t('charging.saveLocation')}
         </button>
         <button onClick={onDone} className="bg-[#2a2a2a] text-[#9ca3af] px-4 py-2 rounded-lg text-sm min-h-[40px]">
-          Cancel
+          {t('charging.cancel')}
         </button>
       </div>
     </div>
