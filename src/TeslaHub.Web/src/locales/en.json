@@ -127,7 +127,17 @@
   "trips": {
     "title": "Trips",
     "distPerDay": "Distance per day",
-    "max": "Max"
+    "max": "Max",
+    "energy": "Energy",
+    "efficiency": "Efficiency",
+    "avgSpeed": "Avg speed",
+    "maxSpeed": "Max speed",
+    "maxPower": "Max power",
+    "temperature": "Temp",
+    "elevation": "Elevation",
+    "consumption": "Consumption",
+    "viewOnMap": "View on map",
+    "coldBattery": "Cold battery"
   },
   "map": {
     "7days": "7 days",

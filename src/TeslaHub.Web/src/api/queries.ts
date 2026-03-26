@@ -46,6 +46,7 @@ export interface Drive {
   distance: number | null;
   durationMin: number | null;
   speedMax: number | null;
+  powerMax: number | null;
   outsideTempAvg: number | null;
   insideTempAvg: number | null;
   ascent: number | null;
@@ -53,6 +54,12 @@ export interface Drive {
   startAddress: string | null;
   endAddress: string | null;
   consumptionKWhPer100Km: number | null;
+  startBatteryLevel: number | null;
+  endBatteryLevel: number | null;
+  speedAvg: number | null;
+  netEnergyKwh: number | null;
+  efficiency: number | null;
+  hasReducedRange: boolean;
 }
 
 export interface Position {

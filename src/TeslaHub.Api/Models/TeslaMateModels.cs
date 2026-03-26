@@ -52,6 +52,12 @@ public record DriveDto
     public string? StartAddress { get; init; }
     public string? EndAddress { get; init; }
     public double? ConsumptionKWhPer100Km { get; init; }
+    public double? StartBatteryLevel { get; init; }
+    public double? EndBatteryLevel { get; init; }
+    public double? SpeedAvg { get; init; }
+    public double? NetEnergyKwh { get; init; }
+    public double? Efficiency { get; init; }
+    public bool HasReducedRange { get; init; }
 }
 
 public record PositionDto

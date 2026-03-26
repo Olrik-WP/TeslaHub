@@ -127,7 +127,17 @@
   "trips": {
     "title": "Trajets",
     "distPerDay": "Distance par jour",
-    "max": "Max"
+    "max": "Max",
+    "energy": "Énergie",
+    "efficiency": "Efficacité",
+    "avgSpeed": "Vit. moy.",
+    "maxSpeed": "Vit. max",
+    "maxPower": "Puiss. max",
+    "temperature": "Temp",
+    "elevation": "Dénivelé",
+    "consumption": "Consommation",
+    "viewOnMap": "Voir sur la carte",
+    "coldBattery": "Batterie froide"
   },
   "map": {
     "7days": "7 jours",

@@ -9,6 +9,16 @@ public static class DrivesQueries
     {
         using var conn = db.CreateConnection();
         return await conn.QueryAsync<DriveDto>("""
+            WITH reduced_range_info AS (
+                SELECT drive_id,
+                    CASE WHEN SUM(CASE WHEN battery_level - usable_battery_level > 0
+                                      THEN 1 ELSE 0 END)::numeric / COUNT(*) > 0.25
+                         THEN true ELSE false
+                    END AS reduced_range
+                FROM positions
+                WHERE car_id = @CarId AND ideal_battery_range_km IS NOT NULL
+                GROUP BY drive_id
+            )
             SELECT
                 d.id AS "Id", d.car_id AS "CarId",
                 d.start_date AS "StartDate", d.end_date AS "EndDate",
@@ -22,14 +32,27 @@ public static class DrivesQueries
                 d.ascent AS "Ascent", d.descent AS "Descent",
                 sa.display_name AS "StartAddress",
                 ea.display_name AS "EndAddress",
+                sp.battery_level AS "StartBatteryLevel",
+                ep.battery_level AS "EndBatteryLevel",
                 CASE WHEN d.distance > 0
                     THEN (d.start_rated_range_km - d.end_rated_range_km) * c.efficiency / d.distance * 100.0
                     ELSE NULL
-                END AS "ConsumptionKWhPer100Km"
+                END AS "ConsumptionKWhPer100Km",
+                d.distance / COALESCE(NULLIF(d.duration_min, 0) * 60,
+                    EXTRACT(EPOCH FROM (d.end_date - d.start_date))) * 3600 AS "SpeedAvg",
+                (d.start_rated_range_km - d.end_rated_range_km) * c.efficiency AS "NetEnergyKwh",
+                CASE WHEN (d.start_rated_range_km - d.end_rated_range_km) > 0
+                     THEN d.distance / (d.start_rated_range_km - d.end_rated_range_km)
+                     ELSE NULL
+                END AS "Efficiency",
+                COALESCE(rr.reduced_range, false) AS "HasReducedRange"
             FROM drives d
             JOIN cars c ON d.car_id = c.id
             LEFT JOIN addresses sa ON d.start_address_id = sa.id
             LEFT JOIN addresses ea ON d.end_address_id = ea.id
+            LEFT JOIN positions sp ON d.start_position_id = sp.id
+            LEFT JOIN positions ep ON d.end_position_id = ep.id
+            LEFT JOIN reduced_range_info rr ON d.id = rr.drive_id
             WHERE d.car_id = @CarId
             ORDER BY d.start_date DESC
             LIMIT @Limit OFFSET @Offset
