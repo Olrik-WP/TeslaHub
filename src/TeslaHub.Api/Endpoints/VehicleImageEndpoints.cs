@@ -6,7 +6,7 @@ namespace TeslaHub.Api.Endpoints;
 
 public static class VehicleImageEndpoints
 {
-    private const int MaxUploadBytes = 2 * 1024 * 1024;
+    private const int MaxUploadBytes = 5 * 1024 * 1024;
 
     public static void MapVehicleImageEndpoints(this WebApplication app)
     {
