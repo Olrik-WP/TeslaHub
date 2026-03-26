@@ -41,8 +41,13 @@ public static class DrivesQueries
                 d.distance / COALESCE(NULLIF(d.duration_min, 0) * 60,
                     EXTRACT(EPOCH FROM (d.end_date - d.start_date))) * 3600 AS "SpeedAvg",
                 (d.start_rated_range_km - d.end_rated_range_km) * c.efficiency AS "NetEnergyKwh",
-                CASE WHEN (d.start_rated_range_km - d.end_rated_range_km) > 0
-                     THEN d.distance / (d.start_rated_range_km - d.end_rated_range_km)
+                CASE WHEN d.distance > 0 AND (d.start_rated_range_km - d.end_rated_range_km) > 0
+                     THEN d.distance * c.efficiency
+                          / NULLIF(
+                              (d.start_rated_range_km - d.end_rated_range_km) * c.efficiency
+                              + 2100.0 * 0.85 * 9.81 * COALESCE(d.descent, 0) / 3600.0 / 1000.0
+                              - 2100.0 * 9.81 * COALESCE(d.ascent, 0) / 3600.0 / 1000.0
+                            , 0)
                      ELSE NULL
                 END AS "Efficiency",
                 COALESCE(rr.reduced_range, false) AS "HasReducedRange"
