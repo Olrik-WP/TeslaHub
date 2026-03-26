@@ -104,8 +104,8 @@ public static class VampireQueries
               AND v.start_date IS NOT NULL
               AND v.start_range - v.end_range >= 0
               AND v.end_km - v.start_km < 1
-              AND (@From IS NULL OR v.start_date >= @From)
-              AND (@To   IS NULL OR v.start_date <= @To)
+              AND (@From::timestamp IS NULL OR v.start_date >= @From::timestamp)
+              AND (@To::timestamp   IS NULL OR v.start_date <= @To::timestamp)
             ORDER BY v.start_date DESC
             LIMIT @Limit OFFSET @Offset
             """,
@@ -175,8 +175,8 @@ public static class VampireQueries
                   AND start_date IS NOT NULL
                   AND start_range - end_range >= 0
                   AND end_km - start_km < 1
-                  AND (@From IS NULL OR start_date >= @From)
-                  AND (@To   IS NULL OR start_date <= @To)
+                  AND (@From::timestamp IS NULL OR start_date >= @From::timestamp)
+                  AND (@To::timestamp   IS NULL OR start_date <= @To::timestamp)
             )
             SELECT
                 COUNT(*)                                  AS "SessionCount",
