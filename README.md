@@ -271,6 +271,12 @@ npm run dev
 - **Auth:** bcrypt + JWT with refresh tokens
 - **Deployment:** Docker multi-arch (amd64/arm64), Docker Compose
 
+## Credits
+
+TeslaHub works alongside [TeslaMate](https://github.com/teslamate-org/teslamate), which is licensed under the [GNU AGPLv3](https://github.com/teslamate-org/teslamate/blob/master/LICENSE).
+
+TeslaHub is an independent project and does not modify TeslaMate. It only reads TeslaMate data using a read-only database user.
+
 ## License
 
 [GNU AGPLv3](LICENSE) — Free and open-source. Modifications and network-deployed forks must remain open-source under the same license.
