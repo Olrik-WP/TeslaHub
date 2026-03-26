@@ -4,6 +4,10 @@ A self-hosted companion dashboard for [TeslaMate](https://github.com/teslamate-o
 
 ![TeslaHub Home](docs/screenshots/home.png)
 
+Mobile responsive
+
+![TeslaHub Home](docs/screenshots/mobile.png)
+
 TeslaHub reads your existing TeslaMate data (read-only) and provides a touch-first, dark-themed interface with:
 
 - Vehicle status, battery health, and position at a glance
