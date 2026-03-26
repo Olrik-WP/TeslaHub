@@ -1,17 +1,14 @@
 # TeslaHub
 
-TeslaMate companion app — a self-hosted dashboard optimized for the Tesla in-car browser.
+A self-hosted companion dashboard for [TeslaMate](https://github.com/teslamate-org/teslamate), optimized for the Tesla in-car browser.
 
-## What is this?
+TeslaHub reads your existing TeslaMate data (read-only) and provides a touch-first, dark-themed interface with:
 
-TeslaHub reads your existing TeslaMate data (read-only) and provides:
-
-- A touch-first, dark-themed UI designed for the Tesla browser
-- Vehicle status, battery, and position at a glance
-- Charging sessions with cost tracking and custom pricing rules
+- Vehicle status, battery health, and position at a glance
+- Charging sessions with manual cost tracking and DC charging curves
 - Trip history with distance, consumption, and route visualization
-- Map with Leaflet (historical data) and Waze (live traffic)
-- Custom cost management (home/night rates, supercharger, public, free)
+- Interactive map with historical data
+- Cost analytics by location, month, and period
 - Multi-car support
 
 TeslaMate remains your telemetry source. TeslaHub is the UX layer.
@@ -19,86 +16,236 @@ TeslaMate remains your telemetry source. TeslaHub is the UX layer.
 ## Architecture
 
 ```
-Docker (your server)
-├── TeslaMate          (existing)
-├── PostgreSQL         (existing — hosts both teslamate and teslahub databases)
-├── Grafana            (existing)
-├── TeslaHub API       (ASP.NET Core 9 — reads TeslaMate DB, manages App DB)
-└── TeslaHub Web       (React + Caddy — serves the UI)
+Your Server (Docker)
+├── TeslaMate           (existing)
+├── PostgreSQL          (existing — hosts both teslamate and teslahub databases)
+├── Grafana             (existing)
+├── TeslaHub Init       (one-shot — creates DB users automatically)
+├── TeslaHub API        (ASP.NET Core 9 — reads TeslaMate DB, manages App DB)
+└── TeslaHub Web        (React + Caddy — serves the UI)
 ```
 
-TeslaMate DB is **never exposed** — TeslaHub reads it via the Docker internal network, just like Grafana.
+TeslaHub connects to your existing PostgreSQL instance via the Docker internal network, just like Grafana does. Your TeslaMate database is **never modified** — TeslaHub uses a read-only user.
 
-## Quick Start
+---
 
-### 1. Create database users (run once)
+## Installation
 
-```bash
-docker exec -it <your-postgres-container> psql -U tm_user -d teslamate
-```
+### Prerequisites
 
-```sql
--- Read-only user for TeslaMate data
-CREATE USER teslahub_reader WITH PASSWORD 'choose_password_1';
-GRANT CONNECT ON DATABASE teslamate TO teslahub_reader;
-GRANT USAGE ON SCHEMA public TO teslahub_reader;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO teslahub_reader;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO teslahub_reader;
+- A running [TeslaMate](https://docs.teslamate.org/docs/installation/docker) installation with Docker Compose
+- Docker and Docker Compose v2+
 
--- TeslaHub app database
-CREATE DATABASE teslahub;
-CREATE USER teslahub_app WITH PASSWORD 'choose_password_2';
-GRANT ALL PRIVILEGES ON DATABASE teslahub TO teslahub_app;
-\c teslahub
-GRANT ALL ON SCHEMA public TO teslahub_app;
-```
+### Step 1 — Add TeslaHub variables to your `.env`
 
-### 2. Add to your .env
+In the same directory as your TeslaMate `docker-compose.yml`, add these variables to your `.env` file:
 
 ```env
-TESLAHUB_READER_PASS=choose_password_1
-TESLAHUB_APP_PASS=choose_password_2
+# TeslaHub database passwords (choose strong passwords)
+TESLAHUB_READER_PASS=choose_a_strong_password_1
+TESLAHUB_APP_PASS=choose_a_strong_password_2
+
+# TeslaHub admin login
 TESLAHUB_ADMIN_USER=admin
-TESLAHUB_ADMIN_PASSWORD=choose_a_strong_password
+TESLAHUB_ADMIN_PASSWORD=choose_a_strong_password_3
+
+# Session duration (days the browser stays logged in)
 TESLAHUB_SESSION_DAYS=30
+
+# JWT secret (generate a random 64-character string)
 TESLAHUB_JWT_SECRET=generate_a_64_char_random_string
+
+# Optional — custom map tiles (default: OpenStreetMap)
+# MAP_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png
+
+# Optional — restrict access by IP (empty = allow all)
+# TESLAHUB_ALLOWED_IPS=192.168.1.0/24
 ```
 
-### 3. Add services to your docker-compose.yml
+> **Tip:** Generate a JWT secret with: `openssl rand -hex 32`
 
-See `docker-compose.addon.yml` for the services to add.
+**If you don't use a `.env` file**, add the variables directly in the `environment:` section of each service (see Step 2).
 
-### 4. Start
+### Step 2 — Add TeslaHub services to your `docker-compose.yml`
+
+Add the following services to your **existing** TeslaMate `docker-compose.yml`:
+
+```yaml
+  teslahub-init:
+    image: deltawp/teslahub-init:latest
+    restart: "no"
+    environment:
+      - TM_DB_HOST=database
+      - TM_DB_PORT=5432
+      - TM_DB_NAME=${TM_DB_NAME:-teslamate}
+      - TM_DB_USER=${TM_DB_USER:-teslamate}
+      - TM_DB_PASS=${TM_DB_PASS}
+      - TESLAHUB_READER_PASS=${TESLAHUB_READER_PASS}
+      - TESLAHUB_APP_PASS=${TESLAHUB_APP_PASS}
+    depends_on:
+      - database
+
+  teslahub-api:
+    image: deltawp/teslahub-api:latest
+    restart: always
+    environment:
+      - TM_DB_HOST=database
+      - TM_DB_PORT=5432
+      - TM_DB_NAME=${TM_DB_NAME:-teslamate}
+      - TM_DB_USER=teslahub_reader
+      - TM_DB_PASSWORD=${TESLAHUB_READER_PASS}
+      - APP_DB_HOST=database
+      - APP_DB_PORT=5432
+      - APP_DB_NAME=teslahub
+      - APP_DB_USER=teslahub_app
+      - APP_DB_PASSWORD=${TESLAHUB_APP_PASS}
+      - TESLAHUB_ADMIN_USER=${TESLAHUB_ADMIN_USER:-admin}
+      - TESLAHUB_ADMIN_PASSWORD=${TESLAHUB_ADMIN_PASSWORD}
+      - TESLAHUB_SESSION_DAYS=${TESLAHUB_SESSION_DAYS:-30}
+      - TESLAHUB_JWT_SECRET=${TESLAHUB_JWT_SECRET}
+      - MAP_TILE_URL=${MAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
+      - TESLAHUB_ALLOWED_IPS=${TESLAHUB_ALLOWED_IPS:-}
+      - TZ=${TZ:-Europe/Paris}
+    ports:
+      - "127.0.0.1:4001:8080"
+    depends_on:
+      - database
+      - teslahub-init
+
+  teslahub-web:
+    image: deltawp/teslahub-web:latest
+    restart: always
+    ports:
+      - "127.0.0.1:4002:80"
+    depends_on:
+      - teslahub-api
+```
+
+> **Note:** `database` refers to your existing PostgreSQL service name. If yours is named differently (e.g., `db` or `postgres`), adjust the `TM_DB_HOST`, `APP_DB_HOST`, and `depends_on` values accordingly.
+
+> **Without `.env` file?** Replace variables like `${TM_DB_PASS}` with their actual values directly in the YAML.
+
+### Step 3 — Start
 
 ```bash
-docker compose up -d teslahub-api teslahub-web
+docker compose up -d
 ```
 
-TeslaHub is now available at `http://your-server:4002`.
+The `teslahub-init` container will automatically:
+1. Wait for PostgreSQL to be ready
+2. Create a `teslahub_reader` user (read-only access to your TeslaMate database)
+3. Create a `teslahub` database
+4. Create a `teslahub_app` user (full access to the TeslaHub database)
 
-### 5. Reverse proxy with Caddy (recommended)
+Then `teslahub-api` starts and auto-migrates the TeslaHub database schema.
 
-Add this to your Caddyfile to expose TeslaHub over HTTPS with automatic certificates:
+TeslaHub is now available at **http://your-server:4002**.
+
+---
+
+## Reverse Proxy (HTTPS)
+
+TeslaHub listens on `127.0.0.1` only. To expose it over HTTPS, use a reverse proxy.
+
+### Caddy (recommended)
+
+Add to your Caddyfile:
 
 ```
 teslahub.yourdomain.com {
-	reverse_proxy localhost:4002
+    reverse_proxy localhost:4002
 }
 ```
 
-This works exactly like your Grafana setup — Caddy handles TLS automatically.
+Caddy handles TLS certificates automatically. Reload with `caddy reload`.
 
-## Tech Stack
+### Nginx
 
-- **Backend**: ASP.NET Core 9 Minimal API, Dapper (TeslaMate queries), EF Core (App DB)
-- **Frontend**: React 18, Vite, TypeScript, Tailwind CSS, TanStack Query, Recharts, Leaflet
-- **Database**: PostgreSQL (same instance as TeslaMate)
-- **Auth**: Username/password (bcrypt), JWT with 30-day refresh tokens
-- **Map**: Leaflet (historical) + Waze Live Map (traffic, GPS from Tesla browser)
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name teslahub.yourdomain.com;
+
+    ssl_certificate     /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:4002;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+---
+
+## Updating
+
+Pull the latest images and restart:
+
+```bash
+docker compose pull teslahub-init teslahub-api teslahub-web
+docker compose up -d teslahub-init teslahub-api teslahub-web
+```
+
+Or use the update script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Olrik-WP/TeslaHub/main/update.sh -o update.sh
+chmod +x update.sh
+./update.sh
+```
+
+Options:
+- `./update.sh --clean` — remove dangling images after update
+- `./update.sh --full-clean` — prune all unused images and build cache
+- `./update.sh --logs` — show logs after restart
+
+Your data is safe — TeslaHub data lives in the PostgreSQL volume. Only the application containers are replaced.
+
+---
+
+## Configuration Reference
+
+| Variable | Default | Description |
+|---|---|---|
+| `TESLAHUB_READER_PASS` | *(required)* | Password for the read-only TeslaMate DB user |
+| `TESLAHUB_APP_PASS` | *(required)* | Password for the TeslaHub app DB user |
+| `TESLAHUB_ADMIN_USER` | `admin` | Login username for TeslaHub |
+| `TESLAHUB_ADMIN_PASSWORD` | *(required)* | Login password for TeslaHub |
+| `TESLAHUB_SESSION_DAYS` | `30` | How long the browser stays logged in |
+| `TESLAHUB_JWT_SECRET` | *(required)* | Secret key for JWT signing |
+| `MAP_TILE_URL` | OpenStreetMap | Custom tile server URL |
+| `TESLAHUB_ALLOWED_IPS` | *(empty = all)* | Restrict access by IP/CIDR |
+| `TZ` | `Europe/Paris` | Timezone |
+
+---
+
+## Security
+
+- Passwords are hashed with bcrypt
+- JWT access tokens (short-lived) + httpOnly refresh tokens (configurable duration)
+- Progressive lockout on failed login attempts (exponential backoff)
+- Optional IP whitelisting via `TESLAHUB_ALLOWED_IPS`
+- TeslaMate database access is strictly read-only
+- You can change your password from Settings after first login
+
+---
 
 ## Development
 
+For contributors who want to build from source:
+
 ```bash
+git clone https://github.com/Olrik-WP/TeslaHub.git
+cd TeslaHub
+
+# Start everything with local builds
+docker compose -f docker-compose.dev.yml up -d --build
+
+# Or run services individually:
 # Backend
 cd src/TeslaHub.Api
 dotnet run
@@ -109,6 +256,15 @@ npm install
 npm run dev
 ```
 
+---
+
+## Tech Stack
+
+- **Backend:** ASP.NET Core 9 Minimal API, Dapper, Entity Framework Core, PostgreSQL
+- **Frontend:** React 18, Vite, TypeScript, Tailwind CSS, TanStack Query, Recharts, Leaflet
+- **Auth:** bcrypt + JWT with refresh tokens
+- **Deployment:** Docker multi-arch (amd64/arm64), Docker Compose
+
 ## License
 
-MIT
+[MIT](LICENSE)

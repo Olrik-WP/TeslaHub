@@ -1,0 +1,76 @@
+# Development compose — builds images from local source code.
+# Used by contributors / developers only. End users should use the pre-built images.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d --build
+
+services:
+  database:
+    image: postgres:17
+    restart: always
+    environment:
+      - POSTGRES_USER=${TM_DB_USER:-teslamate}
+      - POSTGRES_PASSWORD=${TM_DB_PASS:-devpass}
+      - POSTGRES_DB=${TM_DB_NAME:-teslamate}
+    volumes:
+      - teslahub-dev-db:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  teslahub-init:
+    build:
+      context: ./src/TeslaHub.Init
+      dockerfile: Dockerfile
+    restart: "no"
+    environment:
+      - TM_DB_HOST=database
+      - TM_DB_PORT=5432
+      - TM_DB_NAME=${TM_DB_NAME:-teslamate}
+      - TM_DB_USER=${TM_DB_USER:-teslamate}
+      - TM_DB_PASS=${TM_DB_PASS:-devpass}
+      - TESLAHUB_READER_PASS=${TESLAHUB_READER_PASS:-devreader}
+      - TESLAHUB_APP_PASS=${TESLAHUB_APP_PASS:-devapp}
+    depends_on:
+      - database
+
+  teslahub-api:
+    build:
+      context: ./src/TeslaHub.Api
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - TM_DB_HOST=database
+      - TM_DB_PORT=5432
+      - TM_DB_NAME=${TM_DB_NAME:-teslamate}
+      - TM_DB_USER=teslahub_reader
+      - TM_DB_PASSWORD=${TESLAHUB_READER_PASS:-devreader}
+      - APP_DB_HOST=database
+      - APP_DB_PORT=5432
+      - APP_DB_NAME=teslahub
+      - APP_DB_USER=teslahub_app
+      - APP_DB_PASSWORD=${TESLAHUB_APP_PASS:-devapp}
+      - TESLAHUB_ADMIN_USER=${TESLAHUB_ADMIN_USER:-admin}
+      - TESLAHUB_ADMIN_PASSWORD=${TESLAHUB_ADMIN_PASSWORD:-admin}
+      - TESLAHUB_SESSION_DAYS=${TESLAHUB_SESSION_DAYS:-30}
+      - TESLAHUB_JWT_SECRET=${TESLAHUB_JWT_SECRET:-dev_jwt_secret_not_for_production_use}
+      - MAP_TILE_URL=${MAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
+      - TESLAHUB_ALLOWED_IPS=${TESLAHUB_ALLOWED_IPS:-}
+      - TZ=${TZ:-Europe/Paris}
+    ports:
+      - "127.0.0.1:4001:8080"
+    depends_on:
+      - database
+      - teslahub-init
+
+  teslahub-web:
+    build:
+      context: ./src/TeslaHub.Web
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "127.0.0.1:4002:80"
+    depends_on:
+      - teslahub-api
+
+volumes:
+  teslahub-dev-db:

@@ -1,6 +1,6 @@
-# ⚠️  EXAMPLE ONLY — for fresh installs where you want everything in one stack.
+# Full example — fresh install with TeslaMate + TeslaHub in one stack.
 # If you already have TeslaMate running, do NOT use this file.
-# Instead, add the teslahub services to YOUR existing docker-compose.yml.
+# Instead, add the services from docker-compose.addon.yml to YOUR existing compose file.
 # See README.md for instructions.
 
 services:
@@ -9,7 +9,7 @@ services:
     restart: always
     environment:
       - ENCRYPTION_KEY=${TM_ENCRYPTION_KEY}
-      - DATABASE_USER=${TM_DB_USER:-tm_user}
+      - DATABASE_USER=${TM_DB_USER:-teslamate}
       - DATABASE_PASS=${TM_DB_PASS}
       - DATABASE_NAME=${TM_DB_NAME:-teslamate}
       - DATABASE_HOST=database
@@ -24,25 +24,20 @@ services:
     image: postgres:17
     restart: always
     environment:
-      - POSTGRES_USER=${TM_DB_USER:-tm_user}
+      - POSTGRES_USER=${TM_DB_USER:-teslamate}
       - POSTGRES_PASSWORD=${TM_DB_PASS}
       - POSTGRES_DB=${TM_DB_NAME:-teslamate}
     volumes:
       - teslamate-db:/var/lib/postgresql/data
-    labels:
-      - "com.centurylinklabs.watchtower.enable=false"
 
   grafana:
     image: teslamate/grafana:latest
     restart: always
     environment:
-      - DATABASE_USER=${TM_DB_USER:-tm_user}
+      - DATABASE_USER=${TM_DB_USER:-teslamate}
       - DATABASE_PASS=${TM_DB_PASS}
       - DATABASE_NAME=${TM_DB_NAME:-teslamate}
       - DATABASE_HOST=database
-      - GF_SERVER_DOMAIN=${GRAFANA_DOMAIN:-grafana.localhost}
-      - GF_SERVER_ROOT_URL=https://${GRAFANA_DOMAIN:-grafana.localhost}
-      - GF_SECURITY_COOKIE_SECURE=true
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
@@ -51,43 +46,49 @@ services:
       - database
 
   # ─── TeslaHub ──────────────────────────────────────────────────
+  teslahub-init:
+    image: deltawp/teslahub-init:latest
+    restart: "no"
+    environment:
+      - TM_DB_HOST=database
+      - TM_DB_PORT=5432
+      - TM_DB_NAME=${TM_DB_NAME:-teslamate}
+      - TM_DB_USER=${TM_DB_USER:-teslamate}
+      - TM_DB_PASS=${TM_DB_PASS}
+      - TESLAHUB_READER_PASS=${TESLAHUB_READER_PASS}
+      - TESLAHUB_APP_PASS=${TESLAHUB_APP_PASS}
+    depends_on:
+      - database
+
   teslahub-api:
-    build:
-      context: ./src/TeslaHub.Api
-      dockerfile: Dockerfile
+    image: deltawp/teslahub-api:latest
     restart: always
     environment:
-      # TeslaMate DB — read only
       - TM_DB_HOST=database
       - TM_DB_PORT=5432
       - TM_DB_NAME=${TM_DB_NAME:-teslamate}
       - TM_DB_USER=teslahub_reader
       - TM_DB_PASSWORD=${TESLAHUB_READER_PASS}
-      # App DB — TeslaHub owned
       - APP_DB_HOST=database
       - APP_DB_PORT=5432
       - APP_DB_NAME=teslahub
       - APP_DB_USER=teslahub_app
       - APP_DB_PASSWORD=${TESLAHUB_APP_PASS}
-      # Auth
       - TESLAHUB_ADMIN_USER=${TESLAHUB_ADMIN_USER:-admin}
       - TESLAHUB_ADMIN_PASSWORD=${TESLAHUB_ADMIN_PASSWORD}
       - TESLAHUB_SESSION_DAYS=${TESLAHUB_SESSION_DAYS:-30}
       - TESLAHUB_JWT_SECRET=${TESLAHUB_JWT_SECRET}
-      # Map
       - MAP_TILE_URL=${MAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
-      # Security — optional IP restriction (empty = allow all)
       - TESLAHUB_ALLOWED_IPS=${TESLAHUB_ALLOWED_IPS:-}
       - TZ=${TZ:-Europe/Paris}
     ports:
       - "127.0.0.1:4001:8080"
     depends_on:
       - database
+      - teslahub-init
 
   teslahub-web:
-    build:
-      context: ./src/TeslaHub.Web
-      dockerfile: Dockerfile
+    image: deltawp/teslahub-web:latest
     restart: always
     ports:
       - "127.0.0.1:4002:80"
