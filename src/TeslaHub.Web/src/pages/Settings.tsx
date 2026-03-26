@@ -80,7 +80,7 @@ export default function Settings({ carId }: Props) {
   };
 
   const handleUpload = async (file: File) => {
-    if (!carId || file.size > 2 * 1024 * 1024) return;
+    if (!carId || file.size > 5 * 1024 * 1024) return;
     setUploading(true);
     try {
       const formData = new FormData();
