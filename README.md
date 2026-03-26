@@ -4,18 +4,26 @@ A self-hosted companion dashboard for [TeslaMate](https://github.com/teslamate-o
 
 ![TeslaHub Home](docs/screenshots/home.png)
 
-Mobile responsive
+| Charging | Trips | Vampire Drain |
+|:---:|:---:|:---:|
+| ![Charging](docs/screenshots/charge.png) | ![Trips](docs/screenshots/trips.png) | ![Vampire Drain](docs/screenshots/vampire.png) |
 
-![TeslaHub Home](docs/screenshots/mobile.jpeg)
+<details>
+<summary>Mobile responsive</summary>
+
+![TeslaHub Mobile](docs/screenshots/mobile.jpeg)
+</details>
 
 TeslaHub reads your existing TeslaMate data (read-only) and provides a touch-first, dark-themed interface with:
 
 - Vehicle status, battery health, and position at a glance
 - Charging sessions with manual cost tracking and DC charging curves
-- Trip history with distance, consumption, and route visualization
+- Trip history with expandable details, efficiency metrics, and route visualization
+- Vampire drain analysis with sleep health verdict and power analogies
 - Interactive map with historical data
 - Cost analytics by location, month, and period
 - Multi-car support
+- Internationalization (English / French)
 
 TeslaMate remains your telemetry source. TeslaHub is the UX layer.
 
