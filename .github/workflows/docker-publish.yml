@@ -6,6 +6,10 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  packages: write
+
 env:
   REGISTRY: docker.io
   API_IMAGE: deltawp/teslahub-api
@@ -18,6 +22,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -117,3 +122,39 @@ jobs:
             ${{ env.INIT_IMAGE }}:${{ steps.meta.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  release:
+    name: Create GitHub Release
+    needs: [build-api, build-web, build-init]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: meta
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "TeslaHub v${{ steps.meta.outputs.version }}"
+          generate_release_notes: true
+          body: |
+            ## Docker images
+
+            ```yaml
+            teslahub-api:  deltawp/teslahub-api:${{ steps.meta.outputs.version }}
+            teslahub-web:  deltawp/teslahub-web:${{ steps.meta.outputs.version }}
+            teslahub-init: deltawp/teslahub-init:${{ steps.meta.outputs.version }}
+            ```
+
+            To update, run `./update.sh` on your server.
+
+            ---
