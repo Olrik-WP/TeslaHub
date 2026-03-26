@@ -12,7 +12,7 @@ interface Props {
 }
 
 type DaysOption = 7 | 30 | 90 | null;
-type IdleOption = 1 | 4 | 8 | 12;
+type IdleOption = 0 | 1 | 3 | 6 | 12 | 18 | 24;
 
 const DAYS_OPTIONS: { label: string; value: DaysOption }[] = [
   { label: '7j', value: 7 },
@@ -21,7 +21,7 @@ const DAYS_OPTIONS: { label: string; value: DaysOption }[] = [
   { label: 'Tout', value: null },
 ];
 
-const IDLE_OPTIONS: IdleOption[] = [1, 4, 8, 12];
+const IDLE_OPTIONS: IdleOption[] = [0, 1, 3, 6, 12, 18, 24];
 
 function drainColor(kwh: number | null): string {
   if (kwh == null) return '#6b7280';
@@ -55,7 +55,7 @@ export default function VampireDrain({ carId }: Props) {
   const { t } = useTranslation();
   const u = useUnits();
   const [days, setDays] = useState<DaysOption>(30);
-  const [idleHours, setIdleHours] = useState<IdleOption>(4);
+  const [idleHours, setIdleHours] = useState<IdleOption>(6);
   const [page, setPage] = useState(1);
 
   const { data, isLoading } = useQuery({
