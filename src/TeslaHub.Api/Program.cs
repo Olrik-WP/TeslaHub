@@ -8,11 +8,6 @@ using TeslaHub.Api.Endpoints;
 using TeslaHub.Api.Services;
 using TeslaHub.Api.TeslaMate;
 
-// TeslaMate stores dates as "timestamp without time zone" in UTC.
-// Without this switch, Npgsql returns DateTime(Kind=Unspecified) and JSON
-// serialization omits the 'Z' suffix, causing the browser to treat them as local time.
-AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
-
 var builder = WebApplication.CreateBuilder(args);
 
 var tmHost = builder.Configuration["TM_DB_HOST"] ?? "localhost";

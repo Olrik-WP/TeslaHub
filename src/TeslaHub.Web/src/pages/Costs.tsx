@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { getCostSummary, getCostOverrides, getSettings, getTeslaMateCostSummary, getTeslaMateMonthlyTrend } from '../api/queries';
 import { useUnits } from '../hooks/useUnits';
+import { utcDate } from '../utils/date';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import StatCard from '../components/StatCard';
 
@@ -213,7 +214,7 @@ function buildMonthlyData(overrides: { totalCost: number; createdAt?: string }[]
   const map = new Map<string, number>();
   for (const o of overrides) {
     if (!o.createdAt) continue;
-    const d = new Date(o.createdAt);
+    const d = utcDate(o.createdAt);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     map.set(key, (map.get(key) ?? 0) + o.totalCost);
   }

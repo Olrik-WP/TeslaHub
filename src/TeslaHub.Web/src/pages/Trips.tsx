@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useDrives } from '../hooks/useDrives';
 import { useUnits } from '../hooks/useUnits';
+import { utcDate } from '../utils/date';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 
 interface Props {
@@ -22,7 +23,7 @@ export default function Trips({ carId }: Props) {
 
   const dailyData: Record<string, number> = {};
   driveList.forEach((d) => {
-    const day = new Date(d.startDate).toLocaleDateString(undefined, { weekday: 'short', day: '2-digit' });
+    const day = utcDate(d.startDate).toLocaleDateString(undefined, { weekday: 'short', day: '2-digit' });
     dailyData[day] = (dailyData[day] ?? 0) + (u.convertDistance(d.distance) ?? 0);
   });
 
@@ -60,7 +61,7 @@ export default function Trips({ carId }: Props) {
                 {drive.startAddress?.split(',')[0] ?? '?'}{' → '}{drive.endAddress?.split(',')[0] ?? '?'}
               </span>
               <span className="text-xs text-[#9ca3af]">
-                {new Date(drive.startDate).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
+                {utcDate(drive.startDate).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
               </span>
             </div>
             <div className="flex items-center gap-4 text-sm text-[#9ca3af]">

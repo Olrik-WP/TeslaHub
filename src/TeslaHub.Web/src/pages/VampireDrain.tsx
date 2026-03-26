@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts';
 import { getVampireDrain } from '../api/queries';
 import { useUnits } from '../hooks/useUnits';
+import { utcDate } from '../utils/date';
 import StatCard from '../components/StatCard';
 
 interface Props {
@@ -73,7 +74,7 @@ export default function VampireDrain({ carId }: Props) {
     .reverse()
     .map((s, i) => ({
       idx: i + 1,
-      label: new Date(s.startDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }),
+      label: utcDate(s.startDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }),
       kwh: s.consumptionKwh != null ? Math.round(s.consumptionKwh * 1000) / 1000 : null,
     }));
 
@@ -190,8 +191,8 @@ export default function VampireDrain({ carId }: Props) {
       ) : (
         <div className="space-y-2">
           {items.map((item, i) => {
-            const startD = new Date(item.startDate);
-            const endD = new Date(item.endDate);
+            const startD = utcDate(item.startDate);
+            const endD = utcDate(item.endDate);
             const rangeDist = u.convertDistance(item.rangeDiffKm);
             const rangeLostH = u.convertDistance(item.rangeLostPerHourKm);
 

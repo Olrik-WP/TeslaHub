@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts';
 import { useTranslation } from 'react-i18next';
 import { useUnits } from '../hooks/useUnits';
+import { utcDate } from '../utils/date';
 import { getChargingSessions, getChargingSummary, getCostOverrides, getSuggestedPrice, getMatchingLocation, getSettings } from '../api/queries';
 import { api } from '../api/client';
 import type { ChargingSession, CostOverride, ChargingLocation } from '../api/queries';
@@ -66,14 +67,14 @@ export default function Charging({ carId }: Props) {
     : null;
 
   const filteredSessions = (sessions?.filter((s) => s.endDate) ?? []).filter(
-    (s) => !cutoff || new Date(s.startDate) >= cutoff
+    (s) => !cutoff || utcDate(s.startDate) >= cutoff
   );
 
   const chartData = filteredSessions
     .slice(0, 20)
     .reverse()
     .map((s) => ({
-      date: new Date(s.startDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }),
+      date: utcDate(s.startDate).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }),
       kwh: s.chargeEnergyAdded ?? 0,
       type: s.chargeType ?? (s.fastChargerPresent ? 'DC' : 'AC'),
     }));
@@ -283,7 +284,7 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-sm font-medium truncate">
-            {new Date(session.startDate).toLocaleDateString()}
+            {utcDate(session.startDate).toLocaleDateString()}
             {' · '}
             {costOverride?.location?.name ?? session.geofenceName ?? session.address?.split(',')[0] ?? 'Unknown'}
           </span>

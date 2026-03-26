@@ -11,6 +11,7 @@ import StatCard from '../components/StatCard';
 import { getStats, getChargingStats, getDriveStats } from '../api/queries';
 import type { VehicleStatus } from '../api/queries';
 import { useTranslation } from 'react-i18next';
+import { utcDate } from '../utils/date';
 
 interface Props {
   carId: number | undefined;
@@ -393,7 +394,7 @@ export default function Home({ carId }: Props) {
               )}
               {vehicle.positionDate && (
                 <p className="text-xs text-[#6b7280] mt-0.5">
-                  {new Date(vehicle.positionDate).toLocaleString()}
+                  {utcDate(vehicle.positionDate).toLocaleString()}
                 </p>
               )}
             </div>
@@ -420,7 +421,7 @@ export default function Home({ carId }: Props) {
                 </div>
               )}
               <div className="text-[#6b7280] text-xs mt-2">
-                {new Date(lastDrive.startDate).toLocaleDateString()}
+                {utcDate(lastDrive.startDate).toLocaleDateString()}
               </div>
             </div>
           ) : (
