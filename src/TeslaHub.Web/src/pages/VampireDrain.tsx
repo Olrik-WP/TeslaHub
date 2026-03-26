@@ -54,7 +54,7 @@ function fmtDuration(sec: number): string {
 export default function VampireDrain({ carId }: Props) {
   const { t } = useTranslation();
   const u = useUnits();
-  const [days, setDays] = useState<DaysOption>(30);
+  const [days, setDays] = useState<DaysOption>(90);
   const [idleHours, setIdleHours] = useState<IdleOption>(6);
   const [page, setPage] = useState(1);
 
