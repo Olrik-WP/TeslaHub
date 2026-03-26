@@ -198,6 +198,7 @@
     "about": "About",
     "aboutDesc": "TeslaHub — TeslaMate companion app",
     "aboutSub": "Self-hosted, privacy-first",
+    "poweredBy": "Powered by TeslaMate — read-only, no data modified",
     "radiusLine": "Radius: {{meters}}m"
   },
   "battery": {

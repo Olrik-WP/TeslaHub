@@ -383,6 +383,25 @@ export default function Settings({ carId }: Props) {
         <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2">{t('settings.about')}</div>
         <p className="text-sm text-[#9ca3af]">{t('settings.aboutDesc')}</p>
         <p className="text-xs text-[#6b7280] mt-1">{t('settings.aboutSub')}</p>
+        <a
+          href="https://github.com/teslamate-org/teslamate"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block text-xs text-[#6b7280] mt-2 hover:text-[#9ca3af] transition-colors"
+        >
+          {t('settings.poweredBy')}
+        </a>
+        <div className="mt-3 pt-3 border-t border-[#2a2a2a] flex items-center justify-between text-xs text-[#6b7280]">
+          <span>AGPLv3 — © 2026 TeslaHub</span>
+          <a
+            href="https://github.com/Olrik-WP/TeslaHub"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#3b82f6] hover:underline"
+          >
+            Source code
+          </a>
+        </div>
       </div>
 
       <button onClick={handleLogout} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-[#ef4444] py-3 rounded-xl text-sm font-medium min-h-[48px] active:bg-[#2a2a2a]">
