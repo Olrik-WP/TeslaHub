@@ -285,3 +285,42 @@ export const getTeslaMateMonthlyTrend = (carId: number) =>
 
 // ─── Settings ───────────────────────────────────────────────────
 export const getSettings = () => api<GlobalSettings>('/costs/settings');
+
+// ─── Vampire Drain ──────────────────────────────────────────────
+export interface VampireDrainItem {
+  startDate: string;
+  endDate: string;
+  durationSec: number;
+  standby: number | null;
+  socDiff: number | null;
+  hasReducedRange: boolean;
+  rangeDiffKm: number | null;
+  consumptionKwh: number | null;
+  avgPowerW: number | null;
+  rangeLostPerHourKm: number | null;
+}
+
+export interface VampireSummary {
+  sessionCount: number;
+  totalKwh: number;
+  avgWh: number;
+  avgPowerW: number;
+}
+
+export interface VampireDrainResponse {
+  items: VampireDrainItem[];
+  summary: VampireSummary;
+}
+
+export const getVampireDrain = (
+  carId: number,
+  minIdleHours: number,
+  days: number | null,
+  page: number
+) => {
+  const params = new URLSearchParams();
+  params.set('minIdleHours', String(minIdleHours));
+  if (days != null) params.set('days', String(days));
+  params.set('page', String(page));
+  return api<VampireDrainResponse>(`/vampire/${carId}?${params}`);
+};

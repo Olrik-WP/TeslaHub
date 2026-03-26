@@ -177,3 +177,25 @@ public record ChargingCurveMedianDto
     public int SoC { get; init; }
     public double Power { get; init; }
 }
+
+public record VampireDrainDto
+{
+    public DateTime StartDate { get; init; }
+    public DateTime EndDate { get; init; }
+    public double DurationSec { get; init; }
+    public double? Standby { get; init; }
+    public double? SocDiff { get; init; }
+    public bool HasReducedRange { get; init; }
+    public double? RangeDiffKm { get; init; }
+    public double? ConsumptionKwh { get; init; }
+    public double? AvgPowerW { get; init; }
+    public double? RangeLostPerHourKm { get; init; }
+}
+
+public record VampireSummaryDto
+{
+    public int SessionCount { get; init; }
+    public double TotalKwh { get; init; }
+    public double AvgWh { get; init; }
+    public double AvgPowerW { get; init; }
+}

@@ -98,6 +98,7 @@ app.MapDrivesEndpoints();
 app.MapChargingEndpoints();
 app.MapMapEndpoints();
 app.MapCostsEndpoints();
+app.MapVampireEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { Status = "OK", Timestamp = DateTime.UtcNow }))
     .AllowAnonymous();

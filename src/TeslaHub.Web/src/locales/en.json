@@ -23,7 +23,8 @@
     "trips": "Trips",
     "map": "Map",
     "costs": "Costs",
-    "settings": "Settings"
+    "settings": "Settings",
+    "vampire": "Vampire"
   },
   "home": {
     "loadingVehicle": "Loading vehicle data...",
@@ -191,5 +192,23 @@
   },
   "battery": {
     "charging": "Charge"
+  },
+  "vampire": {
+    "title": "Vampire Drain",
+    "sessions": "Sessions",
+    "totalDrained": "Total drained",
+    "avgDrain": "Avg drain",
+    "avgPower": "Avg power",
+    "period": "Period",
+    "standby": "Standby",
+    "socDiff": "SoC Diff",
+    "rangeLoss": "Range loss",
+    "energyDrained": "Energy drained",
+    "avgRangeLossH": "Ø Range loss/h",
+    "coldBattery": "Cold battery",
+    "minIdle": "Min. idle",
+    "noData": "No vampire drain data for this period.",
+    "noDataSub": "Try reducing the minimum idle time or extending the time range.",
+    "perSession": "per session"
   }
 }

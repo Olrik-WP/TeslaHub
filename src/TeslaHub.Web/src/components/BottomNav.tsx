@@ -8,6 +8,7 @@ const links = [
   { to: '/trips', labelKey: 'nav.trips', icon: '⟿' },
   { to: '/map', labelKey: 'nav.map', icon: '◉' },
   { to: '/costs', labelKey: 'nav.costs', icon: '◆' },
+  { to: '/vampire', labelKey: 'nav.vampire', icon: '🧛' },
   { to: '/settings', labelKey: 'nav.settings', icon: '⚙' },
 ];
 
@@ -37,7 +38,7 @@ export default function BottomNav() {
           style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
         >
           <span className="text-lg leading-none mb-0.5">{link.icon}</span>
-          <span className="text-[10px]">{t(link.labelKey)}</span>
+          <span className="text-[9px]">{t(link.labelKey)}</span>
         </NavLink>
       ))}
     </nav>

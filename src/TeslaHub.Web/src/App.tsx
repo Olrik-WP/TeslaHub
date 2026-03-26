@@ -16,6 +16,7 @@ const Trips = lazy(() => import('./pages/Trips'));
 const MapPage = lazy(() => import('./pages/Map'));
 const Costs = lazy(() => import('./pages/Costs'));
 const ChargingStats = lazy(() => import('./pages/ChargingStats'));
+const VampireDrain = lazy(() => import('./pages/VampireDrain'));
 const Settings = lazy(() => import('./pages/Settings'));
 
 const queryClient = new QueryClient({
@@ -105,6 +106,7 @@ function AppLayout() {
             <Route path="/map" element={<MapPage carId={selectedCarId} />} />
             <Route path="/costs" element={<Costs carId={selectedCarId} />} />
             <Route path="/charging-stats" element={<ChargingStats carId={selectedCarId} />} />
+            <Route path="/vampire" element={<VampireDrain carId={selectedCarId} />} />
             <Route path="/settings" element={<Settings carId={selectedCarId} />} />
           </Routes>
         </Suspense>

@@ -23,7 +23,8 @@
     "trips": "Trajets",
     "map": "Carte",
     "costs": "Coûts",
-    "settings": "Config"
+    "settings": "Config",
+    "vampire": "Vampire"
   },
   "home": {
     "loadingVehicle": "Chargement des données...",
@@ -191,5 +192,23 @@
   },
   "battery": {
     "charging": "Charge"
+  },
+  "vampire": {
+    "title": "Vampire Drain",
+    "sessions": "Sessions",
+    "totalDrained": "Total drainé",
+    "avgDrain": "Moy. drain",
+    "avgPower": "Moy. puissance",
+    "period": "Durée",
+    "standby": "Veille",
+    "socDiff": "Diff SoC",
+    "rangeLoss": "Perte autonomie",
+    "energyDrained": "Énergie drainée",
+    "avgRangeLossH": "Ø Perte/h",
+    "coldBattery": "Batterie froide",
+    "minIdle": "Inactif min.",
+    "noData": "Aucune donnée de vampire drain pour cette période.",
+    "noDataSub": "Réduisez le temps inactif minimum ou étendez la plage de dates.",
+    "perSession": "par session"
   }
 }
