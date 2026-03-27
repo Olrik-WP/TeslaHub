@@ -8,7 +8,7 @@ import { useDrives } from '../hooks/useDrives';
 import { useUnits } from '../hooks/useUnits';
 import BatteryGauge from '../components/BatteryGauge';
 import StatCard from '../components/StatCard';
-import { getStats, getChargingStats, getDriveStats } from '../api/queries';
+import { getStats, getChargingStats, getDriveStats, getSettings, getCostOverrides } from '../api/queries';
 import type { VehicleStatus } from '../api/queries';
 import { useTranslation } from 'react-i18next';
 import { utcDate } from '../utils/date';
@@ -96,6 +96,14 @@ export default function Home({ carId }: Props) {
     enabled: !!carId,
     staleTime: 5 * 60_000,
   });
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings, staleTime: 5 * 60_000 });
+  const costSource = settings?.costSource ?? 'teslahub';
+  const { data: overrides } = useQuery({
+    queryKey: ['costOverrides', carId],
+    queryFn: () => getCostOverrides(carId!),
+    enabled: !!carId && costSource === 'teslahub',
+    staleTime: 5 * 60_000,
+  });
   const u = useUnits();
   const { t } = useTranslation();
   const [imgError, setImgError] = useState(false);
@@ -106,6 +114,16 @@ export default function Home({ carId }: Props) {
   const isCharging = lastCharge && !lastCharge.endDate;
   const lastCompletedCharge = charges?.find((s) => s.endDate);
   const imgSrc = carId ? `/api/vehicle/${carId}/image` : null;
+
+  const lastChargeCost = (() => {
+    if (!lastCompletedCharge) return null;
+    if (costSource === 'teslahub') {
+      const ov = overrides?.find((o) => o.chargingProcessId === lastCompletedCharge.id);
+      if (ov) return ov.isFree ? 0 : ov.totalCost;
+      return null;
+    }
+    return lastCompletedCharge.cost;
+  })();
 
   const tempColor = (t: number | null | undefined) =>
     t == null ? undefined : t <= 0 ? '#3b82f6' : t < 10 ? '#60a5fa' : t < 20 ? '#9ca3af' : t < 30 ? '#f97316' : '#ef4444';
@@ -193,8 +211,8 @@ export default function Home({ carId }: Props) {
               <div className="text-right cursor-pointer" onClick={() => navigate('/charging')}>
                 <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.lastCharge')}</div>
                 <div className="text-base font-bold tabular-nums text-[#e31937]">
-                  {lastCompletedCharge.cost != null && lastCompletedCharge.cost > 0
-                    ? `${lastCompletedCharge.cost.toFixed(2)} ${u.currencySymbol}`
+                  {lastChargeCost != null && lastChargeCost > 0
+                    ? `${lastChargeCost.toFixed(2)} ${u.currencySymbol}`
                     : `${lastCompletedCharge.chargeEnergyAdded?.toFixed(0) ?? '—'} kWh`}
                 </div>
                 {lastCompletedCharge.distanceSinceLastCharge != null && lastCompletedCharge.distanceSinceLastCharge > 0 && (
@@ -227,13 +245,13 @@ export default function Home({ carId }: Props) {
           )}
           {lastCompletedCharge && (
             <div
-              className="hidden sm:block absolute right-[180px] top-2 z-20 bg-black/60 rounded-xl px-3 py-2 text-center cursor-pointer hover:bg-black/80 transition-colors"
+              className="hidden sm:block absolute right-[150px] bottom-2 z-20 bg-black/60 rounded-xl px-3 py-2 text-center cursor-pointer hover:bg-black/80 transition-colors"
               onClick={() => navigate('/charging')}
             >
               <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.lastCharge')}</div>
               <div className="text-xl font-bold tabular-nums text-[#e31937]">
-                {lastCompletedCharge.cost != null && lastCompletedCharge.cost > 0
-                  ? `${lastCompletedCharge.cost.toFixed(2)} ${u.currencySymbol}`
+                {lastChargeCost != null && lastChargeCost > 0
+                  ? `${lastChargeCost.toFixed(2)} ${u.currencySymbol}`
                   : `${lastCompletedCharge.chargeEnergyAdded?.toFixed(0) ?? '—'} kWh`}
               </div>
               {lastCompletedCharge.distanceSinceLastCharge != null && lastCompletedCharge.distanceSinceLastCharge > 0 && (
