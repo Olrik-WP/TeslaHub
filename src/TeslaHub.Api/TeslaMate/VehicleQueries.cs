@@ -27,11 +27,12 @@ public static class VehicleQueries
                 c.vin AS "Vin", c.efficiency AS "Efficiency",
                 p.battery_level AS "BatteryLevel",
                 p.usable_battery_level AS "UsableBatteryLevel",
-                p.rated_battery_range_km AS "RatedBatteryRangeKm",
-                p.ideal_battery_range_km AS "IdealBatteryRangeKm",
+                COALESCE(p.rated_battery_range_km, fallback.rated_battery_range_km) AS "RatedBatteryRangeKm",
+                COALESCE(p.ideal_battery_range_km, fallback.ideal_battery_range_km) AS "IdealBatteryRangeKm",
                 p.odometer AS "Odometer",
                 p.latitude AS "Latitude", p.longitude AS "Longitude",
-                p.inside_temp AS "InsideTemp", p.outside_temp AS "OutsideTemp",
+                COALESCE(p.inside_temp, fallback.inside_temp) AS "InsideTemp",
+                COALESCE(p.outside_temp, fallback.outside_temp) AS "OutsideTemp",
                 p.speed AS "Speed", p.power AS "Power",
                 p.date AS "PositionDate",
                 s.state AS "State",
@@ -45,6 +46,14 @@ public static class VehicleQueries
                 ORDER BY date DESC
                 LIMIT 1
             ) p ON true
+            LEFT JOIN LATERAL (
+                SELECT inside_temp, outside_temp, rated_battery_range_km, ideal_battery_range_km
+                FROM positions
+                WHERE car_id = c.id
+                  AND (inside_temp IS NOT NULL OR outside_temp IS NOT NULL OR rated_battery_range_km IS NOT NULL)
+                ORDER BY date DESC
+                LIMIT 1
+            ) fallback ON true
             LEFT JOIN LATERAL (
                 SELECT state FROM states
                 WHERE car_id = c.id
