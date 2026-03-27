@@ -245,7 +245,7 @@ export default function Home({ carId }: Props) {
           )}
           {lastCompletedCharge && (
             <div
-              className="hidden sm:block absolute right-[150px] bottom-2 z-20 bg-black/60 rounded-xl px-3 py-2 text-center cursor-pointer hover:bg-black/80 transition-colors"
+              className="hidden sm:block absolute right-[230px] bottom-2 z-20 bg-black/60 rounded-xl px-3 py-2 text-center cursor-pointer hover:bg-black/80 transition-colors"
               onClick={() => navigate('/charging')}
             >
               <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.lastCharge')}</div>
