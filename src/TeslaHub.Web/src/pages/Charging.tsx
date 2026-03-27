@@ -345,6 +345,11 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
             +<span className="text-white font-medium">{Math.round(u.convertDistance(session.rangeAddedKm)!)}</span> {u.distanceUnit}
           </div>
         )}
+        {session.distanceSinceLastCharge != null && session.distanceSinceLastCharge > 0 && (
+          <div title={t('charging.kmSinceLastCharge')}>
+            <span className="text-white font-medium">{Math.round(u.convertDistance(session.distanceSinceLastCharge)!)}</span> {u.distanceUnit}
+          </div>
+        )}
       </div>
 
       {/* Temp row */}

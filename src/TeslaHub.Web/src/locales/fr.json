@@ -55,7 +55,9 @@
     "noTrips": "Aucun trajet",
     "chargingInProgress": "Charge en cours",
     "added": "Ajouté",
-    "duration": "Durée"
+    "duration": "Durée",
+    "lastCharge": "Dernière charge",
+    "driven": "parcourus"
   },
   "charging": {
     "7days": "7 jours",
@@ -92,7 +94,8 @@
     "updateLocation": "Modifier le lieu",
     "saveLocation": "Enregistrer le lieu",
     "savingLocation": "Enregistrement...",
-    "cancel": "Annuler"
+    "cancel": "Annuler",
+    "kmSinceLastCharge": "Km depuis dernière charge"
   },
   "chargingStats": {
     "dcChargingCurve": "Courbe de charge DC",

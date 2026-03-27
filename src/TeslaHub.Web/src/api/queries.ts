@@ -98,6 +98,8 @@ export interface ChargingSession {
   chargeRateKmPerHour: number | null;
   rangeAddedKm: number | null;
   costPerKwh: number | null;
+  odometer: number | null;
+  distanceSinceLastCharge: number | null;
 }
 
 export interface ChargingSummary {

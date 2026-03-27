@@ -104,6 +104,7 @@ export default function Home({ carId }: Props) {
   const lastDrive = drives?.[0];
   const lastCharge = charges?.[0];
   const isCharging = lastCharge && !lastCharge.endDate;
+  const lastCompletedCharge = charges?.find((s) => s.endDate);
   const imgSrc = carId ? `/api/vehicle/${carId}/image` : null;
 
   const tempColor = (t: number | null | undefined) =>
@@ -165,21 +166,21 @@ export default function Home({ carId }: Props) {
         {driveStats && driveStats.driveCount > 0 && (
           <div className="grid grid-cols-3 border-b border-[#2a2a2a]">
             <div className="px-3 py-2 text-center">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.medianDist')}</div>
-              <div className="text-sm font-bold tabular-nums text-[#e31937]">{driveStats.medianDistanceKm != null ? u.fmtDist(driveStats.medianDistanceKm) : '—'} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+              <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.medianDist')}</div>
+              <div className="text-base font-bold tabular-nums text-[#e31937]">{driveStats.medianDistanceKm != null ? u.fmtDist(driveStats.medianDistanceKm) : '—'} <span className="text-[11px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
             </div>
             <div className="px-3 py-2 text-center border-x border-[#2a2a2a]">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.avgDistDay')}</div>
-              <div className="text-sm font-bold tabular-nums text-[#e31937]">{u.fmtDist(driveStats.totalDistanceKm / driveStats.totalDays)} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+              <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.avgDistDay')}</div>
+              <div className="text-base font-bold tabular-nums text-[#e31937]">{u.fmtDist(driveStats.totalDistanceKm / driveStats.totalDays)} <span className="text-[11px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
             </div>
             <div className="px-3 py-2 text-center">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.avgKwhDay')}</div>
-              <div className="text-sm font-bold tabular-nums text-[#e31937]">{(driveStats.totalNetEnergyKwh / driveStats.totalDays).toFixed(1)} <span className="text-[10px] font-normal text-[#9ca3af]">kWh</span></div>
+              <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.avgKwhDay')}</div>
+              <div className="text-base font-bold tabular-nums text-[#e31937]">{(driveStats.totalNetEnergyKwh / driveStats.totalDays).toFixed(1)} <span className="text-[11px] font-normal text-[#9ca3af]">kWh</span></div>
             </div>
           </div>
         )}
 
-        {/* Mobile: vehicle info + max speed as inline row */}
+        {/* Mobile: vehicle info + max speed + last charge as inline row */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-[#2a2a2a] sm:hidden">
           <div>
             <div className="text-sm font-bold">{vehicle.marketingName || vehicle.model || vehicle.name}</div>
@@ -187,12 +188,27 @@ export default function Home({ carId }: Props) {
               {[vehicle.exteriorColor, vehicle.vin].filter(Boolean).join(' · ')}
             </div>
           </div>
-          {driveStats && driveStats.maxSpeedKmh != null && (
-            <div className="text-right">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.maxSpeed')}</div>
-              <div className="text-base font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.maxSpeedKmh)!)} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit === 'mi' ? 'mph' : 'km/h'}</span></div>
-            </div>
-          )}
+          <div className="flex items-center gap-4">
+            {lastCompletedCharge && (
+              <div className="text-right cursor-pointer" onClick={() => navigate('/charging')}>
+                <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.lastCharge')}</div>
+                <div className="text-base font-bold tabular-nums text-[#e31937]">
+                  {lastCompletedCharge.cost != null && lastCompletedCharge.cost > 0
+                    ? `${lastCompletedCharge.cost.toFixed(2)} ${u.currencySymbol}`
+                    : `${lastCompletedCharge.chargeEnergyAdded?.toFixed(0) ?? '—'} kWh`}
+                </div>
+                {lastCompletedCharge.distanceSinceLastCharge != null && lastCompletedCharge.distanceSinceLastCharge > 0 && (
+                  <div className="text-[10px] text-[#9ca3af]">{Math.round(u.convertDistance(lastCompletedCharge.distanceSinceLastCharge)!)} {u.distanceUnit} {t('home.driven')}</div>
+                )}
+              </div>
+            )}
+            {driveStats && driveStats.maxSpeedKmh != null && (
+              <div className="text-right">
+                <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.maxSpeed')}</div>
+                <div className="text-base font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.maxSpeedKmh)!)} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit === 'mi' ? 'mph' : 'km/h'}</span></div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Middle row: Car Image + overlays (overlays visible on sm+ only) */}
@@ -207,6 +223,22 @@ export default function Home({ carId }: Props) {
               <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.maxSpeed')}</div>
               <div className="text-xl font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.maxSpeedKmh)!)}</div>
               <div className="text-[10px] text-[#9ca3af]">{u.distanceUnit === 'mi' ? 'mph' : 'km/h'}</div>
+            </div>
+          )}
+          {lastCompletedCharge && (
+            <div
+              className="hidden sm:block absolute right-3 top-2 z-10 bg-black/60 rounded-xl px-3 py-2 text-center cursor-pointer hover:bg-black/80 transition-colors"
+              onClick={() => navigate('/charging')}
+            >
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.lastCharge')}</div>
+              <div className="text-xl font-bold tabular-nums text-[#e31937]">
+                {lastCompletedCharge.cost != null && lastCompletedCharge.cost > 0
+                  ? `${lastCompletedCharge.cost.toFixed(2)} ${u.currencySymbol}`
+                  : `${lastCompletedCharge.chargeEnergyAdded?.toFixed(0) ?? '—'} kWh`}
+              </div>
+              {lastCompletedCharge.distanceSinceLastCharge != null && lastCompletedCharge.distanceSinceLastCharge > 0 && (
+                <div className="text-[10px] text-[#9ca3af]">{Math.round(u.convertDistance(lastCompletedCharge.distanceSinceLastCharge)!)} {u.distanceUnit} {t('home.driven')}</div>
+              )}
             </div>
           )}
           <div className="flex-1 flex items-center justify-center">
@@ -235,16 +267,16 @@ export default function Home({ carId }: Props) {
         {driveStats && driveStats.driveCount > 0 && (
           <div className="grid grid-cols-3 border-t border-[#2a2a2a]">
             <div className="px-3 py-2 text-center">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.estMonthly')}</div>
-              <div className="text-sm font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * (365 / 12))!).toLocaleString()} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+              <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.estMonthly')}</div>
+              <div className="text-base font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * (365 / 12))!).toLocaleString()} <span className="text-[11px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
             </div>
             <div className="px-3 py-2 text-center border-x border-[#2a2a2a]">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{driveStats.driveCount} {t('home.trips')}</div>
-              <div className="text-sm font-bold tabular-nums text-[#e31937]">{Math.round(driveStats.totalDays)} <span className="text-[10px] font-normal text-[#9ca3af]">{t('home.days')}</span></div>
+              <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{driveStats.driveCount} {t('home.trips')}</div>
+              <div className="text-base font-bold tabular-nums text-[#e31937]">{Math.round(driveStats.totalDays)} <span className="text-[11px] font-normal text-[#9ca3af]">{t('home.days')}</span></div>
             </div>
             <div className="px-3 py-2 text-center">
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.estAnnual')}</div>
-              <div className="text-sm font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * 365)!).toLocaleString()} <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+              <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.estAnnual')}</div>
+              <div className="text-base font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * 365)!).toLocaleString()} <span className="text-[11px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
             </div>
           </div>
         )}

@@ -55,7 +55,9 @@
     "noTrips": "No trips yet",
     "chargingInProgress": "Charging in progress",
     "added": "Added",
-    "duration": "Duration"
+    "duration": "Duration",
+    "lastCharge": "Last Charge",
+    "driven": "driven"
   },
   "charging": {
     "7days": "7 days",
@@ -92,7 +94,8 @@
     "updateLocation": "Update location",
     "saveLocation": "Save location",
     "savingLocation": "Saving...",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "kmSinceLastCharge": "Driven since last charge"
   },
   "chargingStats": {
     "dcChargingCurve": "DC Charging Curve",

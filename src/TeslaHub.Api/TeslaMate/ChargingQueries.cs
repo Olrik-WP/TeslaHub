@@ -9,53 +9,83 @@ public static class ChargingQueries
     {
         using var conn = db.CreateConnection();
         return await conn.QueryAsync<ChargingSessionDto>("""
+            WITH data AS (
+                SELECT
+                    cp.id,
+                    cp.car_id,
+                    cp.start_date,
+                    cp.end_date,
+                    cp.charge_energy_added,
+                    cp.charge_energy_used,
+                    cp.start_battery_level,
+                    cp.end_battery_level,
+                    cp.duration_min,
+                    cp.outside_temp_avg,
+                    cp.start_rated_range_km,
+                    cp.end_rated_range_km,
+                    cp.cost,
+                    a.display_name AS address,
+                    a.latitude,
+                    a.longitude,
+                    cp.geofence_id,
+                    g.name AS geofence_name,
+                    ch.fast_charger_present,
+                    ch.fast_charger_type,
+                    ch.charge_type,
+                    p.odometer,
+                    p.odometer - LAG(p.odometer) OVER (ORDER BY cp.start_date) AS distance_since_last_charge
+                FROM charging_processes cp
+                LEFT JOIN positions p ON p.id = cp.position_id
+                LEFT JOIN addresses a ON cp.address_id = a.id
+                LEFT JOIN geofences g ON cp.geofence_id = g.id
+                LEFT JOIN LATERAL (
+                    SELECT fast_charger_present, fast_charger_type,
+                           CASE WHEN NULLIF(mode() WITHIN GROUP (ORDER BY charger_phases), 0) IS NULL
+                                THEN 'DC' ELSE 'AC' END AS charge_type
+                    FROM charges
+                    WHERE charging_process_id = cp.id
+                    GROUP BY fast_charger_present, fast_charger_type
+                ) ch ON true
+                WHERE cp.car_id = @CarId
+                  AND (@ChargeType IS NULL OR ch.charge_type = @ChargeType)
+            )
             SELECT
-                cp.id AS "Id", cp.car_id AS "CarId",
-                cp.start_date AS "StartDate", cp.end_date AS "EndDate",
-                cp.charge_energy_added AS "ChargeEnergyAdded",
-                cp.charge_energy_used AS "ChargeEnergyUsed",
-                cp.start_battery_level AS "StartBatteryLevel",
-                cp.end_battery_level AS "EndBatteryLevel",
-                cp.duration_min AS "DurationMin",
-                cp.outside_temp_avg AS "OutsideTempAvg",
-                cp.start_rated_range_km AS "StartRatedRangeKm",
-                cp.end_rated_range_km AS "EndRatedRangeKm",
-                cp.cost AS "Cost",
-                a.display_name AS "Address",
-                a.latitude AS "Latitude",
-                a.longitude AS "Longitude",
-                cp.geofence_id AS "GeofenceId",
-                g.name AS "GeofenceName",
-                ch.fast_charger_present AS "FastChargerPresent",
-                ch.fast_charger_type AS "FastChargerType",
-                ch.charge_type AS "ChargeType",
-                CASE WHEN GREATEST(cp.charge_energy_used, cp.charge_energy_added) > 0
-                     THEN cp.charge_energy_added / GREATEST(cp.charge_energy_used, cp.charge_energy_added)
+                id AS "Id", car_id AS "CarId",
+                start_date AS "StartDate", end_date AS "EndDate",
+                charge_energy_added AS "ChargeEnergyAdded",
+                charge_energy_used AS "ChargeEnergyUsed",
+                start_battery_level AS "StartBatteryLevel",
+                end_battery_level AS "EndBatteryLevel",
+                duration_min AS "DurationMin",
+                outside_temp_avg AS "OutsideTempAvg",
+                start_rated_range_km AS "StartRatedRangeKm",
+                end_rated_range_km AS "EndRatedRangeKm",
+                cost AS "Cost",
+                address AS "Address",
+                latitude AS "Latitude",
+                longitude AS "Longitude",
+                geofence_id AS "GeofenceId",
+                geofence_name AS "GeofenceName",
+                fast_charger_present AS "FastChargerPresent",
+                fast_charger_type AS "FastChargerType",
+                charge_type AS "ChargeType",
+                CASE WHEN GREATEST(charge_energy_used, charge_energy_added) > 0
+                     THEN charge_energy_added / GREATEST(charge_energy_used, charge_energy_added)
                      ELSE NULL END AS "Efficiency",
-                CASE WHEN cp.duration_min > 0
-                     THEN cp.charge_energy_added * 60.0 / cp.duration_min
+                CASE WHEN duration_min > 0
+                     THEN charge_energy_added * 60.0 / duration_min
                      ELSE NULL END AS "AvgPowerKw",
-                CASE WHEN cp.duration_min > 0
-                     THEN (cp.end_rated_range_km - cp.start_rated_range_km) * 60.0 / cp.duration_min
+                CASE WHEN duration_min > 0
+                     THEN (end_rated_range_km - start_rated_range_km) * 60.0 / duration_min
                      ELSE NULL END AS "ChargeRateKmPerHour",
-                cp.end_rated_range_km - cp.start_rated_range_km AS "RangeAddedKm",
-                CASE WHEN GREATEST(cp.charge_energy_used, cp.charge_energy_added) > 0
-                     THEN cp.cost / GREATEST(cp.charge_energy_used, cp.charge_energy_added)
-                     ELSE NULL END AS "CostPerKwh"
-            FROM charging_processes cp
-            LEFT JOIN addresses a ON cp.address_id = a.id
-            LEFT JOIN geofences g ON cp.geofence_id = g.id
-            LEFT JOIN LATERAL (
-                SELECT fast_charger_present, fast_charger_type,
-                       CASE WHEN NULLIF(mode() WITHIN GROUP (ORDER BY charger_phases), 0) IS NULL
-                            THEN 'DC' ELSE 'AC' END AS charge_type
-                FROM charges
-                WHERE charging_process_id = cp.id
-                GROUP BY fast_charger_present, fast_charger_type
-            ) ch ON true
-            WHERE cp.car_id = @CarId
-              AND (@ChargeType IS NULL OR ch.charge_type = @ChargeType)
-            ORDER BY cp.start_date DESC
+                end_rated_range_km - start_rated_range_km AS "RangeAddedKm",
+                CASE WHEN GREATEST(charge_energy_used, charge_energy_added) > 0
+                     THEN cost / GREATEST(charge_energy_used, charge_energy_added)
+                     ELSE NULL END AS "CostPerKwh",
+                odometer AS "Odometer",
+                distance_since_last_charge AS "DistanceSinceLastCharge"
+            FROM data
+            ORDER BY start_date DESC
             LIMIT @Limit OFFSET @Offset
             """, new { CarId = carId, Limit = limit, Offset = offset, ChargeType = chargeType });
     }

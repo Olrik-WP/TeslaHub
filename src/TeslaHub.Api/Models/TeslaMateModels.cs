@@ -102,6 +102,8 @@ public record ChargingSessionDto
     public double? ChargeRateKmPerHour { get; init; }
     public double? RangeAddedKm { get; init; }
     public double? CostPerKwh { get; init; }
+    public double? Odometer { get; init; }
+    public double? DistanceSinceLastCharge { get; init; }
 }
 
 public record ChargePointDto
