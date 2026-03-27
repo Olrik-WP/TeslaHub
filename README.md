@@ -1,5 +1,11 @@
 # TeslaHub
 
+[![license](https://img.shields.io/github/license/Olrik-WP/TeslaHub?label=license&color=blue)](LICENSE)
+[![GitHub release](https://img.shields.io/github/v/release/Olrik-WP/TeslaHub?color=brightgreen)](https://github.com/Olrik-WP/TeslaHub/releases/latest)
+[![Build and Push Docker Images](https://img.shields.io/github/actions/workflow/status/Olrik-WP/TeslaHub/docker-publish.yml?label=Docker%20Build)](https://github.com/Olrik-WP/TeslaHub/actions/workflows/docker-publish.yml)
+[![Docker Pulls](https://img.shields.io/docker/pulls/deltawp/teslahub-api?label=docker%20pulls)](https://hub.docker.com/r/deltawp/teslahub-api)
+[![Docker Image Size](https://img.shields.io/docker/image-size/deltawp/teslahub-api/latest?label=API%20image)](https://hub.docker.com/r/deltawp/teslahub-api)
+
 A self-hosted companion dashboard for [TeslaMate](https://github.com/teslamate-org/teslamate), optimized for the Tesla in-car browser.
 
 ![TeslaHub Home](docs/screenshots/home.png)
