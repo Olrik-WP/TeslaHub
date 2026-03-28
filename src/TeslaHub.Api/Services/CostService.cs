@@ -1,16 +1,19 @@
 using Microsoft.EntityFrameworkCore;
 using TeslaHub.Api.Data;
 using TeslaHub.Api.Models;
+using TeslaHub.Api.TeslaMate;
 
 namespace TeslaHub.Api.Services;
 
 public class CostService
 {
     private readonly AppDbContext _db;
+    private readonly TeslaMateConnectionFactory _tm;
 
-    public CostService(AppDbContext db)
+    public CostService(AppDbContext db, TeslaMateConnectionFactory tm)
     {
         _db = db;
+        _tm = tm;
     }
 
     public async Task<ChargingLocation?> FindMatchingLocation(double? lat, double? lng, int? carId)
@@ -190,7 +193,87 @@ public class CostService
             .OrderByDescending(c => c.CreatedAt)
             .FirstOrDefaultAsync();
 
-        return lastOverride?.PricePerKwh;
+        if (lastOverride?.PricePerKwh != null)
+            return lastOverride.PricePerKwh;
+
+        return location.PeakPricePerKwh;
+    }
+
+    /// <summary>
+    /// Auto-apply location pricing to all matching charging sessions that don't have a manual override.
+    /// </summary>
+    public async Task<int> ApplyLocationPricingAsync(ChargingLocation location)
+    {
+        var carIds = location.CarId.HasValue
+            ? new[] { location.CarId.Value }
+            : (await _tm.GetCarIdsAsync()).ToArray();
+
+        var created = 0;
+
+        foreach (var carId in carIds)
+        {
+            var sessions = await _tm.GetChargingSessionsForLocationAsync(
+                carId, location.Latitude, location.Longitude, location.RadiusMeters);
+
+            var existingProcessIds = (await _db.ChargingCostOverrides
+                .Where(c => c.CarId == carId && c.IsManualOverride)
+                .Select(c => c.ChargingProcessId)
+                .ToListAsync())
+                .ToHashSet();
+
+            foreach (var session in sessions)
+            {
+                if (existingProcessIds.Contains(session.Id))
+                    continue;
+
+                var pricePerKwh = CalculatePricePerKwh(location, session.StartDate);
+                decimal totalCost;
+
+                if (location.PricingType == "subscription")
+                {
+                    var subCost = await CalculateSubscriptionCostForSession(location, carId, session.StartDate);
+                    totalCost = subCost ?? 0;
+                    pricePerKwh = session.ChargeEnergyAdded > 0
+                        ? Math.Round(totalCost / (decimal)session.ChargeEnergyAdded.Value, 4)
+                        : null;
+                }
+                else
+                {
+                    var kwh = (decimal)(session.ChargeEnergyAdded ?? session.ChargeEnergyUsed ?? 0);
+                    totalCost = (pricePerKwh ?? 0) * kwh;
+                }
+
+                var existing = await _db.ChargingCostOverrides
+                    .FirstOrDefaultAsync(c => c.ChargingProcessId == session.Id && c.CarId == carId);
+
+                if (existing != null)
+                {
+                    existing.PricePerKwh = pricePerKwh;
+                    existing.TotalCost = totalCost;
+                    existing.LocationId = location.Id;
+                    existing.IsManualOverride = false;
+                    existing.UpdatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    _db.ChargingCostOverrides.Add(new ChargingCostOverride
+                    {
+                        ChargingProcessId = session.Id,
+                        CarId = carId,
+                        PricePerKwh = pricePerKwh,
+                        TotalCost = totalCost,
+                        IsFree = false,
+                        IsManualOverride = false,
+                        LocationId = location.Id
+                    });
+                }
+
+                created++;
+            }
+        }
+
+        await _db.SaveChangesAsync();
+        return created;
     }
 
     private static bool IsOffPeak(ChargingLocation location, DateTime sessionStart)

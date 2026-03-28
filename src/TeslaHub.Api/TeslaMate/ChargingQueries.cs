@@ -267,4 +267,41 @@ public static class ChargingQueries
             ORDER BY c.battery_level
             """, new { CarId = carId });
     }
+
+    public static async Task<IEnumerable<ChargingSessionDto>> GetChargingSessionsForLocationAsync(
+        this TeslaMateConnectionFactory db, int carId, double lat, double lng, int radiusMeters)
+    {
+        using var conn = db.CreateConnection();
+        return await conn.QueryAsync<ChargingSessionDto>("""
+            SELECT
+                cp.id AS "Id",
+                cp.car_id AS "CarId",
+                cp.start_date AS "StartDate",
+                cp.end_date AS "EndDate",
+                cp.charge_energy_added AS "ChargeEnergyAdded",
+                cp.charge_energy_used AS "ChargeEnergyUsed",
+                a.latitude AS "Latitude",
+                a.longitude AS "Longitude"
+            FROM charging_processes cp
+            LEFT JOIN addresses a ON cp.address_id = a.id
+            WHERE cp.car_id = @CarId
+              AND cp.charge_energy_added > 0.01
+              AND a.latitude IS NOT NULL
+              AND a.longitude IS NOT NULL
+              AND (
+                  6371000.0 * 2 * ASIN(SQRT(
+                      POWER(SIN(RADIANS(a.latitude - @Lat) / 2), 2)
+                      + COS(RADIANS(@Lat)) * COS(RADIANS(a.latitude))
+                      * POWER(SIN(RADIANS(a.longitude - @Lng) / 2), 2)
+                  ))
+              ) <= @Radius
+            ORDER BY cp.start_date
+            """, new { CarId = carId, Lat = lat, Lng = lng, Radius = radiusMeters });
+    }
+
+    public static async Task<IEnumerable<int>> GetCarIdsAsync(this TeslaMateConnectionFactory db)
+    {
+        using var conn = db.CreateConnection();
+        return await conn.QueryAsync<int>("SELECT id FROM cars ORDER BY id");
+    }
 }

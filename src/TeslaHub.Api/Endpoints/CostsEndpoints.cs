@@ -22,7 +22,7 @@ public static class CostsEndpoints
             return Results.Ok(await query.OrderBy(l => l.Name).ToListAsync());
         });
 
-        group.MapPost("/locations", async (ChargingLocationCreateDto dto, AppDbContext db) =>
+        group.MapPost("/locations", async (ChargingLocationCreateDto dto, AppDbContext db, CostService costService) =>
         {
             var location = new ChargingLocation
             {
@@ -41,10 +41,12 @@ public static class CostsEndpoints
 
             db.ChargingLocations.Add(location);
             await db.SaveChangesAsync();
-            return Results.Created($"/api/costs/locations/{location.Id}", location);
+
+            var applied = await costService.ApplyLocationPricingAsync(location);
+            return Results.Created($"/api/costs/locations/{location.Id}", new { location, sessionsUpdated = applied });
         });
 
-        group.MapPut("/locations/{id:int}", async (int id, ChargingLocationCreateDto dto, AppDbContext db) =>
+        group.MapPut("/locations/{id:int}", async (int id, ChargingLocationCreateDto dto, AppDbContext db, CostService costService) =>
         {
             var location = await db.ChargingLocations.FindAsync(id);
             if (location == null) return Results.NotFound();
@@ -63,7 +65,9 @@ public static class CostsEndpoints
             location.UpdatedAt = DateTime.UtcNow;
 
             await db.SaveChangesAsync();
-            return Results.Ok(location);
+
+            var applied = await costService.ApplyLocationPricingAsync(location);
+            return Results.Ok(new { location, sessionsUpdated = applied });
         });
 
         group.MapDelete("/locations/{id:int}", async (int id, AppDbContext db) =>
