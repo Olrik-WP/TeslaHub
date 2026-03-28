@@ -38,7 +38,8 @@ public static class VehicleQueries
                 s.state AS "State",
                 u.version AS "FirmwareVersion",
                 cap.current_capacity_kwh AS "CurrentCapacityKwh",
-                maxcap.max_capacity_kwh AS "MaxCapacityKwh"
+                maxcap.max_capacity_kwh AS "MaxCapacityKwh",
+                COALESCE(kms.km_since_last_charge, 0) AS "KmSinceLastCharge"
             FROM cars c
             LEFT JOIN LATERAL (
                 SELECT * FROM positions
@@ -111,6 +112,18 @@ public static class VehicleQueries
                     AND cp2.end_date IS NOT NULL
                     AND cp2.charge_energy_added >= eff.rated_efficiency
             ) maxcap ON true
+            LEFT JOIN LATERAL (
+                SELECT SUM(d.distance) AS km_since_last_charge
+                FROM drives d
+                WHERE d.car_id = c.id
+                  AND d.distance IS NOT NULL
+                  AND d.start_date >= (
+                      SELECT cp.end_date
+                      FROM charging_processes cp
+                      WHERE cp.car_id = c.id AND cp.end_date IS NOT NULL
+                      ORDER BY cp.end_date DESC LIMIT 1
+                  )
+            ) kms ON true
             WHERE c.id = @CarId
             """, new { CarId = carId });
     }

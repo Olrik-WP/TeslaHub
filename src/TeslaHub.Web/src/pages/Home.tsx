@@ -125,11 +125,23 @@ export default function Home({ carId }: Props) {
     return lastCompletedCharge.cost;
   })();
 
-  const kmDriven = lastCompletedCharge?.distanceSinceLastCharge;
+  const kmSinceCharge = vehicle?.kmSinceLastCharge ?? 0;
+
+  const costConsumed = (() => {
+    if (lastChargeCost == null || lastChargeCost <= 0 || !lastCompletedCharge) return null;
+    const endBat = lastCompletedCharge.endBatteryLevel;
+    const startBat = lastCompletedCharge.startBatteryLevel;
+    const currentBat = vehicle?.batteryLevel;
+    if (endBat == null || startBat == null || currentBat == null) return null;
+    const added = endBat - startBat;
+    if (added <= 0) return null;
+    const used = Math.max(0, endBat - currentBat);
+    return Math.min(lastChargeCost * used / added, lastChargeCost);
+  })();
 
   const costPerKm = (() => {
-    if (lastChargeCost == null || lastChargeCost <= 0 || !kmDriven || kmDriven < 1) return null;
-    return lastChargeCost / u.convertDistance(kmDriven)!;
+    if (costConsumed == null || costConsumed <= 0 || kmSinceCharge < 1) return null;
+    return costConsumed / u.convertDistance(kmSinceCharge)!;
   })();
 
   const tempColor = (t: number | null | undefined) =>
@@ -214,17 +226,15 @@ export default function Home({ carId }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {lastCompletedCharge && (
+            {lastCompletedCharge && lastChargeCost != null && lastChargeCost > 0 && (
               <div className="text-right cursor-pointer" onClick={() => navigate('/charging')}>
                 <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.lastCharge')}</div>
                 <div className="text-base font-bold tabular-nums text-[#e31937]">
-                  {lastChargeCost != null && lastChargeCost > 0
-                    ? `${lastChargeCost.toFixed(2)} ${u.currencySymbol}`
-                    : `${lastCompletedCharge.chargeEnergyAdded?.toFixed(0) ?? '—'} kWh`}
+                  {costConsumed != null ? `${costConsumed.toFixed(2)} / ` : ''}{lastChargeCost.toFixed(2)} {u.currencySymbol}
                 </div>
-                {kmDriven != null && kmDriven > 0 && (
+                {kmSinceCharge >= 1 && (
                   <div className="text-[10px] text-[#9ca3af]">
-                    {Math.round(u.convertDistance(kmDriven)!)} {u.distanceUnit} {t('home.driven')}
+                    {Math.round(u.convertDistance(kmSinceCharge)!)} {u.distanceUnit} {t('home.sinceCharge')}
                     {costPerKm != null && ` · ${costPerKm.toFixed(2)} ${u.currencySymbol}/${u.distanceUnit}`}
                   </div>
                 )}
@@ -253,20 +263,18 @@ export default function Home({ carId }: Props) {
               <div className="text-[10px] text-[#9ca3af]">{u.distanceUnit === 'mi' ? 'mph' : 'km/h'}</div>
             </div>
           )}
-          {lastCompletedCharge && (
+          {lastCompletedCharge && lastChargeCost != null && lastChargeCost > 0 && (
             <div
               className="hidden sm:block absolute right-[230px] bottom-2 z-20 bg-black/60 rounded-xl px-3 py-2 text-center cursor-pointer hover:bg-black/80 transition-colors"
               onClick={() => navigate('/charging')}
             >
               <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.lastCharge')}</div>
               <div className="text-xl font-bold tabular-nums text-[#e31937]">
-                {lastChargeCost != null && lastChargeCost > 0
-                  ? `${lastChargeCost.toFixed(2)} ${u.currencySymbol}`
-                  : `${lastCompletedCharge.chargeEnergyAdded?.toFixed(0) ?? '—'} kWh`}
+                {costConsumed != null ? `${costConsumed.toFixed(2)} / ` : ''}{lastChargeCost.toFixed(2)} {u.currencySymbol}
               </div>
-              {kmDriven != null && kmDriven > 0 && (
+              {kmSinceCharge >= 1 && (
                 <div className="text-[10px] text-[#9ca3af]">
-                  {Math.round(u.convertDistance(kmDriven)!)} {u.distanceUnit} {t('home.driven')}
+                  {Math.round(u.convertDistance(kmSinceCharge)!)} {u.distanceUnit} {t('home.sinceCharge')}
                 </div>
               )}
               {costPerKm != null && (

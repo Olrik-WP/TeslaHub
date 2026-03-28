@@ -33,6 +33,7 @@ export interface VehicleStatus {
   state: string | null;
   firmwareVersion: string | null;
   currentCapacityKwh: number | null;
+  kmSinceLastCharge: number;
   maxCapacityKwh: number | null;
 }
 

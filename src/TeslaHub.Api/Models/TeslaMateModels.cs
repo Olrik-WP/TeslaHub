@@ -28,6 +28,7 @@ public record VehicleDto
     public string? FirmwareVersion { get; init; }
     public double? CurrentCapacityKwh { get; init; }
     public double? MaxCapacityKwh { get; init; }
+    public double KmSinceLastCharge { get; init; }
 }
 
 public record DriveDto
