@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES } from '../i18n';
 import type { GlobalSettings, ChargingLocation } from '../api/queries';
+import CustomSelect from '../components/CustomSelect';
 
 interface Props {
   carId: number | undefined;
@@ -193,56 +194,59 @@ export default function Settings({ carId }: Props) {
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-4">
         <div>
           <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.currency')}</label>
-          <select className={inputClass} value={form.currency ?? 'EUR'} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
-            <option value="EUR">EUR (€)</option>
-            <option value="USD">USD ($)</option>
-            <option value="GBP">GBP (£)</option>
-            <option value="CHF">CHF</option>
-            <option value="NOK">NOK (kr)</option>
-            <option value="SEK">SEK (kr)</option>
-            <option value="DKK">DKK (kr)</option>
-            <option value="CAD">CAD (CA$)</option>
-            <option value="AUD">AUD (A$)</option>
-            <option value="NZD">NZD (NZ$)</option>
-            <option value="PLN">PLN (zł)</option>
-            <option value="CZK">CZK (Kč)</option>
-            <option value="HUF">HUF (Ft)</option>
-            <option value="CNY">CNY (¥)</option>
-            <option value="JPY">JPY (¥)</option>
-            <option value="KRW">KRW (₩)</option>
-            <option value="ILS">ILS (₪)</option>
-            <option value="AED">AED</option>
-            <option value="SGD">SGD (S$)</option>
-            <option value="HKD">HKD (HK$)</option>
-            <option value="TWD">TWD (NT$)</option>
-            <option value="THB">THB (฿)</option>
-            <option value="MXN">MXN (MX$)</option>
-            <option value="BRL">BRL (R$)</option>
-            <option value="INR">INR (₹)</option>
-            <option value="TRY">TRY (₺)</option>
-            <option value="ZAR">ZAR (R)</option>
-          </select>
+          <CustomSelect
+            value={form.currency ?? 'EUR'}
+            onChange={(v) => setForm({ ...form, currency: v })}
+            options={[
+              { value: 'EUR', label: 'EUR (€)' }, { value: 'USD', label: 'USD ($)' },
+              { value: 'GBP', label: 'GBP (£)' }, { value: 'CHF', label: 'CHF' },
+              { value: 'NOK', label: 'NOK (kr)' }, { value: 'SEK', label: 'SEK (kr)' },
+              { value: 'DKK', label: 'DKK (kr)' }, { value: 'CAD', label: 'CAD (CA$)' },
+              { value: 'AUD', label: 'AUD (A$)' }, { value: 'NZD', label: 'NZD (NZ$)' },
+              { value: 'PLN', label: 'PLN (zł)' }, { value: 'CZK', label: 'CZK (Kč)' },
+              { value: 'HUF', label: 'HUF (Ft)' }, { value: 'CNY', label: 'CNY (¥)' },
+              { value: 'JPY', label: 'JPY (¥)' }, { value: 'KRW', label: 'KRW (₩)' },
+              { value: 'ILS', label: 'ILS (₪)' }, { value: 'AED', label: 'AED' },
+              { value: 'SGD', label: 'SGD (S$)' }, { value: 'HKD', label: 'HKD (HK$)' },
+              { value: 'TWD', label: 'TWD (NT$)' }, { value: 'THB', label: 'THB (฿)' },
+              { value: 'MXN', label: 'MXN (MX$)' }, { value: 'BRL', label: 'BRL (R$)' },
+              { value: 'INR', label: 'INR (₹)' }, { value: 'TRY', label: 'TRY (₺)' },
+              { value: 'ZAR', label: 'ZAR (R)' },
+            ]}
+          />
         </div>
         <div>
           <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.unitOfLength')}</label>
-          <select className={inputClass} value={form.unitOfLength ?? 'km'} onChange={(e) => setForm({ ...form, unitOfLength: e.target.value })}>
-            <option value="km">{t('settings.km')}</option>
-            <option value="mi">{t('settings.mi')}</option>
-          </select>
+          <CustomSelect
+            value={form.unitOfLength ?? 'km'}
+            onChange={(v) => setForm({ ...form, unitOfLength: v })}
+            options={[
+              { value: 'km', label: t('settings.km') },
+              { value: 'mi', label: t('settings.mi') },
+            ]}
+          />
         </div>
         <div>
           <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.temperature')}</label>
-          <select className={inputClass} value={form.unitOfTemperature ?? 'C'} onChange={(e) => setForm({ ...form, unitOfTemperature: e.target.value })}>
-            <option value="C">{t('settings.celsius')}</option>
-            <option value="F">{t('settings.fahrenheit')}</option>
-          </select>
+          <CustomSelect
+            value={form.unitOfTemperature ?? 'C'}
+            onChange={(v) => setForm({ ...form, unitOfTemperature: v })}
+            options={[
+              { value: 'C', label: t('settings.celsius') },
+              { value: 'F', label: t('settings.fahrenheit') },
+            ]}
+          />
         </div>
         <div>
           <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.costSource')}</label>
-          <select className={inputClass} value={form.costSource ?? 'teslahub'} onChange={(e) => setForm({ ...form, costSource: e.target.value })}>
-            <option value="teslahub">{t('settings.teslahubManual')}</option>
-            <option value="teslamate">{t('settings.teslaMateGeofence')}</option>
-          </select>
+          <CustomSelect
+            value={form.costSource ?? 'teslahub'}
+            onChange={(v) => setForm({ ...form, costSource: v })}
+            options={[
+              { value: 'teslahub', label: t('settings.teslahubManual') },
+              { value: 'teslamate', label: t('settings.teslaMateGeofence') },
+            ]}
+          />
           <p className="text-xs text-[#6b7280] mt-1">
             {(form.costSource ?? 'teslahub') === 'teslahub'
               ? t('settings.costSourceTeslahub')
@@ -251,18 +255,14 @@ export default function Settings({ carId }: Props) {
         </div>
         <div>
           <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.language')}</label>
-          <select
-            className={inputClass}
+          <CustomSelect
             value={i18n.language}
-            onChange={(e) => {
-              i18n.changeLanguage(e.target.value);
-              localStorage.setItem('teslahub_lang', e.target.value);
+            onChange={(v) => {
+              i18n.changeLanguage(v);
+              localStorage.setItem('teslahub_lang', v);
             }}
-          >
-            {LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>{l.label}</option>
-            ))}
-          </select>
+            options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
+          />
         </div>
         <button onClick={() => save.mutate()} className="bg-[#e31937] text-white px-6 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f]">
           {save.isPending ? t('settings.saving') : t('settings.saveSettings')}
