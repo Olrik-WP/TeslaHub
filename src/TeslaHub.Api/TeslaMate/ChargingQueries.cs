@@ -32,10 +32,16 @@ public static class ChargingQueries
                     ch.fast_charger_present,
                     ch.fast_charger_type,
                     ch.charge_type,
-                    p.odometer,
-                    p.odometer - LAG(p.odometer) OVER (ORDER BY cp.start_date) AS distance_since_last_charge
+                    COALESCE(p.odometer, p2.odometer) AS odometer,
+                    COALESCE(p.odometer, p2.odometer)
+                        - LAG(COALESCE(p.odometer, p2.odometer)) OVER (ORDER BY cp.start_date) AS distance_since_last_charge
                 FROM charging_processes cp
                 LEFT JOIN positions p ON p.id = cp.position_id
+                LEFT JOIN LATERAL (
+                    SELECT odometer FROM positions
+                    WHERE car_id = cp.car_id AND date <= cp.start_date AND odometer IS NOT NULL
+                    ORDER BY date DESC LIMIT 1
+                ) p2 ON p.odometer IS NULL
                 LEFT JOIN addresses a ON cp.address_id = a.id
                 LEFT JOIN geofences g ON cp.geofence_id = g.id
                 LEFT JOIN LATERAL (
