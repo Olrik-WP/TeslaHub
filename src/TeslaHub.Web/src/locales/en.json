@@ -59,7 +59,8 @@
     "lastCharge": "Last Charge",
     "driven": "driven",
     "sinceCharge": "since charge",
-    "costPerKm": "cost/{{unit}}"
+    "costPerKm": "cost/{{unit}}",
+    "costExplain": "Shows how much of your last charge cost ({{total}}) you've consumed so far, based on your actual battery usage. Resets after each charge."
   },
   "charging": {
     "7days": "7 days",

@@ -108,6 +108,7 @@ export default function Home({ carId }: Props) {
   const { t } = useTranslation();
   const [imgError, setImgError] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
+  const [showCostInfo, setShowCostInfo] = useState(false);
 
   const lastDrive = drives?.[0];
   const lastCharge = charges?.[0];
@@ -227,9 +228,15 @@ export default function Home({ carId }: Props) {
           </div>
           <div className="flex items-center gap-4">
             {lastCompletedCharge && lastChargeCost != null && lastChargeCost > 0 && (
-              <div className="text-right cursor-pointer" onClick={() => navigate('/charging')}>
-                <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.lastCharge')}</div>
-                <div className="text-base font-bold tabular-nums text-[#e31937]">
+              <div className="text-right">
+                <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider flex items-center justify-end gap-1">
+                  <span className="cursor-pointer" onClick={() => navigate('/charging')}>{t('home.lastCharge')}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowCostInfo(!showCostInfo); }}
+                    className="w-3.5 h-3.5 rounded-full border border-[#9ca3af]/50 text-[8px] text-[#9ca3af] flex items-center justify-center"
+                  >i</button>
+                </div>
+                <div className="text-base font-bold tabular-nums text-[#e31937] cursor-pointer" onClick={() => navigate('/charging')}>
                   {costConsumed != null ? `${costConsumed.toFixed(2)} / ` : ''}{lastChargeCost.toFixed(2)} {u.currencySymbol}
                 </div>
                 {kmSinceCharge >= 1 && (
@@ -265,11 +272,16 @@ export default function Home({ carId }: Props) {
           )}
           {lastCompletedCharge && lastChargeCost != null && lastChargeCost > 0 && (
             <div
-              className="hidden sm:block absolute right-[230px] bottom-2 z-20 bg-black/60 rounded-xl px-3 py-2 text-center cursor-pointer hover:bg-black/80 transition-colors"
-              onClick={() => navigate('/charging')}
+              className="hidden sm:block absolute right-[230px] bottom-2 z-20 bg-black/60 rounded-xl px-3 py-2 text-center hover:bg-black/80 transition-colors"
             >
-              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.lastCharge')}</div>
-              <div className="text-xl font-bold tabular-nums text-[#e31937]">
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider flex items-center justify-center gap-1">
+                <span className="cursor-pointer" onClick={() => navigate('/charging')}>{t('home.lastCharge')}</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowCostInfo(!showCostInfo); }}
+                  className="w-3.5 h-3.5 rounded-full border border-[#9ca3af]/50 text-[8px] text-[#9ca3af] flex items-center justify-center cursor-pointer"
+                >i</button>
+              </div>
+              <div className="text-xl font-bold tabular-nums text-[#e31937] cursor-pointer" onClick={() => navigate('/charging')}>
                 {costConsumed != null ? `${costConsumed.toFixed(2)} / ` : ''}{lastChargeCost.toFixed(2)} {u.currencySymbol}
               </div>
               {kmSinceCharge >= 1 && (
@@ -305,6 +317,15 @@ export default function Home({ carId }: Props) {
             />
           </div>
         </div>
+
+        {showCostInfo && lastChargeCost != null && (
+          <div
+            className="mx-3 mb-2 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-xs text-[#9ca3af] leading-relaxed cursor-pointer"
+            onClick={() => setShowCostInfo(false)}
+          >
+            {t('home.costExplain', { total: `${lastChargeCost.toFixed(2)} ${u.currencySymbol}` })}
+          </div>
+        )}
 
         {/* Bottom row: mileage extrapolations */}
         {driveStats && driveStats.driveCount > 0 && (

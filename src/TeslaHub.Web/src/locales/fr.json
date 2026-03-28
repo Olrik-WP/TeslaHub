@@ -59,7 +59,8 @@
     "lastCharge": "Dernière charge",
     "driven": "parcourus",
     "sinceCharge": "depuis charge",
-    "costPerKm": "coût/{{unit}}"
+    "costPerKm": "coût/{{unit}}",
+    "costExplain": "Indique combien de votre dernière charge ({{total}}) a été consommé, basé sur votre utilisation réelle de la batterie. Se remet à zéro après chaque charge."
   },
   "charging": {
     "7days": "7 jours",
