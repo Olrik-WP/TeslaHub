@@ -125,26 +125,11 @@ export default function Home({ carId }: Props) {
     return lastCompletedCharge.cost;
   })();
 
-  const kmSinceLastCharge = (() => {
-    if (vehicle?.odometer && lastCompletedCharge?.odometer) {
-      const diff = vehicle.odometer - lastCompletedCharge.odometer;
-      if (diff >= 0) return diff;
-    }
-    if (drives && lastCompletedCharge?.endDate) {
-      const chargeEnd = new Date(lastCompletedCharge.endDate).getTime();
-      const total = drives
-        .filter((d) => d.endDate && new Date(d.startDate).getTime() >= chargeEnd && d.distance != null)
-        .reduce((sum, d) => sum + d.distance!, 0);
-      if (total > 0) return total;
-    }
-    if (lastCompletedCharge?.distanceSinceLastCharge != null && lastCompletedCharge.distanceSinceLastCharge > 0)
-      return lastCompletedCharge.distanceSinceLastCharge;
-    return null;
-  })();
+  const kmDriven = lastCompletedCharge?.distanceSinceLastCharge;
 
   const costPerKm = (() => {
-    if (lastChargeCost == null || lastChargeCost <= 0 || !kmSinceLastCharge || kmSinceLastCharge < 1) return null;
-    return lastChargeCost / u.convertDistance(kmSinceLastCharge)!;
+    if (lastChargeCost == null || lastChargeCost <= 0 || !kmDriven || kmDriven < 1) return null;
+    return lastChargeCost / u.convertDistance(kmDriven)!;
   })();
 
   const tempColor = (t: number | null | undefined) =>
@@ -237,9 +222,9 @@ export default function Home({ carId }: Props) {
                     ? `${lastChargeCost.toFixed(2)} ${u.currencySymbol}`
                     : `${lastCompletedCharge.chargeEnergyAdded?.toFixed(0) ?? '—'} kWh`}
                 </div>
-                {kmSinceLastCharge != null && kmSinceLastCharge >= 1 && (
+                {kmDriven != null && kmDriven > 0 && (
                   <div className="text-[10px] text-[#9ca3af]">
-                    {Math.round(u.convertDistance(kmSinceLastCharge)!)} {u.distanceUnit} {t('home.sinceCharge')}
+                    {Math.round(u.convertDistance(kmDriven)!)} {u.distanceUnit} {t('home.driven')}
                     {costPerKm != null && ` · ${costPerKm.toFixed(2)} ${u.currencySymbol}/${u.distanceUnit}`}
                   </div>
                 )}
@@ -279,9 +264,9 @@ export default function Home({ carId }: Props) {
                   ? `${lastChargeCost.toFixed(2)} ${u.currencySymbol}`
                   : `${lastCompletedCharge.chargeEnergyAdded?.toFixed(0) ?? '—'} kWh`}
               </div>
-              {kmSinceLastCharge != null && kmSinceLastCharge >= 1 && (
+              {kmDriven != null && kmDriven > 0 && (
                 <div className="text-[10px] text-[#9ca3af]">
-                  {Math.round(u.convertDistance(kmSinceLastCharge)!)} {u.distanceUnit} {t('home.sinceCharge')}
+                  {Math.round(u.convertDistance(kmDriven)!)} {u.distanceUnit} {t('home.driven')}
                 </div>
               )}
               {costPerKm != null && (
