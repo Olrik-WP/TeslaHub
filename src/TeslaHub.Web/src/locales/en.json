@@ -57,7 +57,9 @@
     "added": "Added",
     "duration": "Duration",
     "lastCharge": "Last Charge",
-    "driven": "driven"
+    "driven": "driven",
+    "sinceCharge": "since charge",
+    "costPerKm": "cost/{{unit}}"
   },
   "charging": {
     "7days": "7 days",
@@ -188,6 +190,7 @@
     "chargingLocations": "Charging locations",
     "manualEntry": "Manual entry",
     "home": "Home",
+    "edit": "Edit",
     "delete": "Delete",
     "noLocations": "No locations configured. Tap \"Define this location\" on a charging session to add one.",
     "changePassword": "Change password",

@@ -50,10 +50,59 @@ export default function Settings({ carId }: Props) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
   });
 
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<{
+    name: string; pricingType: string; peakPrice: string; offPeakPrice: string;
+    offPeakStart: string; offPeakEnd: string; monthlyAmount: string; radius: string;
+  }>({ name: '', pricingType: 'manual', peakPrice: '', offPeakPrice: '', offPeakStart: '22:00', offPeakEnd: '06:00', monthlyAmount: '', radius: '200' });
+
+  const invalidateLocationCaches = () => {
+    queryClient.invalidateQueries({ queryKey: ['chargingLocations'] });
+    queryClient.invalidateQueries({ queryKey: ['costOverrides'] });
+    queryClient.invalidateQueries({ queryKey: ['chargingSessions'] });
+  };
+
   const deleteLocation = useMutation({
     mutationFn: (id: number) => api(`/costs/locations/${id}`, { method: 'DELETE' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['chargingLocations'] }),
+    onSuccess: () => invalidateLocationCaches(),
   });
+
+  const updateLocation = useMutation({
+    mutationFn: (loc: ChargingLocation) => api(`/costs/locations/${loc.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: editForm.name,
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        radiusMeters: parseInt(editForm.radius) || 200,
+        pricingType: editForm.pricingType,
+        peakPricePerKwh: editForm.peakPrice ? parseFloat(editForm.peakPrice) : null,
+        offPeakPricePerKwh: editForm.offPeakPrice ? parseFloat(editForm.offPeakPrice) : null,
+        offPeakStart: editForm.pricingType === 'home' ? editForm.offPeakStart : null,
+        offPeakEnd: editForm.pricingType === 'home' ? editForm.offPeakEnd : null,
+        monthlySubscription: editForm.monthlyAmount ? parseFloat(editForm.monthlyAmount) : null,
+        carId: loc.carId,
+      }),
+    }),
+    onSuccess: () => {
+      invalidateLocationCaches();
+      setEditingId(null);
+    },
+  });
+
+  const startEdit = (loc: ChargingLocation) => {
+    setEditingId(loc.id);
+    setEditForm({
+      name: loc.name,
+      pricingType: loc.pricingType,
+      peakPrice: loc.peakPricePerKwh?.toString() ?? '',
+      offPeakPrice: loc.offPeakPricePerKwh?.toString() ?? '',
+      offPeakStart: loc.offPeakStart ?? '22:00',
+      offPeakEnd: loc.offPeakEnd ?? '06:00',
+      monthlyAmount: loc.monthlySubscription?.toString() ?? '',
+      radius: loc.radiusMeters.toString(),
+    });
+  };
 
   const handleSaveTeslaUrl = async () => {
     if (!carId || !teslaUrl.trim()) return;
@@ -298,21 +347,88 @@ export default function Settings({ carId }: Props) {
         <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">{t('settings.chargingLocations')}</div>
         <div className="space-y-2">
           {(locations ?? []).map((loc) => (
-            <div key={loc.id} className="flex items-center justify-between bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-sm font-medium truncate">{loc.name}</span>
-                  {pricingBadge(loc.pricingType)}
+            <div key={loc.id} className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-medium truncate">{loc.name}</span>
+                    {pricingBadge(loc.pricingType)}
+                  </div>
+                  <div className="text-xs text-[#6b7280]">{pricingLabel(loc)}</div>
+                  <div className="text-xs text-[#4b5563] mt-0.5">{t('settings.radiusLine', { meters: loc.radiusMeters })}</div>
                 </div>
-                <div className="text-xs text-[#6b7280]">{pricingLabel(loc)}</div>
-                <div className="text-xs text-[#4b5563] mt-0.5">{t('settings.radiusLine', { meters: loc.radiusMeters })}</div>
+                <div className="flex gap-1 ml-2">
+                  <button
+                    onClick={() => editingId === loc.id ? setEditingId(null) : startEdit(loc)}
+                    className="text-[#3b82f6] text-xs px-2 py-1 rounded min-h-[32px] active:bg-[#3b82f6]/10"
+                  >
+                    {editingId === loc.id ? t('charging.cancel') : t('settings.edit')}
+                  </button>
+                  <button
+                    onClick={() => deleteLocation.mutate(loc.id)}
+                    disabled={deleteLocation.isPending}
+                    className="text-[#ef4444] text-xs px-2 py-1 rounded min-h-[32px] active:bg-[#ef4444]/10"
+                  >
+                    {t('settings.delete')}
+                  </button>
+                </div>
               </div>
-              <button
-                onClick={() => deleteLocation.mutate(loc.id)}
-                className="text-[#ef4444] text-xs px-2 py-1 rounded min-h-[32px] ml-2 active:bg-[#ef4444]/10"
-              >
-                {t('settings.delete')}
-              </button>
+
+              {editingId === loc.id && (
+                <div className="mt-3 pt-3 border-t border-[#2a2a2a] space-y-3">
+                  <input className={inputClass} placeholder={t('charging.locationName')} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+
+                  <div className="flex gap-2">
+                    {(['manual', 'home', 'subscription'] as const).map((pt) => (
+                      <button
+                        key={pt}
+                        type="button"
+                        onClick={() => setEditForm({ ...editForm, pricingType: pt })}
+                        className={`flex-1 py-2 rounded-lg text-xs font-medium min-h-[40px] transition-colors ${
+                          editForm.pricingType === pt ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
+                        }`}
+                      >
+                        {pt === 'manual' ? t('charging.manual') : pt === 'home' ? t('charging.homeHcHp') : t('charging.subscription')}
+                      </button>
+                    ))}
+                  </div>
+
+                  {editForm.pricingType === 'home' && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input className={inputClass} type="number" step="0.0001" placeholder={`${t('charging.peak')} ${u.currencySymbol}/kWh`} value={editForm.peakPrice} onChange={(e) => setEditForm({ ...editForm, peakPrice: e.target.value })} />
+                        <input className={inputClass} type="number" step="0.0001" placeholder={`${t('charging.offPeak')} ${u.currencySymbol}/kWh`} value={editForm.offPeakPrice} onChange={(e) => setEditForm({ ...editForm, offPeakPrice: e.target.value })} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input className={inputClass} type="time" value={editForm.offPeakStart} onChange={(e) => setEditForm({ ...editForm, offPeakStart: e.target.value })} />
+                        <input className={inputClass} type="time" value={editForm.offPeakEnd} onChange={(e) => setEditForm({ ...editForm, offPeakEnd: e.target.value })} />
+                      </div>
+                    </>
+                  )}
+
+                  {editForm.pricingType === 'subscription' && (
+                    <input className={inputClass} type="number" step="0.01" placeholder={`${t('charging.monthlyAmount')} (${u.currencySymbol})`} value={editForm.monthlyAmount} onChange={(e) => setEditForm({ ...editForm, monthlyAmount: e.target.value })} />
+                  )}
+
+                  <input className={inputClass} type="number" placeholder={t('charging.radius')} value={editForm.radius} onChange={(e) => setEditForm({ ...editForm, radius: e.target.value })} />
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => updateLocation.mutate(loc)}
+                      disabled={updateLocation.isPending}
+                      className="bg-[#3b82f6] text-white px-4 py-2 rounded-lg text-sm font-medium min-h-[40px] active:bg-[#2563eb] transition-colors"
+                    >
+                      {updateLocation.isPending ? t('charging.savingLocation') : t('charging.updateLocation')}
+                    </button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="bg-[#2a2a2a] text-[#9ca3af] px-4 py-2 rounded-lg text-sm min-h-[40px]"
+                    >
+                      {t('charging.cancel')}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
           {(!locations || locations.length === 0) && (

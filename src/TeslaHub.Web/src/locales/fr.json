@@ -57,7 +57,9 @@
     "added": "Ajouté",
     "duration": "Durée",
     "lastCharge": "Dernière charge",
-    "driven": "parcourus"
+    "driven": "parcourus",
+    "sinceCharge": "depuis charge",
+    "costPerKm": "coût/{{unit}}"
   },
   "charging": {
     "7days": "7 jours",
@@ -188,6 +190,7 @@
     "chargingLocations": "Lieux de charge",
     "manualEntry": "Saisie manuelle",
     "home": "Domicile",
+    "edit": "Modifier",
     "delete": "Supprimer",
     "noLocations": "Aucun lieu configuré. Appuyez sur « Définir ce lieu » sur une session de charge pour en ajouter un.",
     "changePassword": "Changer le mot de passe",

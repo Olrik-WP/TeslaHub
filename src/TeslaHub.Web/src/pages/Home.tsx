@@ -125,6 +125,17 @@ export default function Home({ carId }: Props) {
     return lastCompletedCharge.cost;
   })();
 
+  const kmSinceLastCharge = (() => {
+    if (!vehicle?.odometer || !lastCompletedCharge?.odometer) return null;
+    const diff = vehicle.odometer - lastCompletedCharge.odometer;
+    return diff >= 0 ? diff : null;
+  })();
+
+  const costPerKm = (() => {
+    if (lastChargeCost == null || lastChargeCost <= 0 || !kmSinceLastCharge || kmSinceLastCharge < 1) return null;
+    return lastChargeCost / u.convertDistance(kmSinceLastCharge)!;
+  })();
+
   const tempColor = (t: number | null | undefined) =>
     t == null ? undefined : t <= 0 ? '#3b82f6' : t < 10 ? '#60a5fa' : t < 20 ? '#9ca3af' : t < 30 ? '#f97316' : '#ef4444';
 
@@ -215,8 +226,11 @@ export default function Home({ carId }: Props) {
                     ? `${lastChargeCost.toFixed(2)} ${u.currencySymbol}`
                     : `${lastCompletedCharge.chargeEnergyAdded?.toFixed(0) ?? '—'} kWh`}
                 </div>
-                {lastCompletedCharge.distanceSinceLastCharge != null && lastCompletedCharge.distanceSinceLastCharge > 0 && (
-                  <div className="text-[10px] text-[#9ca3af]">{Math.round(u.convertDistance(lastCompletedCharge.distanceSinceLastCharge)!)} {u.distanceUnit} {t('home.driven')}</div>
+                {kmSinceLastCharge != null && kmSinceLastCharge >= 1 && (
+                  <div className="text-[10px] text-[#9ca3af]">
+                    {Math.round(u.convertDistance(kmSinceLastCharge)!)} {u.distanceUnit} {t('home.sinceCharge')}
+                    {costPerKm != null && ` · ${costPerKm.toFixed(2)} ${u.currencySymbol}/${u.distanceUnit}`}
+                  </div>
                 )}
               </div>
             )}
@@ -254,8 +268,15 @@ export default function Home({ carId }: Props) {
                   ? `${lastChargeCost.toFixed(2)} ${u.currencySymbol}`
                   : `${lastCompletedCharge.chargeEnergyAdded?.toFixed(0) ?? '—'} kWh`}
               </div>
-              {lastCompletedCharge.distanceSinceLastCharge != null && lastCompletedCharge.distanceSinceLastCharge > 0 && (
-                <div className="text-[10px] text-[#9ca3af]">{Math.round(u.convertDistance(lastCompletedCharge.distanceSinceLastCharge)!)} {u.distanceUnit} {t('home.driven')}</div>
+              {kmSinceLastCharge != null && kmSinceLastCharge >= 1 && (
+                <div className="text-[10px] text-[#9ca3af]">
+                  {Math.round(u.convertDistance(kmSinceLastCharge)!)} {u.distanceUnit} {t('home.sinceCharge')}
+                </div>
+              )}
+              {costPerKm != null && (
+                <div className="text-[10px] text-[#9ca3af]">
+                  {costPerKm.toFixed(2)} {u.currencySymbol}/{u.distanceUnit}
+                </div>
               )}
             </div>
           )}

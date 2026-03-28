@@ -415,7 +415,7 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
           {session.latitude != null && session.longitude != null && (
             <button
               onClick={() => setShowLocationForm(!showLocationForm)}
-              className="text-xs text-[#3b82f6] underline"
+              className="bg-[#3b82f6] text-white px-4 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#2563eb] transition-colors w-full"
             >
               {showLocationForm ? t('charging.hideLocation') : t('charging.defineLocation')}
             </button>
@@ -500,6 +500,8 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chargingLocations'] });
+      queryClient.invalidateQueries({ queryKey: ['costOverrides'] });
+      queryClient.invalidateQueries({ queryKey: ['chargingSessions'] });
       onDone();
     },
   });
