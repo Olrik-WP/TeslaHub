@@ -126,10 +126,17 @@ export default function Home({ carId }: Props) {
   })();
 
   const kmSinceLastCharge = (() => {
-    if (!vehicle?.odometer || !lastCompletedCharge?.odometer) return null;
-    const diff = vehicle.odometer - lastCompletedCharge.odometer;
-    return diff >= 0 ? diff : null;
+    if (vehicle?.odometer && lastCompletedCharge?.odometer) {
+      const diff = vehicle.odometer - lastCompletedCharge.odometer;
+      if (diff >= 0) return diff;
+    }
+    if (lastCompletedCharge?.distanceSinceLastCharge != null && lastCompletedCharge.distanceSinceLastCharge > 0)
+      return lastCompletedCharge.distanceSinceLastCharge;
+    return null;
   })();
+
+  const isLiveKm = !!(vehicle?.odometer && lastCompletedCharge?.odometer
+    && (vehicle.odometer - lastCompletedCharge.odometer) >= 0);
 
   const costPerKm = (() => {
     if (lastChargeCost == null || lastChargeCost <= 0 || !kmSinceLastCharge || kmSinceLastCharge < 1) return null;
@@ -228,7 +235,7 @@ export default function Home({ carId }: Props) {
                 </div>
                 {kmSinceLastCharge != null && kmSinceLastCharge >= 1 && (
                   <div className="text-[10px] text-[#9ca3af]">
-                    {Math.round(u.convertDistance(kmSinceLastCharge)!)} {u.distanceUnit} {t('home.sinceCharge')}
+                    {Math.round(u.convertDistance(kmSinceLastCharge)!)} {u.distanceUnit} {isLiveKm ? t('home.sinceCharge') : t('home.driven')}
                     {costPerKm != null && ` · ${costPerKm.toFixed(2)} ${u.currencySymbol}/${u.distanceUnit}`}
                   </div>
                 )}
@@ -270,7 +277,7 @@ export default function Home({ carId }: Props) {
               </div>
               {kmSinceLastCharge != null && kmSinceLastCharge >= 1 && (
                 <div className="text-[10px] text-[#9ca3af]">
-                  {Math.round(u.convertDistance(kmSinceLastCharge)!)} {u.distanceUnit} {t('home.sinceCharge')}
+                  {Math.round(u.convertDistance(kmSinceLastCharge)!)} {u.distanceUnit} {isLiveKm ? t('home.sinceCharge') : t('home.driven')}
                 </div>
               )}
               {costPerKm != null && (
