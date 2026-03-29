@@ -29,25 +29,20 @@ function efficiencyColor(eff: number | null): string {
 }
 
 export default function Trips({ carId }: Props) {
-  const { data: drives, isLoading } = useDrives(carId, 200);
   const [period, setPeriod] = useState<PeriodKey>('30d');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const navigate = useNavigate();
   const u = useUnits();
   const { t } = useTranslation();
 
+  const selectedPeriod = PERIOD_OPTIONS.find((p) => p.key === period)!;
+  const { data: drives, isLoading } = useDrives(carId, 500, selectedPeriod.days);
+
   if (isLoading) {
     return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>;
   }
 
-  const selectedPeriod = PERIOD_OPTIONS.find((p) => p.key === period)!;
-  const cutoff = selectedPeriod.days
-    ? new Date(Date.now() - selectedPeriod.days * 86400_000)
-    : null;
-
-  const driveList = (drives ?? []).filter(
-    (d) => !cutoff || utcDate(d.startDate) >= cutoff
-  );
+  const driveList = drives ?? [];
 
   const totalDist = driveList.reduce((sum, d) => sum + (u.convertDistance(d.distance) ?? 0), 0);
   const tripCount = driveList.length;

@@ -188,8 +188,8 @@ export const getCars = () => api<Car[]>('/vehicle/cars');
 export const getVehicleStatus = (carId: number) => api<VehicleStatus>(`/vehicle/${carId}/status`);
 
 // ─── Drives ─────────────────────────────────────────────────────
-export const getDrives = (carId: number, limit = 20, offset = 0) =>
-  api<Drive[]>(`/drives/${carId}?limit=${limit}&offset=${offset}`);
+export const getDrives = (carId: number, limit = 20, offset = 0, days?: number) =>
+  api<Drive[]>(`/drives/${carId}?limit=${limit}&offset=${offset}${days ? `&days=${days}` : ''}`);
 export const getDrivePositions = (driveId: number) => api<Position[]>(`/drives/positions/${driveId}`);
 
 // ─── Charging ───────────────────────────────────────────────────

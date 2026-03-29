@@ -5,7 +5,7 @@ namespace TeslaHub.Api.TeslaMate;
 
 public static class DrivesQueries
 {
-    public static async Task<IEnumerable<DriveDto>> GetDrivesAsync(this TeslaMateConnectionFactory db, int carId, int limit = 20, int offset = 0)
+    public static async Task<IEnumerable<DriveDto>> GetDrivesAsync(this TeslaMateConnectionFactory db, int carId, int limit = 20, int offset = 0, int? days = null)
     {
         using var conn = db.CreateConnection();
         return await conn.QueryAsync<DriveDto>("""
@@ -59,9 +59,10 @@ public static class DrivesQueries
             LEFT JOIN positions ep ON d.end_position_id = ep.id
             LEFT JOIN reduced_range_info rr ON d.id = rr.drive_id
             WHERE d.car_id = @CarId
+              AND (@Days IS NULL OR d.start_date >= NOW() - INTERVAL '1 day' * @Days)
             ORDER BY d.start_date DESC
             LIMIT @Limit OFFSET @Offset
-            """, new { CarId = carId, Limit = limit, Offset = offset });
+            """, new { CarId = carId, Limit = limit, Offset = offset, Days = days });
     }
 
     public static async Task<DriveStatsDto?> GetDriveStatsAsync(this TeslaMateConnectionFactory db, int carId)

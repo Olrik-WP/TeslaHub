@@ -9,13 +9,13 @@ public static class DrivesEndpoints
     {
         var group = app.MapGroup("/api/drives").RequireAuthorization();
 
-        group.MapGet("/{carId:int}", async (int carId, int? limit, int? offset, TeslaMateConnectionFactory tm, CacheService cache) =>
+        group.MapGet("/{carId:int}", async (int carId, int? limit, int? offset, int? days, TeslaMateConnectionFactory tm, CacheService cache) =>
         {
             var l = limit ?? 20;
             var o = offset ?? 0;
             var drives = await cache.GetOrSetHistoricalAsync(
-                $"drives:{carId}:{l}:{o}",
-                () => tm.GetDrivesAsync(carId, l, o));
+                $"drives:{carId}:{l}:{o}:{days}",
+                () => tm.GetDrivesAsync(carId, l, o, days));
             return Results.Ok(drives);
         });
 
