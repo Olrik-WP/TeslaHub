@@ -37,8 +37,8 @@ export default function Charging({ carId }: Props) {
   const chargeTypeParam = typeFilter === 'all' ? undefined : typeFilter;
 
   const { data: sessions, isLoading } = useQuery({
-    queryKey: ['charging', carId, 100, 0, chargeTypeParam],
-    queryFn: () => getChargingSessions(carId!, 100, 0, chargeTypeParam),
+    queryKey: ['charging', carId, 500, 0, chargeTypeParam, selectedPeriod.days],
+    queryFn: () => getChargingSessions(carId!, 500, 0, chargeTypeParam, selectedPeriod.days),
     enabled: !!carId,
     staleTime: 30_000,
   });
@@ -61,14 +61,7 @@ export default function Charging({ carId }: Props) {
 
   const overrideMap = new Map(overrides?.map((o) => [o.chargingProcessId, o]));
   const activeSession = sessions?.find((s) => !s.endDate);
-
-  const cutoff = selectedPeriod.days
-    ? new Date(Date.now() - selectedPeriod.days * 86400_000)
-    : null;
-
-  const filteredSessions = (sessions?.filter((s) => s.endDate) ?? []).filter(
-    (s) => !cutoff || utcDate(s.startDate) >= cutoff
-  );
+  const filteredSessions = sessions?.filter((s) => s.endDate) ?? [];
 
   const chartData = filteredSessions
     .slice(0, 20)

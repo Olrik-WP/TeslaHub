@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 const links = [
   { to: '/', labelKey: 'nav.home', icon: '⌂' },
   { to: '/charging', labelKey: 'nav.charging', icon: '⚡' },
-  { to: '/charging-stats', labelKey: 'nav.dcCurve', icon: '⚡' },
+  { to: '/charging-stats', labelKey: 'nav.dcCurve', icon: '📈' },
   { to: '/trips', labelKey: 'nav.trips', icon: '⟿' },
   { to: '/map', labelKey: 'nav.map', icon: '◉' },
   { to: '/costs', labelKey: 'nav.costs', icon: '◆' },

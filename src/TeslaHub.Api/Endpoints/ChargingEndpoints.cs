@@ -9,14 +9,14 @@ public static class ChargingEndpoints
     {
         var group = app.MapGroup("/api/charging").RequireAuthorization();
 
-        group.MapGet("/{carId:int}", async (int carId, int? limit, int? offset, string? chargeType, TeslaMateConnectionFactory tm, CacheService cache) =>
+        group.MapGet("/{carId:int}", async (int carId, int? limit, int? offset, string? chargeType, int? days, TeslaMateConnectionFactory tm, CacheService cache) =>
         {
             var l = limit ?? 20;
             var o = offset ?? 0;
             var ct = chargeType is "AC" or "DC" ? chargeType : null;
             var sessions = await cache.GetOrSetHistoricalAsync(
-                $"charging:{carId}:{l}:{o}:{ct}",
-                () => tm.GetChargingSessionsAsync(carId, l, o, ct));
+                $"charging:{carId}:{l}:{o}:{ct}:{days}",
+                () => tm.GetChargingSessionsAsync(carId, l, o, ct, days));
             return Results.Ok(sessions);
         });
 
