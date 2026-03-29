@@ -39,12 +39,12 @@ public static class ChargingQueries
                 LEFT JOIN addresses a ON cp.address_id = a.id
                 LEFT JOIN geofences g ON cp.geofence_id = g.id
                 LEFT JOIN LATERAL (
-                    SELECT fast_charger_present, fast_charger_type,
+                    SELECT bool_or(fast_charger_present) AS fast_charger_present,
+                           mode() WITHIN GROUP (ORDER BY fast_charger_type) AS fast_charger_type,
                            CASE WHEN NULLIF(mode() WITHIN GROUP (ORDER BY charger_phases), 0) IS NULL
                                 THEN 'DC' ELSE 'AC' END AS charge_type
                     FROM charges
                     WHERE charging_process_id = cp.id
-                    GROUP BY fast_charger_present, fast_charger_type
                 ) ch ON true
                 WHERE cp.car_id = @CarId
                   AND (@ChargeType IS NULL OR ch.charge_type = @ChargeType)
