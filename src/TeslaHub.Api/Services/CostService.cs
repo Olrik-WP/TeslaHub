@@ -200,6 +200,24 @@ public class CostService
     }
 
     /// <summary>
+    /// Auto-apply pricing for ALL saved locations that match a given car.
+    /// Called on overrides load so new sessions always get priced automatically.
+    /// </summary>
+    public async Task<int> AutoApplyAllLocationsPricingAsync(int carId)
+    {
+        var locations = await _db.ChargingLocations
+            .Where(l => l.CarId == null || l.CarId == carId)
+            .Where(l => l.PricingType == "home" || l.PricingType == "subscription")
+            .ToListAsync();
+
+        var total = 0;
+        foreach (var location in locations)
+            total += await ApplyLocationPricingAsync(location);
+
+        return total;
+    }
+
+    /// <summary>
     /// Auto-apply location pricing to all matching charging sessions that don't have a manual override.
     /// </summary>
     public async Task<int> ApplyLocationPricingAsync(ChargingLocation location)
