@@ -200,8 +200,9 @@ public class CostService
     }
 
     /// <summary>
-    /// Auto-apply pricing for ALL saved locations that match a given car.
-    /// Called on overrides load so new sessions always get priced automatically.
+    /// Auto-apply pricing for ALL saved locations for a specific car.
+    /// Only creates overrides for sessions that have NO existing override,
+    /// so repeated calls on page load are fast no-ops.
     /// </summary>
     public async Task<int> AutoApplyAllLocationsPricingAsync(int carId)
     {
@@ -212,19 +213,27 @@ public class CostService
 
         var total = 0;
         foreach (var location in locations)
-            total += await ApplyLocationPricingAsync(location);
+            total += await ApplyLocationPricingAsync(location, onlyNewSessions: true, scopeCarId: carId);
 
         return total;
     }
 
     /// <summary>
-    /// Auto-apply location pricing to all matching charging sessions that don't have a manual override.
+    /// Auto-apply location pricing to matching charging sessions.
+    /// When <paramref name="scopeCarId"/> is set, only that car is processed (used by page-load auto-apply).
+    /// When <paramref name="onlyNewSessions"/> is true, sessions that already have ANY override are skipped (fast path).
+    /// When false, only sessions with a manual override are skipped, allowing price updates to propagate.
     /// </summary>
-    public async Task<int> ApplyLocationPricingAsync(ChargingLocation location)
+    public async Task<int> ApplyLocationPricingAsync(
+        ChargingLocation location, bool onlyNewSessions = false, int? scopeCarId = null)
     {
-        var carIds = location.CarId.HasValue
-            ? new[] { location.CarId.Value }
-            : (await _tm.GetCarIdsAsync()).ToArray();
+        int[] carIds;
+        if (scopeCarId.HasValue)
+            carIds = new[] { scopeCarId.Value };
+        else if (location.CarId.HasValue)
+            carIds = new[] { location.CarId.Value };
+        else
+            carIds = (await _tm.GetCarIdsAsync()).ToArray();
 
         var created = 0;
 
@@ -234,7 +243,7 @@ public class CostService
                 carId, location.Latitude, location.Longitude, location.RadiusMeters);
 
             var existingProcessIds = (await _db.ChargingCostOverrides
-                .Where(c => c.CarId == carId && c.IsManualOverride)
+                .Where(c => c.CarId == carId && (onlyNewSessions || c.IsManualOverride))
                 .Select(c => c.ChargingProcessId)
                 .ToListAsync())
                 .ToHashSet();
