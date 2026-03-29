@@ -206,7 +206,8 @@
     "aboutDesc": "TeslaHub — Application compagnon TeslaMate",
     "aboutSub": "Auto-hébergé, respect de la vie privée",
     "poweredBy": "Propulsé par TeslaMate — lecture seule, aucune donnée modifiée",
-    "radiusLine": "Rayon : {{meters}} m"
+    "radiusLine": "Rayon : {{meters}} m",
+    "newVersionAvailable": "v{{version}} disponible !"
   },
   "battery": {
     "charging": "Charge"
