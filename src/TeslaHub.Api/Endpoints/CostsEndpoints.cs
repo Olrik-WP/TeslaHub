@@ -87,8 +87,10 @@ public static class CostsEndpoints
             return Results.Ok(result);
         });
 
-        group.MapGet("/overrides/{carId:int}", async (int carId, AppDbContext db) =>
+        group.MapGet("/overrides/{carId:int}", async (int carId, AppDbContext db, CostService costService) =>
         {
+            await costService.AutoApplyAllLocationsPricingAsync(carId);
+
             var overrides = await db.ChargingCostOverrides
                 .Include(c => c.Location)
                 .Where(c => c.CarId == carId)

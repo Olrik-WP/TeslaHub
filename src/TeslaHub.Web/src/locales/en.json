@@ -133,6 +133,11 @@
   "trips": {
     "title": "Trips",
     "distPerDay": "Distance per day",
+    "totalDistance": "Total distance",
+    "tripCount": "Trips",
+    "avgConsumption": "Ø Consumption",
+    "avgPerTrip": "Ø Dist/trip",
+    "noTrips": "No trips for this period",
     "max": "Max",
     "energy": "Energy",
     "efficiency": "Efficiency",
@@ -206,7 +211,8 @@
     "aboutDesc": "TeslaHub — TeslaMate companion app",
     "aboutSub": "Self-hosted, privacy-first",
     "poweredBy": "Powered by TeslaMate — read-only, no data modified",
-    "radiusLine": "Radius: {{meters}}m"
+    "radiusLine": "Radius: {{meters}}m",
+    "newVersionAvailable": "v{{version}} available!"
   },
   "battery": {
     "charging": "Charge"

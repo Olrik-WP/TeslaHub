@@ -5,11 +5,21 @@ import { useDrives } from '../hooks/useDrives';
 import { useUnits } from '../hooks/useUnits';
 import { utcDate } from '../utils/date';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
+import StatCard from '../components/StatCard';
 import type { Drive } from '../api/queries';
 
 interface Props {
   carId: number | undefined;
 }
+
+type PeriodKey = '7d' | '30d' | '90d' | 'all';
+
+const PERIOD_OPTIONS: { key: PeriodKey; labelKey: string; days?: number }[] = [
+  { key: '7d', labelKey: 'charging.7days', days: 7 },
+  { key: '30d', labelKey: 'charging.30days', days: 30 },
+  { key: '90d', labelKey: 'charging.90days', days: 90 },
+  { key: 'all', labelKey: 'charging.all' },
+];
 
 function efficiencyColor(eff: number | null): string {
   if (eff == null) return '#9ca3af';
@@ -19,17 +29,29 @@ function efficiencyColor(eff: number | null): string {
 }
 
 export default function Trips({ carId }: Props) {
-  const { data: drives, isLoading } = useDrives(carId, 30);
+  const [period, setPeriod] = useState<PeriodKey>('30d');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const navigate = useNavigate();
   const u = useUnits();
   const { t } = useTranslation();
+
+  const selectedPeriod = PERIOD_OPTIONS.find((p) => p.key === period)!;
+  const { data: drives, isLoading } = useDrives(carId, 500, selectedPeriod.days);
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>;
   }
 
   const driveList = drives ?? [];
+
+  const totalDist = driveList.reduce((sum, d) => sum + (u.convertDistance(d.distance) ?? 0), 0);
+  const tripCount = driveList.length;
+  const avgDistPerTrip = tripCount > 0 ? totalDist / tripCount : 0;
+  const consumptionDrives = driveList.filter((d) => d.consumptionKWhPer100Km != null && d.distance != null && d.distance > 0);
+  const avgConsumption = consumptionDrives.length > 0
+    ? consumptionDrives.reduce((sum, d) => sum + d.consumptionKWhPer100Km! * d.distance!, 0)
+      / consumptionDrives.reduce((sum, d) => sum + d.distance!, 0)
+    : null;
 
   const dailyData: Record<string, number> = {};
   driveList.forEach((d) => {
@@ -43,7 +65,35 @@ export default function Trips({ carId }: Props) {
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-xl font-bold">{t('trips.title')}</h1>
+      {/* Period selector */}
+      <div className="flex flex-wrap gap-1">
+        {PERIOD_OPTIONS.map((opt) => (
+          <button
+            key={opt.key}
+            onClick={() => setPeriod(opt.key)}
+            className={`px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors ${
+              period === opt.key ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
+            }`}
+          >
+            {t(opt.labelKey)}
+          </button>
+        ))}
+      </div>
+
+      {/* Summary stats */}
+      {tripCount > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label={t('trips.totalDistance')} value={Math.round(totalDist)} unit={u.distanceUnit} color="#e31937" />
+          <StatCard label={t('trips.tripCount')} value={tripCount} />
+          <StatCard
+            label={t('trips.avgConsumption')}
+            value={avgConsumption != null ? u.fmtConsumption(avgConsumption) : '—'}
+            unit={avgConsumption != null ? u.consumptionUnit : undefined}
+            color="#eab308"
+          />
+          <StatCard label={t('trips.avgPerTrip')} value={Math.round(avgDistPerTrip)} unit={u.distanceUnit} />
+        </div>
+      )}
 
       {chartData.length > 0 && (
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
@@ -71,6 +121,9 @@ export default function Trips({ carId }: Props) {
             t={t}
           />
         ))}
+        {driveList.length === 0 && (
+          <div className="text-center text-[#9ca3af] py-8">{t('trips.noTrips')}</div>
+        )}
       </div>
     </div>
   );

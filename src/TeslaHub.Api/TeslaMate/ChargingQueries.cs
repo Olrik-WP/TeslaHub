@@ -5,7 +5,7 @@ namespace TeslaHub.Api.TeslaMate;
 
 public static class ChargingQueries
 {
-    public static async Task<IEnumerable<ChargingSessionDto>> GetChargingSessionsAsync(this TeslaMateConnectionFactory db, int carId, int limit = 20, int offset = 0, string? chargeType = null)
+    public static async Task<IEnumerable<ChargingSessionDto>> GetChargingSessionsAsync(this TeslaMateConnectionFactory db, int carId, int limit = 20, int offset = 0, string? chargeType = null, int? days = null)
     {
         using var conn = db.CreateConnection();
         return await conn.QueryAsync<ChargingSessionDto>("""
@@ -39,15 +39,16 @@ public static class ChargingQueries
                 LEFT JOIN addresses a ON cp.address_id = a.id
                 LEFT JOIN geofences g ON cp.geofence_id = g.id
                 LEFT JOIN LATERAL (
-                    SELECT fast_charger_present, fast_charger_type,
+                    SELECT bool_or(fast_charger_present) AS fast_charger_present,
+                           mode() WITHIN GROUP (ORDER BY fast_charger_type) AS fast_charger_type,
                            CASE WHEN NULLIF(mode() WITHIN GROUP (ORDER BY charger_phases), 0) IS NULL
                                 THEN 'DC' ELSE 'AC' END AS charge_type
                     FROM charges
                     WHERE charging_process_id = cp.id
-                    GROUP BY fast_charger_present, fast_charger_type
                 ) ch ON true
                 WHERE cp.car_id = @CarId
                   AND (@ChargeType IS NULL OR ch.charge_type = @ChargeType)
+                  AND (@Days IS NULL OR cp.start_date >= NOW() - INTERVAL '1 day' * @Days)
             )
             SELECT
                 id AS "Id", car_id AS "CarId",
@@ -87,7 +88,7 @@ public static class ChargingQueries
             FROM data
             ORDER BY start_date DESC
             LIMIT @Limit OFFSET @Offset
-            """, new { CarId = carId, Limit = limit, Offset = offset, ChargeType = chargeType });
+            """, new { CarId = carId, Limit = limit, Offset = offset, ChargeType = chargeType, Days = days });
     }
 
     public static async Task<IEnumerable<ChargePointDto>> GetChargePointsAsync(this TeslaMateConnectionFactory db, int chargingProcessId)

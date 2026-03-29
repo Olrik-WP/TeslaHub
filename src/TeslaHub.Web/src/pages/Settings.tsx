@@ -21,6 +21,17 @@ export default function Settings({ carId }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings });
+  const { data: latestVersion } = useQuery({
+    queryKey: ['latestVersion'],
+    queryFn: async () => {
+      const res = await fetch('https://api.github.com/repos/Olrik-WP/TeslaHub/releases/latest');
+      if (!res.ok) return null;
+      const data = await res.json();
+      return (data.tag_name as string)?.replace(/^v/, '') ?? null;
+    },
+    staleTime: 60 * 60_000,
+    retry: false,
+  });
   const { data: locations } = useQuery({
     queryKey: ['chargingLocations', carId],
     queryFn: () => getChargingLocations(carId),
@@ -517,6 +528,19 @@ export default function Settings({ carId }: Props) {
           >
             Source code
           </a>
+        </div>
+        <div className="mt-2 text-xs text-[#4b5563] flex items-center justify-between">
+          <span>v{__APP_VERSION__}</span>
+          {latestVersion && latestVersion !== __APP_VERSION__ && __APP_VERSION__ !== 'dev' && (
+            <a
+              href={`https://github.com/Olrik-WP/TeslaHub/releases/tag/v${latestVersion}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#22c55e] hover:underline"
+            >
+              {t('settings.newVersionAvailable', { version: latestVersion })}
+            </a>
+          )}
         </div>
       </div>
 

@@ -188,13 +188,13 @@ export const getCars = () => api<Car[]>('/vehicle/cars');
 export const getVehicleStatus = (carId: number) => api<VehicleStatus>(`/vehicle/${carId}/status`);
 
 // ─── Drives ─────────────────────────────────────────────────────
-export const getDrives = (carId: number, limit = 20, offset = 0) =>
-  api<Drive[]>(`/drives/${carId}?limit=${limit}&offset=${offset}`);
+export const getDrives = (carId: number, limit = 20, offset = 0, days?: number) =>
+  api<Drive[]>(`/drives/${carId}?limit=${limit}&offset=${offset}${days ? `&days=${days}` : ''}`);
 export const getDrivePositions = (driveId: number) => api<Position[]>(`/drives/positions/${driveId}`);
 
 // ─── Charging ───────────────────────────────────────────────────
-export const getChargingSessions = (carId: number, limit = 20, offset = 0, chargeType?: string) =>
-  api<ChargingSession[]>(`/charging/${carId}?limit=${limit}&offset=${offset}${chargeType ? `&chargeType=${chargeType}` : ''}`);
+export const getChargingSessions = (carId: number, limit = 20, offset = 0, chargeType?: string, days?: number) =>
+  api<ChargingSession[]>(`/charging/${carId}?limit=${limit}&offset=${offset}${chargeType ? `&chargeType=${chargeType}` : ''}${days ? `&days=${days}` : ''}`);
 export const getChargePoints = (carId: number, processId: number) =>
   api<ChargePoint[]>(`/charging/${carId}/${processId}/points`);
 
