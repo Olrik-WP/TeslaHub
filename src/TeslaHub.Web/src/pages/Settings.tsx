@@ -518,6 +518,9 @@ export default function Settings({ carId }: Props) {
             Source code
           </a>
         </div>
+        <div className="mt-2 text-xs text-[#4b5563]">
+          v{__APP_VERSION__}
+        </div>
       </div>
 
       <button onClick={handleLogout} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-[#ef4444] py-3 rounded-xl text-sm font-medium min-h-[48px] active:bg-[#2a2a2a]">

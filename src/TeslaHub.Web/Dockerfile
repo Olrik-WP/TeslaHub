@@ -1,4 +1,6 @@
 FROM node:22-alpine AS build
+ARG APP_VERSION=dev
+ENV APP_VERSION=${APP_VERSION}
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
