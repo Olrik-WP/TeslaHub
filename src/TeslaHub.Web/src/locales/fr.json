@@ -133,6 +133,11 @@
   "trips": {
     "title": "Trajets",
     "distPerDay": "Distance par jour",
+    "totalDistance": "Distance totale",
+    "tripCount": "Trajets",
+    "avgConsumption": "Ø Conso",
+    "avgPerTrip": "Ø Dist/trajet",
+    "noTrips": "Aucun trajet pour cette période",
     "max": "Max",
     "energy": "Énergie",
     "efficiency": "Efficacité",

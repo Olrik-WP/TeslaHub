@@ -133,6 +133,11 @@
   "trips": {
     "title": "Trips",
     "distPerDay": "Distance per day",
+    "totalDistance": "Total distance",
+    "tripCount": "Trips",
+    "avgConsumption": "Ø Consumption",
+    "avgPerTrip": "Ø Dist/trip",
+    "noTrips": "No trips for this period",
     "max": "Max",
     "energy": "Energy",
     "efficiency": "Efficiency",
