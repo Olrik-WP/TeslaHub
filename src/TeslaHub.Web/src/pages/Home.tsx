@@ -485,12 +485,11 @@ export default function Home({ carId }: Props) {
             <div className="px-3 pt-2 pb-1">
               <span className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.position')}</span>
             </div>
-            <div className="h-[160px] sm:h-[220px] relative">
-              <div className="absolute inset-0 z-[1000]" />
+            <div className="h-[160px] sm:h-[220px]">
               <MapContainer
                 center={[vehicle.latitude, vehicle.longitude]}
                 zoom={15}
-                className="w-full h-full"
+                className="w-full h-full pointer-events-none"
                 zoomControl={false}
                 attributionControl={false}
                 dragging={false}

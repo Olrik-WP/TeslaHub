@@ -43,6 +43,5 @@ body {
 
 .leaflet-container {
   background: var(--color-bg) !important;
-  touch-action: none;
   -webkit-user-select: none;
 }
