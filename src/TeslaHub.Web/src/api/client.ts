@@ -2,6 +2,13 @@ const API_BASE = '/api';
 
 let accessToken: string | null = localStorage.getItem('teslahub_token');
 
+type AuthExpiredHandler = () => void;
+let onAuthExpired: AuthExpiredHandler | null = null;
+
+export function setAuthExpiredHandler(handler: AuthExpiredHandler) {
+  onAuthExpired = handler;
+}
+
 export function setAccessToken(token: string) {
   accessToken = token;
   localStorage.setItem('teslahub_token', token);
@@ -58,7 +65,11 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
       res = await doFetch();
     } else {
       clearTokens();
-      window.location.href = '/login';
+      if (onAuthExpired) {
+        onAuthExpired();
+      } else {
+        window.location.href = '/login';
+      }
       throw new Error('Session expired');
     }
   }

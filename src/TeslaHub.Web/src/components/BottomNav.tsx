@@ -17,7 +17,7 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-[9999] flex items-center justify-around bg-[#141414] border-t border-[#2a2a2a] h-16 px-1"
+      className="fixed bottom-0 left-0 right-0 z-[9999] flex items-center justify-around bg-[#141414] border-t border-[#2a2a2a] h-16 px-1 pb-safe"
       style={{
         WebkitTransform: 'translateZ(0)',
         transform: 'translateZ(0)',

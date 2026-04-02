@@ -1,13 +1,14 @@
 import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
-import { isAuthenticated, tryInitialRefresh } from './api/client';
+import { isAuthenticated, tryInitialRefresh, setAuthExpiredHandler } from './api/client';
 import { useCars } from './hooks/useVehicle';
 import { getSettings } from './api/queries';
 import BottomNav from './components/BottomNav';
 import CarSelector from './components/CarSelector';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const Login = lazy(() => import('./pages/Login'));
 const Home = lazy(() => import('./pages/Home'));
@@ -30,6 +31,15 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+function AuthExpiredBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    setAuthExpiredHandler(() => navigate('/login', { replace: true }));
+    return () => setAuthExpiredHandler(() => {});
+  }, [navigate]);
+  return null;
+}
 
 function ProtectedRoute() {
   const { t } = useTranslation();
@@ -97,19 +107,21 @@ function AppLayout() {
           onChange={handleCarChange}
         />
       )}
-      <div className="flex-1 overflow-y-auto pb-20">
-        <Suspense fallback={<div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>}>
-          <Routes>
-            <Route path="/" element={<Home carId={selectedCarId} />} />
-            <Route path="/charging" element={<Charging carId={selectedCarId} />} />
-            <Route path="/trips" element={<Trips carId={selectedCarId} />} />
-            <Route path="/map" element={<MapPage carId={selectedCarId} />} />
-            <Route path="/costs" element={<Costs carId={selectedCarId} />} />
-            <Route path="/charging-stats" element={<ChargingStats carId={selectedCarId} />} />
-            <Route path="/vampire" element={<VampireDrain carId={selectedCarId} />} />
-            <Route path="/settings" element={<Settings carId={selectedCarId} />} />
-          </Routes>
-        </Suspense>
+      <div className="flex-1 overflow-y-auto pb-20 pb-safe">
+        <ErrorBoundary>
+          <Suspense fallback={<div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>}>
+            <Routes>
+              <Route path="/" element={<Home carId={selectedCarId} />} />
+              <Route path="/charging" element={<Charging carId={selectedCarId} />} />
+              <Route path="/trips" element={<Trips carId={selectedCarId} />} />
+              <Route path="/map" element={<MapPage carId={selectedCarId} />} />
+              <Route path="/costs" element={<Costs carId={selectedCarId} />} />
+              <Route path="/charging-stats" element={<ChargingStats carId={selectedCarId} />} />
+              <Route path="/vampire" element={<VampireDrain carId={selectedCarId} />} />
+              <Route path="/settings" element={<Settings carId={selectedCarId} />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </div>
       <BottomNav />
     </div>
@@ -118,17 +130,20 @@ function AppLayout() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Suspense fallback={<div className="flex items-center justify-center h-dvh text-[#9ca3af]">{i18n.t('app.loading')}</div>}>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route element={<ProtectedRoute />}>
-              <Route path="/*" element={<AppLayout />} />
-            </Route>
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AuthExpiredBridge />
+          <Suspense fallback={<div className="flex items-center justify-center h-dvh text-[#9ca3af]">{i18n.t('app.loading')}</div>}>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route element={<ProtectedRoute />}>
+                <Route path="/*" element={<AppLayout />} />
+              </Route>
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

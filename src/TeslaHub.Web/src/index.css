@@ -28,16 +28,21 @@ body {
   user-select: none;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: none;
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 * {
   -webkit-tap-highlight-color: transparent;
 }
 
-.leaflet-container {
-  background: var(--color-bg) !important;
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
-.dark-mode-tiles {
-  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+.leaflet-container {
+  background: var(--color-bg) !important;
+  touch-action: none;
+  -webkit-user-select: none;
 }

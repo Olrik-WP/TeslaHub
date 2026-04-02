@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, useMap } from 'react-leaflet';
 import { useVehicleStatus } from '../hooks/useVehicle';
 import { useChargingSessions } from '../hooks/useCharging';
 import { useDrives } from '../hooks/useDrives';
@@ -485,7 +485,8 @@ export default function Home({ carId }: Props) {
             <div className="px-3 pt-2 pb-1">
               <span className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.position')}</span>
             </div>
-            <div className="h-[160px] sm:h-[220px]">
+            <div className="h-[160px] sm:h-[220px] relative">
+              <div className="absolute inset-0 z-[1000]" />
               <MapContainer
                 center={[vehicle.latitude, vehicle.longitude]}
                 zoom={15}
@@ -498,9 +499,8 @@ export default function Home({ carId }: Props) {
                 touchZoom={false}
               >
                 <TileLayer
-                  url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
                   maxZoom={19}
-                  className="dark-mode-tiles"
                 />
                 <RecenterMap lat={vehicle.latitude} lng={vehicle.longitude} />
                 <CircleMarker
@@ -510,9 +510,7 @@ export default function Home({ carId }: Props) {
                   fillOpacity={1}
                   color="#ffffff"
                   weight={3}
-                >
-                  <Popup>{vehicle.name || 'My Tesla'}</Popup>
-                </CircleMarker>
+                />
               </MapContainer>
             </div>
             <div className="px-3 py-2">
