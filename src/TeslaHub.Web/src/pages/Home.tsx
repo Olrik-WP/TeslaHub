@@ -116,11 +116,17 @@ export default function Home({ carId }: Props) {
   const lastCompletedCharge = charges?.find((s) => s.endDate);
   const imgSrc = carId ? `/api/vehicle/${carId}/image` : null;
 
+  const lastChargeOverride = costSource === 'teslahub'
+    ? overrides?.find((o) => o.chargingProcessId === lastCompletedCharge?.id) ?? null
+    : null;
+
+  const isLastChargeSubscription = lastChargeOverride?.location?.pricingType === 'subscription';
+
   const lastChargeCost = (() => {
     if (!lastCompletedCharge) return null;
+    if (isLastChargeSubscription) return 0;
     if (costSource === 'teslahub') {
-      const ov = overrides?.find((o) => o.chargingProcessId === lastCompletedCharge.id);
-      if (ov) return ov.isFree ? 0 : ov.totalCost;
+      if (lastChargeOverride) return lastChargeOverride.isFree ? 0 : lastChargeOverride.totalCost;
       return null;
     }
     return lastCompletedCharge.cost;
@@ -227,7 +233,18 @@ export default function Home({ carId }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {lastCompletedCharge && lastChargeCost != null && lastChargeCost > 0 && (
+            {lastCompletedCharge && isLastChargeSubscription && (
+              <div className="text-right cursor-pointer" onClick={() => navigate('/charging')}>
+                <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.lastCharge')}</div>
+                <div className="text-base font-bold tabular-nums text-[#3b82f6]">{t('home.subscription')}</div>
+                {kmSinceCharge >= 1 && (
+                  <div className="text-[10px] text-[#9ca3af]">
+                    {Math.round(u.convertDistance(kmSinceCharge)!)} {u.distanceUnit} {t('home.sinceCharge')}
+                  </div>
+                )}
+              </div>
+            )}
+            {lastCompletedCharge && !isLastChargeSubscription && lastChargeCost != null && lastChargeCost > 0 && (
               <div className="text-right">
                 <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider flex items-center justify-end gap-1">
                   <span className="cursor-pointer" onClick={() => navigate('/charging')}>{t('home.lastCharge')}</span>
@@ -270,7 +287,21 @@ export default function Home({ carId }: Props) {
               <div className="text-[10px] text-[#9ca3af]">{u.distanceUnit === 'mi' ? 'mph' : 'km/h'}</div>
             </div>
           )}
-          {lastCompletedCharge && lastChargeCost != null && lastChargeCost > 0 && (
+          {lastCompletedCharge && isLastChargeSubscription && (
+            <div
+              className="hidden sm:block absolute right-[230px] bottom-2 z-20 bg-black/60 rounded-xl px-3 py-2 text-center cursor-pointer hover:bg-black/80 transition-colors"
+              onClick={() => navigate('/charging')}
+            >
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.lastCharge')}</div>
+              <div className="text-xl font-bold tabular-nums text-[#3b82f6]">{t('home.subscription')}</div>
+              {kmSinceCharge >= 1 && (
+                <div className="text-[10px] text-[#9ca3af]">
+                  {Math.round(u.convertDistance(kmSinceCharge)!)} {u.distanceUnit} {t('home.sinceCharge')}
+                </div>
+              )}
+            </div>
+          )}
+          {lastCompletedCharge && !isLastChargeSubscription && lastChargeCost != null && lastChargeCost > 0 && (
             <div
               className="hidden sm:block absolute right-[230px] bottom-2 z-20 bg-black/60 rounded-xl px-3 py-2 text-center hover:bg-black/80 transition-colors"
             >

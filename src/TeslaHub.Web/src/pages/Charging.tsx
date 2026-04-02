@@ -248,15 +248,21 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
     saveCost.mutate({ isFree: true });
   };
 
+  const isSubscription = costOverride?.location?.pricingType === 'subscription';
+
   const displayCostRaw = isTeslaHub
     ? (costOverride
-        ? (costOverride.isFree || costOverride.totalCost === 0) ? 'Free' : `${costOverride.totalCost.toFixed(2)} ${u.currencySymbol}`
+        ? isSubscription ? 'Subscription'
+          : (costOverride.isFree || costOverride.totalCost === 0) ? 'Free'
+          : `${costOverride.totalCost.toFixed(2)} ${u.currencySymbol}`
         : null)
     : (session.cost != null && session.cost > 0
         ? `${session.cost.toFixed(2)} ${u.currencySymbol}`
         : session.cost === 0 ? 'Free' : null);
 
-  const displayCost = displayCostRaw === 'Free' ? t('charging.free') : displayCostRaw;
+  const displayCost = displayCostRaw === 'Free' ? t('charging.free')
+    : displayCostRaw === 'Subscription' ? t('charging.subscription')
+    : displayCostRaw;
 
   const previewText = (() => {
     const value = parseFloat(priceInput);
@@ -284,7 +290,11 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {displayCost && (
-            <span className={`text-sm font-medium ${displayCostRaw === 'Free' ? 'text-[#22c55e]' : 'text-white'}`}>
+            <span className={`text-sm font-medium ${
+              displayCostRaw === 'Free' ? 'text-[#22c55e]'
+              : displayCostRaw === 'Subscription' ? 'text-[#3b82f6]'
+              : 'text-white'
+            }`}>
               {displayCost}
             </span>
           )}
@@ -447,6 +457,7 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
   const [offPeakEnd, setOffPeakEnd] = useState('06:00');
   const [monthlyAmount, setMonthlyAmount] = useState('');
   const [radius, setRadius] = useState('200');
+  const [allVehicles, setAllVehicles] = useState(false);
 
   const [existingLocation, setExistingLocation] = useState<ChargingLocation | null>(null);
 
@@ -464,6 +475,7 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
         if (loc.offPeakEnd) setOffPeakEnd(loc.offPeakEnd);
         if (loc.monthlySubscription != null) setMonthlyAmount(loc.monthlySubscription.toString());
         setRadius(loc.radiusMeters.toString());
+        setAllVehicles(loc.carId == null);
       }
     },
   } as any);
@@ -481,7 +493,7 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
         offPeakStart: pricingType === 'home' ? offPeakStart : null,
         offPeakEnd: pricingType === 'home' ? offPeakEnd : null,
         monthlySubscription: monthlyAmount ? parseFloat(monthlyAmount) : null,
-        carId: carId ?? null,
+        carId: allVehicles ? null : (carId ?? null),
       };
       const url = existingLocation
         ? `/costs/locations/${existingLocation.id}`
@@ -538,6 +550,16 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
       )}
 
       <input className={inputClass} type="number" placeholder={t('charging.radius')} value={radius} onChange={(e) => setRadius(e.target.value)} />
+
+      <label className="flex items-center gap-2 text-sm text-[#9ca3af] cursor-pointer min-h-[44px]">
+        <input
+          type="checkbox"
+          checked={allVehicles}
+          onChange={(e) => setAllVehicles(e.target.checked)}
+          className="w-4 h-4 accent-[#3b82f6]"
+        />
+        {t('charging.allVehicles')}
+      </label>
 
       <div className="flex gap-2">
         <button onClick={() => save.mutate()} disabled={save.isPending} className="bg-[#e31937] text-white px-4 py-2 rounded-lg text-sm min-h-[40px] active:bg-[#c0152f]">

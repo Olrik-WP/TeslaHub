@@ -186,6 +186,7 @@ public record CostSummaryDto
     public int SessionCount { get; init; }
     public int FreeSessionCount { get; init; }
     public Dictionary<string, decimal> CostByLocation { get; init; } = new();
+    public decimal SubscriptionCost { get; init; }
 }
 
 public record MonthlyTrendDto

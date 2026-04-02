@@ -60,7 +60,8 @@
     "driven": "parcourus",
     "sinceCharge": "depuis charge",
     "costPerKm": "coût/{{unit}}",
-    "costExplain": "Indique combien de votre dernière charge ({{total}}) a été consommé, basé sur votre utilisation réelle de la batterie. Se remet à zéro après chaque charge."
+    "costExplain": "Indique combien de votre dernière charge ({{total}}) a été consommé, basé sur votre utilisation réelle de la batterie. Se remet à zéro après chaque charge.",
+    "subscription": "Abonnement"
   },
   "charging": {
     "7days": "7 jours",
@@ -94,6 +95,7 @@
     "offPeak": "Heures creuses",
     "monthlyAmount": "Montant mensuel",
     "radius": "Rayon (m)",
+    "allVehicles": "Toutes les voitures",
     "updateLocation": "Modifier le lieu",
     "saveLocation": "Enregistrer le lieu",
     "savingLocation": "Enregistrement...",

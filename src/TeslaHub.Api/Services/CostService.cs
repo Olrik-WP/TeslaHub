@@ -47,24 +47,6 @@ public class CostService
         };
     }
 
-    public async Task<decimal?> CalculateSubscriptionCostForSession(
-        ChargingLocation location, int carId, DateTime sessionStart)
-    {
-        if (location.PricingType != "subscription" || location.MonthlySubscription == null)
-            return null;
-
-        var monthStart = new DateTime(sessionStart.Year, sessionStart.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-        var monthEnd = monthStart.AddMonths(1);
-
-        var sessionsThisMonth = await _db.ChargingCostOverrides
-            .Where(c => c.LocationId == location.Id && c.CarId == carId
-                && c.CreatedAt >= monthStart && c.CreatedAt < monthEnd)
-            .CountAsync();
-
-        var count = Math.Max(sessionsThisMonth, 1);
-        return Math.Round(location.MonthlySubscription.Value / count, 2);
-    }
-
     public async Task<ChargingCostOverride> SetSessionCost(SessionCostDto dto)
     {
         var existing = await _db.ChargingCostOverrides
@@ -138,29 +120,104 @@ public class CostService
 
         var overrides = await query.ToListAsync();
 
-        var totalCost = overrides.Sum(c => c.TotalCost);
+        var sessionCost = overrides.Sum(c => c.TotalCost);
         var totalKwh = overrides
             .Where(c => c.PricePerKwh > 0 && !c.IsFree)
             .Sum(c => c.PricePerKwh > 0 ? c.TotalCost / c.PricePerKwh.Value : 0);
         var sessionCount = overrides.Count;
         var freeCount = overrides.Count(c => c.IsFree || c.TotalCost == 0);
 
+        var subscriptionCost = await CalculateSubscriptionTotal(carId, start, end);
+        var totalCost = sessionCost + subscriptionCost;
+
         var costByLocation = overrides
             .GroupBy(c => c.Location?.Name ?? "Other")
             .ToDictionary(g => g.Key, g => g.Sum(c => c.TotalCost));
+
+        foreach (var loc in await GetSubscriptionLocationsWithSessions(carId, start, end))
+        {
+            var existing = costByLocation.GetValueOrDefault(loc.Name, 0);
+            costByLocation[loc.Name] = existing + loc.Cost;
+        }
 
         return new CostSummaryDto
         {
             Period = label,
             TotalCost = totalCost,
             TotalKwh = totalKwh,
-            AvgPricePerKwh = totalKwh > 0 ? Math.Round(totalCost / totalKwh, 4) : 0,
+            AvgPricePerKwh = totalKwh > 0 ? Math.Round(sessionCost / totalKwh, 4) : 0,
             CostPerKm = totalDistanceKm > 0 ? Math.Round(totalCost / (decimal)totalDistanceKm, 4) : 0,
             TotalDistanceKm = (decimal)totalDistanceKm,
             SessionCount = sessionCount,
             FreeSessionCount = freeCount,
-            CostByLocation = costByLocation
+            CostByLocation = costByLocation,
+            SubscriptionCost = subscriptionCost
         };
+    }
+
+    /// <summary>
+    /// Calculate the total subscription cost for the period.
+    /// Each subscription location is charged once per month where at least one session exists.
+    /// </summary>
+    private async Task<decimal> CalculateSubscriptionTotal(int carId, DateTime? start, DateTime? end)
+    {
+        var subLocations = await _db.ChargingLocations
+            .Where(l => (l.CarId == null || l.CarId == carId)
+                && l.PricingType == "subscription" && l.MonthlySubscription != null)
+            .ToListAsync();
+
+        if (subLocations.Count == 0)
+            return 0;
+
+        decimal total = 0;
+        foreach (var loc in subLocations)
+        {
+            var sessionsQuery = _db.ChargingCostOverrides
+                .Where(c => c.CarId == carId && c.LocationId == loc.Id);
+
+            if (start.HasValue)
+                sessionsQuery = sessionsQuery.Where(c => c.CreatedAt >= start.Value);
+            if (end.HasValue)
+                sessionsQuery = sessionsQuery.Where(c => c.CreatedAt < end.Value);
+
+            var sessionDates = await sessionsQuery
+                .Select(c => c.CreatedAt)
+                .ToListAsync();
+
+            var distinctMonths = sessionDates
+                .Select(d => new { d.Year, d.Month })
+                .Distinct()
+                .Count();
+
+            total += loc.MonthlySubscription!.Value * distinctMonths;
+        }
+
+        return total;
+    }
+
+    private async Task<List<(string Name, decimal Cost)>> GetSubscriptionLocationsWithSessions(
+        int carId, DateTime? start, DateTime? end)
+    {
+        var subLocations = await _db.ChargingLocations
+            .Where(l => (l.CarId == null || l.CarId == carId)
+                && l.PricingType == "subscription" && l.MonthlySubscription != null)
+            .ToListAsync();
+
+        var results = new List<(string Name, decimal Cost)>();
+        foreach (var loc in subLocations)
+        {
+            var sessionsQuery = _db.ChargingCostOverrides
+                .Where(c => c.CarId == carId && c.LocationId == loc.Id);
+            if (start.HasValue) sessionsQuery = sessionsQuery.Where(c => c.CreatedAt >= start.Value);
+            if (end.HasValue) sessionsQuery = sessionsQuery.Where(c => c.CreatedAt < end.Value);
+
+            var distinctMonths = (await sessionsQuery.Select(c => c.CreatedAt).ToListAsync())
+                .Select(d => new { d.Year, d.Month }).Distinct().Count();
+
+            if (distinctMonths > 0)
+                results.Add((loc.Name, loc.MonthlySubscription!.Value * distinctMonths));
+        }
+        return results;
     }
 
     public static (DateTime? Start, DateTime? End, string Label) ComputeDateRange(string period, int year, int month)
@@ -213,7 +270,10 @@ public class CostService
 
         var total = 0;
         foreach (var location in locations)
-            total += await ApplyLocationPricingAsync(location, onlyNewSessions: true, scopeCarId: carId);
+        {
+            var onlyNew = location.PricingType != "subscription";
+            total += await ApplyLocationPricingAsync(location, onlyNewSessions: onlyNew, scopeCarId: carId);
+        }
 
         return total;
     }
@@ -253,19 +313,17 @@ public class CostService
                 if (existingProcessIds.Contains(session.Id))
                     continue;
 
-                var pricePerKwh = CalculatePricePerKwh(location, session.StartDate);
+                decimal? pricePerKwh;
                 decimal totalCost;
 
                 if (location.PricingType == "subscription")
                 {
-                    var subCost = await CalculateSubscriptionCostForSession(location, carId, session.StartDate);
-                    totalCost = subCost ?? 0;
-                    pricePerKwh = session.ChargeEnergyAdded > 0
-                        ? Math.Round(totalCost / (decimal)session.ChargeEnergyAdded.Value, 4)
-                        : null;
+                    totalCost = 0;
+                    pricePerKwh = 0;
                 }
                 else
                 {
+                    pricePerKwh = CalculatePricePerKwh(location, session.StartDate);
                     var kwh = (decimal)(session.ChargeEnergyAdded ?? session.ChargeEnergyUsed ?? 0);
                     totalCost = (pricePerKwh ?? 0) * kwh;
                 }

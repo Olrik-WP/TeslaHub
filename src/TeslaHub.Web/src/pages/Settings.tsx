@@ -65,8 +65,8 @@ export default function Settings({ carId }: Props) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<{
     name: string; pricingType: string; peakPrice: string; offPeakPrice: string;
-    offPeakStart: string; offPeakEnd: string; monthlyAmount: string; radius: string;
-  }>({ name: '', pricingType: 'manual', peakPrice: '', offPeakPrice: '', offPeakStart: '22:00', offPeakEnd: '06:00', monthlyAmount: '', radius: '200' });
+    offPeakStart: string; offPeakEnd: string; monthlyAmount: string; radius: string; allVehicles: boolean;
+  }>({ name: '', pricingType: 'manual', peakPrice: '', offPeakPrice: '', offPeakStart: '22:00', offPeakEnd: '06:00', monthlyAmount: '', radius: '200', allVehicles: false });
 
   const invalidateLocationCaches = () => {
     queryClient.invalidateQueries({ queryKey: ['chargingLocations'] });
@@ -93,7 +93,7 @@ export default function Settings({ carId }: Props) {
         offPeakStart: editForm.pricingType === 'home' ? editForm.offPeakStart : null,
         offPeakEnd: editForm.pricingType === 'home' ? editForm.offPeakEnd : null,
         monthlySubscription: editForm.monthlyAmount ? parseFloat(editForm.monthlyAmount) : null,
-        carId: loc.carId,
+        carId: editForm.allVehicles ? null : (loc.carId ?? carId ?? null),
       }),
     }),
     onSuccess: () => {
@@ -113,6 +113,7 @@ export default function Settings({ carId }: Props) {
       offPeakEnd: loc.offPeakEnd ?? '06:00',
       monthlyAmount: loc.monthlySubscription?.toString() ?? '',
       radius: loc.radiusMeters.toString(),
+      allVehicles: loc.carId == null,
     });
   };
 
@@ -422,6 +423,16 @@ export default function Settings({ carId }: Props) {
                   )}
 
                   <input className={inputClass} type="number" placeholder={t('charging.radius')} value={editForm.radius} onChange={(e) => setEditForm({ ...editForm, radius: e.target.value })} />
+
+                  <label className="flex items-center gap-2 text-sm text-[#9ca3af] cursor-pointer min-h-[40px]">
+                    <input
+                      type="checkbox"
+                      checked={editForm.allVehicles}
+                      onChange={(e) => setEditForm({ ...editForm, allVehicles: e.target.checked })}
+                      className="w-4 h-4 accent-[#3b82f6]"
+                    />
+                    {t('charging.allVehicles')}
+                  </label>
 
                   <div className="flex gap-2">
                     <button

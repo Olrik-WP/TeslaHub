@@ -76,8 +76,9 @@ log "Stopping TeslaHub services..."
 docker compose stop teslahub-api teslahub-web 2>/dev/null || true
 docker compose rm -f teslahub-api teslahub-web 2>/dev/null || true
 
-log "Building TeslaHub API and Web..."
-docker compose build teslahub-api teslahub-web
+APP_VERSION=$(cd "$REPO_DIR" && git describe --tags --always 2>/dev/null || echo "dev")
+log "Building TeslaHub API and Web (version: $APP_VERSION)..."
+docker compose build --build-arg APP_VERSION="$APP_VERSION" teslahub-api teslahub-web
 
 log "Starting TeslaHub services..."
 docker compose up -d teslahub-api teslahub-web

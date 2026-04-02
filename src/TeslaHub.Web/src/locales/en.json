@@ -60,7 +60,8 @@
     "driven": "driven",
     "sinceCharge": "since charge",
     "costPerKm": "cost/{{unit}}",
-    "costExplain": "Shows how much of your last charge cost ({{total}}) you've consumed so far, based on your actual battery usage. Resets after each charge."
+    "costExplain": "Shows how much of your last charge cost ({{total}}) you've consumed so far, based on your actual battery usage. Resets after each charge.",
+    "subscription": "Subscription"
   },
   "charging": {
     "7days": "7 days",
@@ -94,6 +95,7 @@
     "offPeak": "Off-peak",
     "monthlyAmount": "Monthly amount",
     "radius": "Radius (m)",
+    "allVehicles": "All vehicles",
     "updateLocation": "Update location",
     "saveLocation": "Save location",
     "savingLocation": "Saving...",
