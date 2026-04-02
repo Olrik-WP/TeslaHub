@@ -51,8 +51,9 @@ export default function LeafletMap({ routePoints, chargeMarkers }: LeafletMapPro
       attributionControl={false}
     >
       <TileLayer
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         maxZoom={19}
+        className="dark-map-tiles"
       />
 
       <FitBounds points={routePoints} />

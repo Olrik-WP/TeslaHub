@@ -498,8 +498,9 @@ export default function Home({ carId }: Props) {
                 touchZoom={false}
               >
                 <TileLayer
-                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+                  url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
                   maxZoom={19}
+                  className="dark-map-tiles"
                 />
                 <RecenterMap lat={vehicle.latitude} lng={vehicle.longitude} />
                 <CircleMarker
