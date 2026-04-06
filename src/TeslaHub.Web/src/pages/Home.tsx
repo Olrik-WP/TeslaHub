@@ -12,6 +12,7 @@ import { getStats, getChargingStats, getDriveStats, getSettings, getCostOverride
 import type { VehicleStatus } from '../api/queries';
 import { useTranslation } from 'react-i18next';
 import { utcDate } from '../utils/date';
+import { computeCostStack } from '../utils/costStack';
 
 interface Props {
   carId: number | undefined;
@@ -76,7 +77,7 @@ export default function Home({ carId }: Props) {
   const navigate = useNavigate();
   const { data: rawVehicle } = useVehicleStatus(carId);
   const vehicle = useStickyVehicle(rawVehicle);
-  const { data: charges } = useChargingSessions(carId, 5);
+  const { data: charges } = useChargingSessions(carId, 10);
   const { data: drives } = useDrives(carId, 5);
   const { data: stats } = useQuery({
     queryKey: ['home-stats', carId],
@@ -116,40 +117,21 @@ export default function Home({ carId }: Props) {
   const lastCompletedCharge = charges?.find((s) => s.endDate);
   const imgSrc = carId ? `/api/vehicle/${carId}/image` : null;
 
-  const lastChargeOverride = costSource === 'teslahub'
-    ? overrides?.find((o) => o.chargingProcessId === lastCompletedCharge?.id) ?? null
-    : null;
-
-  const isLastChargeSubscription = lastChargeOverride?.location?.pricingType === 'subscription';
-
-  const lastChargeCost = (() => {
-    if (!lastCompletedCharge) return null;
-    if (isLastChargeSubscription) return 0;
-    if (costSource === 'teslahub') {
-      if (lastChargeOverride) return lastChargeOverride.isFree ? 0 : lastChargeOverride.totalCost;
-      return null;
-    }
-    return lastCompletedCharge.cost;
-  })();
-
   const kmSinceCharge = vehicle?.kmSinceLastCharge ?? 0;
 
-  const costConsumed = (() => {
-    if (lastChargeCost == null || lastChargeCost <= 0 || !lastCompletedCharge) return null;
-    const endBat = lastCompletedCharge.endBatteryLevel;
-    const startBat = lastCompletedCharge.startBatteryLevel;
-    const currentBat = vehicle?.batteryLevel;
-    if (endBat == null || startBat == null || currentBat == null) return null;
-    const added = endBat - startBat;
-    if (added <= 0) return null;
-    const used = Math.max(0, endBat - currentBat);
-    return Math.min(lastChargeCost * used / added, lastChargeCost);
-  })();
+  const costStack = computeCostStack(
+    charges,
+    vehicle?.batteryLevel,
+    costSource,
+    overrides,
+    kmSinceCharge,
+    (km) => u.convertDistance(km),
+  );
 
-  const costPerKm = (() => {
-    if (costConsumed == null || costConsumed <= 0 || kmSinceCharge < 1) return null;
-    return costConsumed / u.convertDistance(kmSinceCharge)!;
-  })();
+  const isLastChargeSubscription = costStack?.isSubscription ?? false;
+  const lastChargeCost = costStack ? costStack.totalCostAvailable : null;
+  const costConsumed = costStack && costStack.totalCostConsumed > 0 ? costStack.totalCostConsumed : null;
+  const costPerKm = costStack?.costPerKm ?? null;
 
   const tempColor = (t: number | null | undefined) =>
     t == null ? undefined : t <= 0 ? '#3b82f6' : t < 10 ? '#60a5fa' : t < 20 ? '#9ca3af' : t < 30 ? '#f97316' : '#ef4444';
