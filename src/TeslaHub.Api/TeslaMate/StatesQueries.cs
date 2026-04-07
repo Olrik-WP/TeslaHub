@@ -11,18 +11,18 @@ public static class StatesQueries
         using var conn = db.CreateConnection();
 
         var current = await conn.QueryFirstOrDefaultAsync<string?>("""
-            SELECT state FROM states WHERE car_id = @CarId ORDER BY start_date DESC LIMIT 1
+            SELECT state::text FROM states WHERE car_id = @CarId ORDER BY start_date DESC LIMIT 1
             """, new { CarId = carId });
 
         var segments = await conn.QueryAsync<StateSegmentDto>("""
             WITH events AS (
-                SELECT 'driving' AS state, start_date, end_date FROM drives WHERE car_id = @CarId AND start_date >= NOW() - INTERVAL '1 day' * @Days
+                SELECT 'driving'::text AS state, start_date, end_date FROM drives WHERE car_id = @CarId AND start_date >= NOW() - INTERVAL '1 day' * @Days
                 UNION ALL
-                SELECT 'charging', start_date, end_date FROM charging_processes WHERE car_id = @CarId AND start_date >= NOW() - INTERVAL '1 day' * @Days
+                SELECT 'charging'::text, start_date, end_date FROM charging_processes WHERE car_id = @CarId AND start_date >= NOW() - INTERVAL '1 day' * @Days
                 UNION ALL
-                SELECT state, start_date, end_date FROM states WHERE car_id = @CarId AND start_date >= NOW() - INTERVAL '1 day' * @Days
+                SELECT state::text, start_date, end_date FROM states WHERE car_id = @CarId AND start_date >= NOW() - INTERVAL '1 day' * @Days
                 UNION ALL
-                SELECT 'updating', start_date, end_date FROM updates WHERE car_id = @CarId AND start_date >= NOW() - INTERVAL '1 day' * @Days
+                SELECT 'updating'::text, start_date, end_date FROM updates WHERE car_id = @CarId AND start_date >= NOW() - INTERVAL '1 day' * @Days
             ),
             durations AS (
                 SELECT state, SUM(EXTRACT(EPOCH FROM (COALESCE(end_date, NOW()) - start_date))) AS dur

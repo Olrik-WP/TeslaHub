@@ -20,10 +20,10 @@ public static class StatisticsQueries
 
         var labelExpr = validPeriod switch
         {
-            "year" => "to_char(date, 'YYYY')",
-            "week" => "'W' || to_char(date, 'WW YYYY')",
-            "day" => "to_char(date, 'YYYY-MM-DD')",
-            _ => "to_char(date, 'YYYY-MM')"
+            "year" => "to_char(COALESCE(dd.date, cd.date), 'YYYY')",
+            "week" => "'W' || to_char(COALESCE(dd.date, cd.date), 'WW YYYY')",
+            "day" => "to_char(COALESCE(dd.date, cd.date), 'YYYY-MM-DD')",
+            _ => "to_char(COALESCE(dd.date, cd.date), 'YYYY-MM')"
         };
 
         return await conn.QueryAsync<PeriodStatsDto>($"""

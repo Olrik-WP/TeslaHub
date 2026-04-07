@@ -32,7 +32,7 @@ public static class EfficiencyQueries
                 ORDER BY start_date
             )
             SELECT
-                SUM(range_loss) * c.efficiency / NULLIF(SUM(d1.distance), 0) * 100.0
+                SUM(range_loss) * MAX(c.efficiency) / NULLIF(SUM(d1.distance), 0) * 100.0
             FROM d1
             CROSS JOIN (SELECT efficiency FROM cars WHERE id = @CarId) c
             WHERE d1.distance >= 0 AND d1.range_loss >= 0
