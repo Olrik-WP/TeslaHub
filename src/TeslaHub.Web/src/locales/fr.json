@@ -60,7 +60,7 @@
     "driven": "parcourus",
     "sinceCharge": "depuis charge",
     "costPerKm": "coût/{{unit}}",
-    "costExplain": "Indique combien de votre dernière charge ({{total}}) a été consommé, basé sur votre utilisation réelle de la batterie. Se remet à zéro après chaque charge.",
+    "costExplain": "Indique combien de vos charges cumulées ({{total}}) a été consommé, basé sur votre utilisation réelle de la batterie. Prend en compte les charges précédentes quand le niveau descend en dessous du début de la dernière.",
     "subscription": "Abonnement"
   },
   "charging": {

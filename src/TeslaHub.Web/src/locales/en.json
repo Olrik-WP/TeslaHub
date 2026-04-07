@@ -60,7 +60,7 @@
     "driven": "driven",
     "sinceCharge": "since charge",
     "costPerKm": "cost/{{unit}}",
-    "costExplain": "Shows how much of your last charge cost ({{total}}) you've consumed so far, based on your actual battery usage. Resets after each charge.",
+    "costExplain": "Shows how much of your accumulated charge costs ({{total}}) you've consumed so far, based on your actual battery usage. Accounts for multiple recent charges when your battery level drops below the start of the latest one.",
     "subscription": "Subscription"
   },
   "charging": {
