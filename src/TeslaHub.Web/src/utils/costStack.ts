@@ -11,7 +11,6 @@ export interface StackResult {
   totalCostAvailable: number;
   costPerKm: number | null;
   isSubscription: boolean;
-  layerCount: number;
 }
 
 function resolveChargeCost(
@@ -83,12 +82,7 @@ export function computeCostStack(
     threshold = Math.min(threshold, effectiveBottom);
   }
 
-  if (layers.length === 0) {
-    if (hasSubscription) {
-      return { totalCostConsumed: 0, totalCostAvailable: 0, costPerKm: null, isSubscription: true, layerCount: 0 };
-    }
-    return null;
-  }
+  if (layers.length === 0) return null;
 
   let totalCostConsumed = 0;
   let totalCostAvailable = 0;
@@ -113,6 +107,5 @@ export function computeCostStack(
     totalCostAvailable,
     costPerKm,
     isSubscription: hasSubscription && layers.every((l) => l.cost === 0),
-    layerCount: layers.length,
   };
 }
