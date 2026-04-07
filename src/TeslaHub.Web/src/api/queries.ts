@@ -411,7 +411,6 @@ export interface PeriodStats {
   avgTempC: number | null;
   energyAddedKwh: number | null;
   chargeCount: number;
-  chargeCost: number | null;
   consumptionNetKwhPer100Km: number | null;
 }
 

@@ -81,36 +81,64 @@ export default function Statistics({ carId }: { carId?: number }) {
       )}
 
       {rows && rows.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
-            <thead>
-              <tr className="text-[#9ca3af] border-b border-[#2a2a2a]">
-                <th className="py-2 px-2 font-medium">{t('statisticsPage.period')}</th>
-                <th className="py-2 px-2 font-medium text-right">{u.distanceUnit}</th>
-                <th className="py-2 px-2 font-medium text-right">{t('statisticsPage.drives')}</th>
-                <th className="py-2 px-2 font-medium text-right">{t('statisticsPage.duration')}</th>
-                <th className="py-2 px-2 font-medium text-right">kWh</th>
-                <th className="py-2 px-2 font-medium text-right">{t('statisticsPage.charges')}</th>
-                <th className="py-2 px-2 font-medium text-right">{u.consumptionUnit}</th>
-                <th className="py-2 px-2 font-medium text-right">{t('statisticsPage.cost')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} className="border-b border-[#1a1a1a] text-white">
-                  <td className="py-2 px-2 whitespace-nowrap">{r.label}</td>
-                  <td className="py-2 px-2 text-right tabular-nums">{u.fmtDist(r.distanceKm, 0)}</td>
-                  <td className="py-2 px-2 text-right tabular-nums">{r.driveCount}</td>
-                  <td className="py-2 px-2 text-right tabular-nums">{fmtDuration(r.driveDurationMin)}</td>
-                  <td className="py-2 px-2 text-right tabular-nums">{r.energyAddedKwh?.toFixed(1) ?? '—'}</td>
-                  <td className="py-2 px-2 text-right tabular-nums">{r.chargeCount}</td>
-                  <td className="py-2 px-2 text-right tabular-nums">{u.fmtConsumption(r.consumptionNetKwhPer100Km)}</td>
-                  <td className="py-2 px-2 text-right tabular-nums">{r.chargeCost != null && r.chargeCost > 0 ? `${r.chargeCost.toFixed(2)} ${u.currencySymbol}` : '—'}</td>
+        <>
+          {/* Mobile: cards */}
+          <div className="sm:hidden space-y-3">
+            {rows.map((r, i) => (
+              <div key={i} className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3">
+                <div className="text-sm font-semibold text-white mb-2">{r.label}</div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  <span className="text-[#9ca3af]">{u.distanceUnit}</span>
+                  <span className="text-white text-right tabular-nums">{u.fmtDist(r.distanceKm, 0)}</span>
+                  <span className="text-[#9ca3af]">{t('statisticsPage.drives')}</span>
+                  <span className="text-white text-right tabular-nums">{r.driveCount}</span>
+                  <span className="text-[#9ca3af]">{t('statisticsPage.duration')}</span>
+                  <span className="text-white text-right tabular-nums">{fmtDuration(r.driveDurationMin)}</span>
+                  <span className="text-[#9ca3af]">kWh</span>
+                  <span className="text-white text-right tabular-nums">{r.energyAddedKwh?.toFixed(1) ?? '—'}</span>
+                  <span className="text-[#9ca3af]">{t('statisticsPage.charges')}</span>
+                  <span className="text-white text-right tabular-nums">{r.chargeCount}</span>
+                  <span className="text-[#9ca3af]">{u.consumptionUnit}</span>
+                  <span className="text-white text-right tabular-nums">{u.fmtConsumption(r.consumptionNetKwhPer100Km)}</span>
+                  <span className="text-[#9ca3af]">°C</span>
+                  <span className="text-white text-right tabular-nums">{r.avgTempC != null ? `${r.avgTempC.toFixed(1)}°` : '—'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: table */}
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="text-[#9ca3af] border-b border-[#2a2a2a]">
+                  <th className="py-2 px-2 font-medium">{t('statisticsPage.period')}</th>
+                  <th className="py-2 px-2 font-medium text-right">{u.distanceUnit}</th>
+                  <th className="py-2 px-2 font-medium text-right">{t('statisticsPage.drives')}</th>
+                  <th className="py-2 px-2 font-medium text-right">{t('statisticsPage.duration')}</th>
+                  <th className="py-2 px-2 font-medium text-right">kWh</th>
+                  <th className="py-2 px-2 font-medium text-right">{t('statisticsPage.charges')}</th>
+                  <th className="py-2 px-2 font-medium text-right">{u.consumptionUnit}</th>
+                  <th className="py-2 px-2 font-medium text-right">°C</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={i} className="border-b border-[#1a1a1a] text-white">
+                    <td className="py-2 px-2 whitespace-nowrap">{r.label}</td>
+                    <td className="py-2 px-2 text-right tabular-nums">{u.fmtDist(r.distanceKm, 0)}</td>
+                    <td className="py-2 px-2 text-right tabular-nums">{r.driveCount}</td>
+                    <td className="py-2 px-2 text-right tabular-nums">{fmtDuration(r.driveDurationMin)}</td>
+                    <td className="py-2 px-2 text-right tabular-nums">{r.energyAddedKwh?.toFixed(1) ?? '—'}</td>
+                    <td className="py-2 px-2 text-right tabular-nums">{r.chargeCount}</td>
+                    <td className="py-2 px-2 text-right tabular-nums">{u.fmtConsumption(r.consumptionNetKwhPer100Km)}</td>
+                    <td className="py-2 px-2 text-right tabular-nums">{r.avgTempC != null ? `${r.avgTempC.toFixed(1)}°` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       ) : (
         <div className="text-center text-[#9ca3af] py-12">{t('statisticsPage.noData')}</div>
       )}

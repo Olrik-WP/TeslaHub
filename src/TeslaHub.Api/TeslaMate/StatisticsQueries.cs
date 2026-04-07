@@ -46,8 +46,7 @@ public static class StatisticsQueries
                 SELECT
                     date_trunc('{validPeriod}', start_date) AS date,
                     SUM(charge_energy_added) AS energy_added,
-                    COUNT(*) AS charge_count,
-                    SUM(cost) AS cost
+                    COUNT(*) AS charge_count
                 FROM charging_processes
                 WHERE car_id = @CarId AND (charge_energy_added IS NULL OR charge_energy_added > 0.1)
                 GROUP BY 1
@@ -57,10 +56,9 @@ public static class StatisticsQueries
                 dd.distance AS "DistanceKm",
                 COALESCE(dd.drive_count, 0)::int AS "DriveCount",
                 dd.duration_min AS "DriveDurationMin",
-                dd.avg_temp AS "AvgTempC",
                 cd.energy_added AS "EnergyAddedKwh",
                 COALESCE(cd.charge_count, 0)::int AS "ChargeCount",
-                cd.cost AS "ChargeCost",
+                dd.avg_temp AS "AvgTempC",
                 dd.consumption_net AS "ConsumptionNetKwhPer100Km"
             FROM drive_data dd
             FULL OUTER JOIN charge_data cd ON dd.date = cd.date
