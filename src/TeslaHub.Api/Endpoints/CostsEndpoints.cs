@@ -114,29 +114,34 @@ public static class CostsEndpoints
         // ─── Analytics ─────────────────────────────────────────────
 
         group.MapGet("/summary/{carId:int}", async (int carId, string? period, int? year, int? month,
+            DateTime? from, DateTime? to,
             CostService costService, TeslaMateConnectionFactory tm) =>
         {
             var p = period ?? "month";
             var y = year ?? DateTime.UtcNow.Year;
             var m = month ?? DateTime.UtcNow.Month;
-            var (start, end, _) = CostService.ComputeDateRange(p, y, m);
+            var (start, end, _) = CostService.ComputeDateRange(p, y, m, from, to);
             var dist = await tm.GetTotalDistanceAsync(carId, start, end);
-            var summary = await costService.GetSummary(carId, p, y, m, dist);
+            var summary = await costService.GetSummary(carId, p, y, m, dist, from, to);
             return Results.Ok(summary);
         });
 
         // ─── TeslaMate cost analytics ────────────────────────────────
 
         group.MapGet("/teslamate-summary/{carId:int}", async (int carId, string? period, int? year, int? month,
+            DateTime? from, DateTime? to,
             TeslaMateConnectionFactory tm, CacheService cache) =>
         {
             var p = period ?? "month";
             var y = year ?? DateTime.UtcNow.Year;
             var m = month ?? DateTime.UtcNow.Month;
-            var (start, end, label) = CostService.ComputeDateRange(p, y, m);
+            var (start, end, label) = CostService.ComputeDateRange(p, y, m, from, to);
             var dist = await tm.GetTotalDistanceAsync(carId, start, end);
+            var cacheKey = p == "custom"
+                ? $"tmCostSummary:{carId}:{p}:{from:yyyyMMdd}:{to:yyyyMMdd}"
+                : $"tmCostSummary:{carId}:{p}:{y}:{m}";
             var summary = await cache.GetOrSetHistoricalAsync(
-                $"tmCostSummary:{carId}:{p}:{y}:{m}",
+                cacheKey,
                 () => tm.GetTeslaMateCostSummaryAsync(carId, start, end, label, dist));
             return Results.Ok(summary);
         });

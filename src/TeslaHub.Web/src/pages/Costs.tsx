@@ -13,7 +13,12 @@ interface Props {
 
 const COLORS = ['#e31937', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'];
 
-type PeriodMode = 'month' | 'year' | 'all';
+type PeriodMode = 'day' | 'week' | 'month' | 'year' | 'all' | 'custom';
+
+function formatDateForInput(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 export default function Costs({ carId }: Props) {
   const u = useUnits();
@@ -22,16 +27,30 @@ export default function Costs({ carId }: Props) {
   const [periodMode, setPeriodMode] = useState<PeriodMode>('month');
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const [day, setDay] = useState(now.getDate());
+  const [customFrom, setCustomFrom] = useState(() => formatDateForInput(new Date(Date.now() - 7 * 86_400_000)));
+  const [customTo, setCustomTo] = useState(() => formatDateForInput(now));
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings });
   const costSource = settings?.costSource ?? 'teslahub';
   const isTeslaHub = costSource !== 'teslamate';
 
+  const queryFn = isTeslaHub ? getCostSummary : getTeslaMateCostSummary;
+
   const { data: summary } = useQuery({
-    queryKey: [isTeslaHub ? 'costSummary' : 'tmCostSummary', carId, periodMode, year, month],
-    queryFn: () => isTeslaHub
-      ? getCostSummary(carId!, periodMode, year, periodMode === 'all' ? undefined : month)
-      : getTeslaMateCostSummary(carId!, periodMode, year, periodMode === 'all' ? undefined : month),
+    queryKey: [
+      isTeslaHub ? 'costSummary' : 'tmCostSummary',
+      carId, periodMode, year, month, day, customFrom, customTo,
+    ],
+    queryFn: () => {
+      if (periodMode === 'day' || periodMode === 'week') {
+        return queryFn(carId!, periodMode);
+      }
+      if (periodMode === 'custom') {
+        return queryFn(carId!, 'custom', undefined, undefined, customFrom, customTo);
+      }
+      return queryFn(carId!, periodMode, year, periodMode === 'all' ? undefined : month);
+    },
     enabled: !!carId,
   });
 
@@ -62,7 +81,17 @@ export default function Costs({ carId }: Props) {
         .map((t) => ({ month: t.month.slice(2), cost: Math.round(t.cost * 100) / 100 }));
 
   const handlePrev = () => {
-    if (periodMode === 'month') {
+    if (periodMode === 'day') {
+      const d = new Date(year, month - 1, day - 1);
+      setYear(d.getFullYear());
+      setMonth(d.getMonth() + 1);
+      setDay(d.getDate());
+    } else if (periodMode === 'week') {
+      const d = new Date(year, month - 1, day - 7);
+      setYear(d.getFullYear());
+      setMonth(d.getMonth() + 1);
+      setDay(d.getDate());
+    } else if (periodMode === 'month') {
       if (month === 1) { setMonth(12); setYear(year - 1); }
       else setMonth(month - 1);
     } else if (periodMode === 'year') {
@@ -71,7 +100,17 @@ export default function Costs({ carId }: Props) {
   };
 
   const handleNext = () => {
-    if (periodMode === 'month') {
+    if (periodMode === 'day') {
+      const d = new Date(year, month - 1, day + 1);
+      setYear(d.getFullYear());
+      setMonth(d.getMonth() + 1);
+      setDay(d.getDate());
+    } else if (periodMode === 'week') {
+      const d = new Date(year, month - 1, day + 7);
+      setYear(d.getFullYear());
+      setMonth(d.getMonth() + 1);
+      setDay(d.getDate());
+    } else if (periodMode === 'month') {
       if (month === 12) { setMonth(1); setYear(year + 1); }
       else setMonth(month + 1);
     } else if (periodMode === 'year') {
@@ -79,14 +118,36 @@ export default function Costs({ carId }: Props) {
     }
   };
 
-  const navLabel = periodMode === 'month'
-    ? new Date(year, month - 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-    : periodMode === 'year'
-      ? String(year)
-      : t('costs.allTime');
+  const navLabel = (() => {
+    if (periodMode === 'day') {
+      return new Date(year, month - 1, day).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
+    }
+    if (periodMode === 'week') {
+      const end = new Date(year, month - 1, day);
+      const start = new Date(end.getTime() - 6 * 86_400_000);
+      return `${start.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} — ${end.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    }
+    if (periodMode === 'month') {
+      return new Date(year, month - 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    }
+    if (periodMode === 'year') return String(year);
+    return t('costs.allTime');
+  })();
 
   const costPerKm = summary?.costPerKm ?? 0;
   const totalKwh = summary?.totalKwh ?? 0;
+  const totalDist = summary?.totalDistanceKm ?? 0;
+  const displayDist = u.convertDistance(totalDist);
+  const hasNavigation = periodMode !== 'all' && periodMode !== 'custom';
+
+  const PERIODS: { key: PeriodMode; labelKey: string }[] = [
+    { key: 'day', labelKey: 'costs.day' },
+    { key: 'week', labelKey: 'costs.week' },
+    { key: 'month', labelKey: 'costs.month' },
+    { key: 'year', labelKey: 'costs.year' },
+    { key: 'all', labelKey: 'costs.allTime' },
+    { key: 'custom', labelKey: 'costs.custom' },
+  ];
 
   return (
     <div className="p-4 space-y-4">
@@ -94,21 +155,39 @@ export default function Costs({ carId }: Props) {
 
       {/* Period selector */}
       <div className="flex flex-wrap gap-1">
-        {(['month', 'year', 'all'] as const).map((p) => (
+        {PERIODS.map((p) => (
           <button
-            key={p}
-            onClick={() => setPeriodMode(p)}
+            key={p.key}
+            onClick={() => setPeriodMode(p.key)}
             className={`px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors ${
-              periodMode === p ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
+              periodMode === p.key ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
             }`}
           >
-            {p === 'month' ? t('costs.month') : p === 'year' ? t('costs.year') : t('costs.allTime')}
+            {t(p.labelKey)}
           </button>
         ))}
       </div>
 
+      {/* Custom date inputs */}
+      {periodMode === 'custom' && (
+        <div className="flex gap-2">
+          <input
+            type="date"
+            value={customFrom}
+            onChange={(e) => setCustomFrom(e.target.value)}
+            className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[44px]"
+          />
+          <input
+            type="date"
+            value={customTo}
+            onChange={(e) => setCustomTo(e.target.value)}
+            className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[44px]"
+          />
+        </div>
+      )}
+
       {/* Date navigation */}
-      {periodMode !== 'all' && (
+      {hasNavigation && (
         <div className="flex items-center justify-between bg-[#141414] border border-[#2a2a2a] rounded-xl px-4 py-3">
           <button onClick={handlePrev} className="text-[#9ca3af] text-lg min-w-[44px] min-h-[44px] flex items-center justify-center">←</button>
           <span className="text-sm font-medium capitalize">{navLabel}</span>
@@ -117,12 +196,13 @@ export default function Costs({ carId }: Props) {
       )}
 
       {/* Stats cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         <StatCard label={t('costs.totalCost')} value={summary ? summary.totalCost.toFixed(2) : '—'} unit={u.currencySymbol} accent />
         <StatCard label={t('costs.sessions')} value={summary?.sessionCount ?? 0} />
         <StatCard label={t('costs.free')} value={summary?.freeSessionCount ?? 0} color="#22c55e" />
         <StatCard label={`${t('costs.avgPerKwh')} ${u.currencySymbol}/kWh`} value={summary?.avgPricePerKwh ? summary.avgPricePerKwh.toFixed(4) : '—'} />
         <StatCard label={t('costs.totalKwh')} value={totalKwh > 0 ? totalKwh.toFixed(1) : '—'} unit="kWh" color="#eab308" />
+        <StatCard label={t('costs.distance')} value={displayDist != null && displayDist > 0 ? displayDist.toFixed(0) : '—'} unit={u.distanceUnit} color="#3b82f6" />
         <StatCard label={`${u.currencySymbol}/${u.distanceUnit}`} value={costPerKm > 0 ? costPerKm.toFixed(4) : '—'} />
       </div>
 

@@ -105,9 +105,10 @@ public class CostService
         return existing;
     }
 
-    public async Task<CostSummaryDto> GetSummary(int carId, string period, int year, int month, double totalDistanceKm)
+    public async Task<CostSummaryDto> GetSummary(int carId, string period, int year, int month, double totalDistanceKm,
+        DateTime? customFrom = null, DateTime? customTo = null)
     {
-        var (start, end, label) = ComputeDateRange(period, year, month);
+        var (start, end, label) = ComputeDateRange(period, year, month, customFrom, customTo);
 
         var query = _db.ChargingCostOverrides
             .Include(c => c.Location)
@@ -220,14 +221,23 @@ public class CostService
         return results;
     }
 
-    public static (DateTime? Start, DateTime? End, string Label) ComputeDateRange(string period, int year, int month)
+    public static (DateTime? Start, DateTime? End, string Label) ComputeDateRange(
+        string period, int year, int month,
+        DateTime? customFrom = null, DateTime? customTo = null)
     {
+        var today = DateTime.UtcNow.Date;
         return period switch
         {
+            "day" => (today, today.AddDays(1), today.ToString("yyyy-MM-dd")),
+            "week" => (today.AddDays(-6), today.AddDays(1), "Last 7 days"),
             "year" => (
                 new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 $"{year}"),
+            "custom" when customFrom.HasValue && customTo.HasValue => (
+                customFrom.Value.Date,
+                customTo.Value.Date.AddDays(1),
+                $"{customFrom.Value:yyyy-MM-dd} → {customTo.Value:yyyy-MM-dd}"),
             "all" => (null, null, "All time"),
             _ => (
                 new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc),
