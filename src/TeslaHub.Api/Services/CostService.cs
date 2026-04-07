@@ -246,6 +246,79 @@ public class CostService
         };
     }
 
+    public async Task<Dictionary<string, decimal>> GetCostsGroupedByPeriodAsync(int carId, string periodType)
+    {
+        var overrides = await _db.ChargingCostOverrides
+            .Where(c => c.CarId == carId)
+            .Select(c => new { c.ChargingProcessId, c.TotalCost, c.LocationId })
+            .ToListAsync();
+
+        if (overrides.Count == 0)
+            return new Dictionary<string, decimal>();
+
+        var processIds = overrides.Select(o => o.ChargingProcessId).Distinct().ToArray();
+
+        using var conn = _tm.CreateConnection();
+        var sessionDates = (await Dapper.SqlMapper.QueryAsync<(int Id, DateTime StartDate)>(
+            conn,
+            "SELECT id, start_date FROM charging_processes WHERE id = ANY(@Ids)",
+            new { Ids = processIds }))
+            .ToDictionary(r => r.Id, r => r.StartDate);
+
+        var result = overrides
+            .GroupBy(c =>
+            {
+                var date = sessionDates.TryGetValue(c.ChargingProcessId, out var d) ? d : DateTime.UtcNow;
+                return FormatPeriodLabel(date, periodType);
+            })
+            .ToDictionary(g => g.Key, g => g.Sum(c => c.TotalCost));
+
+        if (periodType is "month" or "year")
+        {
+            var subLocations = await _db.ChargingLocations
+                .Where(l => (l.CarId == null || l.CarId == carId)
+                    && l.PricingType == "subscription" && l.MonthlySubscription != null)
+                .ToListAsync();
+
+            foreach (var loc in subLocations)
+            {
+                var locOverrides = await _db.ChargingCostOverrides
+                    .Where(c => c.CarId == carId && c.LocationId == loc.Id)
+                    .Select(c => c.ChargingProcessId)
+                    .ToListAsync();
+
+                var sessionMonths = locOverrides
+                    .Select(pid => sessionDates.TryGetValue(pid, out var d) ? d : (DateTime?)null)
+                    .Where(d => d != null)
+                    .Select(d => new DateTime(d!.Value.Year, d.Value.Month, 1, 0, 0, 0, DateTimeKind.Utc))
+                    .Distinct();
+
+                foreach (var month in sessionMonths)
+                {
+                    var key = periodType == "year"
+                        ? month.ToString("yyyy")
+                        : month.ToString("yyyy-MM");
+
+                    result.TryGetValue(key, out var existing);
+                    result[key] = existing + loc.MonthlySubscription!.Value;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static string FormatPeriodLabel(DateTime date, string periodType)
+    {
+        return periodType switch
+        {
+            "year" => date.ToString("yyyy"),
+            "day" => date.ToString("yyyy-MM-dd"),
+            "week" => $"W{System.Globalization.ISOWeek.GetWeekOfYear(date):D2} {System.Globalization.ISOWeek.GetYear(date)}",
+            _ => date.ToString("yyyy-MM")
+        };
+    }
+
     public async Task<decimal?> GetLastPriceAtLocation(double? lat, double? lng, int carId)
     {
         if (lat == null || lng == null)

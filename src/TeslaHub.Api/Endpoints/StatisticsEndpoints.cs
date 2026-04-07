@@ -9,13 +9,24 @@ public static class StatisticsEndpoints
     {
         var group = app.MapGroup("/api/statistics").RequireAuthorization();
 
-        group.MapGet("/{carId:int}", async (int carId, string? period, TeslaMateConnectionFactory tm, CacheService cache) =>
+        group.MapGet("/{carId:int}", async (int carId, string? period, TeslaMateConnectionFactory tm, CacheService cache, CostService costService) =>
         {
             var p = period ?? "month";
-            var data = await cache.GetOrSetHistoricalAsync(
+            var stats = await cache.GetOrSetHistoricalAsync(
                 $"periodicStats:{carId}:{p}",
                 () => tm.GetPeriodicStatsAsync(carId, p));
-            return Results.Ok(data);
+
+            var costs = await cache.GetOrSetHistoricalAsync(
+                $"periodCosts:{carId}:{p}",
+                () => costService.GetCostsGroupedByPeriodAsync(carId, p));
+
+            var result = stats.Select(row =>
+                costs.TryGetValue(row.Label, out var cost)
+                    ? row with { ChargeCost = cost }
+                    : row
+            ).ToList();
+
+            return Results.Ok(result);
         });
     }
 }

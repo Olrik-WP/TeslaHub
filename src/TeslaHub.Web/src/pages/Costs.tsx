@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
-import { getCostSummary, getCostOverrides, getSettings, getTeslaMateCostSummary, getTeslaMateMonthlyTrend } from '../api/queries';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getCostSummary, getCostOverrides, getSettings, getTeslaMateCostSummary, getTeslaMateMonthlyTrend, getCarConfig, updateCarConfig } from '../api/queries';
 import { useUnits } from '../hooks/useUnits';
 import { utcDate } from '../utils/date';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
@@ -65,6 +65,48 @@ export default function Costs({ carId }: Props) {
     queryFn: () => getTeslaMateMonthlyTrend(carId!),
     enabled: !!carId && !isTeslaHub,
   });
+
+  const queryClient = useQueryClient();
+  const { data: carConfig } = useQuery({
+    queryKey: ['carConfig', carId],
+    queryFn: () => getCarConfig(carId!),
+    enabled: !!carId,
+    staleTime: 5 * 60_000,
+  });
+
+  const [gasPrice, setGasPrice] = useState<string>('');
+  const [gasConso, setGasConso] = useState<string>('');
+  const [gasName, setGasName] = useState<string>('');
+  const [showGasSetup, setShowGasSetup] = useState(false);
+
+  const gasConfigLoaded = carConfig != null;
+  const hasGasConfig = carConfig?.gasPricePerLiter != null && carConfig?.gasConsumptionLPer100Km != null;
+
+  const effectiveGasPrice = gasPrice !== '' ? parseFloat(gasPrice) : (carConfig?.gasPricePerLiter ?? NaN);
+  const effectiveGasConso = gasConso !== '' ? parseFloat(gasConso) : (carConfig?.gasConsumptionLPer100Km ?? NaN);
+  const effectiveGasName = gasName !== '' ? gasName : (carConfig?.gasVehicleName ?? '');
+
+  const totalDist = summary?.totalDistanceKm ?? 0;
+  const teslaCost = summary?.totalCost ?? 0;
+  const gasEquivalent = totalDist > 0 && !isNaN(effectiveGasPrice) && !isNaN(effectiveGasConso)
+    ? totalDist * (effectiveGasConso / 100) * effectiveGasPrice
+    : null;
+  const savingsAmount = gasEquivalent != null ? gasEquivalent - teslaCost : null;
+
+  const saveGasConfig = useCallback(async () => {
+    if (!carId) return;
+    const price = gasPrice !== '' ? parseFloat(gasPrice) : carConfig?.gasPricePerLiter ?? undefined;
+    const conso = gasConso !== '' ? parseFloat(gasConso) : carConfig?.gasConsumptionLPer100Km ?? undefined;
+    const name = gasName !== '' ? gasName : carConfig?.gasVehicleName ?? undefined;
+    if (price == null && conso == null && name == null) return;
+    await updateCarConfig(carId, {
+      ...carConfig,
+      gasPricePerLiter: price ?? null,
+      gasConsumptionLPer100Km: conso ?? null,
+      gasVehicleName: name || null,
+    } as any);
+    queryClient.invalidateQueries({ queryKey: ['carConfig', carId] });
+  }, [carId, gasPrice, gasConso, gasName, carConfig, queryClient]);
 
   const locationData = Object.entries(summary?.costByLocation ?? {}).map(([name, cost]) => ({
     name,
@@ -136,7 +178,6 @@ export default function Costs({ carId }: Props) {
 
   const costPerKm = summary?.costPerKm ?? 0;
   const totalKwh = summary?.totalKwh ?? 0;
-  const totalDist = summary?.totalDistanceKm ?? 0;
   const displayDist = u.convertDistance(totalDist);
   const hasNavigation = periodMode !== 'all' && periodMode !== 'custom';
 
@@ -205,6 +246,110 @@ export default function Costs({ carId }: Props) {
         <StatCard label={t('costs.distance')} value={displayDist != null && displayDist > 0 ? displayDist.toFixed(0) : '—'} unit={u.distanceUnit} color="#3b82f6" />
         <StatCard label={`${u.currencySymbol}/${u.distanceUnit}`} value={costPerKm > 0 ? costPerKm.toFixed(4) : '—'} />
       </div>
+
+      {/* Gas savings comparison */}
+      {gasConfigLoaded && (hasGasConfig || showGasSetup) && (
+        <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4 space-y-3">
+          <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('costs.gasComparison')}</div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div>
+              <label className="text-[10px] text-[#6b7280] uppercase">{t('costs.gasVehicle')}</label>
+              <input
+                type="text"
+                placeholder={t('costs.gasVehiclePlaceholder')}
+                defaultValue={carConfig?.gasVehicleName ?? ''}
+                onChange={(e) => setGasName(e.target.value)}
+                onBlur={saveGasConfig}
+                className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px]"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-[#6b7280] uppercase">{t('costs.gasPrice')} ({u.currencySymbol}/L)</label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="1.85"
+                defaultValue={carConfig?.gasPricePerLiter ?? ''}
+                onChange={(e) => setGasPrice(e.target.value)}
+                onBlur={saveGasConfig}
+                className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px]"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-[#6b7280] uppercase">{t('costs.gasConsumption')} (L/100km)</label>
+              <input
+                type="number"
+                step="0.1"
+                placeholder="7.0"
+                defaultValue={carConfig?.gasConsumptionLPer100Km ?? ''}
+                onChange={(e) => setGasConso(e.target.value)}
+                onBlur={saveGasConfig}
+                className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px]"
+              />
+            </div>
+          </div>
+
+          {gasEquivalent != null && totalDist > 0 ? (
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <StatCard
+                  label={effectiveGasName ? `${t('costs.gasEquivalent')} (${effectiveGasName})` : t('costs.gasEquivalent')}
+                  value={gasEquivalent.toFixed(2)}
+                  unit={u.currencySymbol}
+                  color="#ef4444"
+                />
+                <StatCard
+                  label={t('costs.teslaCost')}
+                  value={teslaCost.toFixed(2)}
+                  unit={u.currencySymbol}
+                  color="#3b82f6"
+                />
+                <StatCard
+                  label={savingsAmount != null && savingsAmount >= 0 ? t('costs.savings') : t('costs.savingsNegative')}
+                  value={savingsAmount != null ? Math.abs(savingsAmount).toFixed(2) : '—'}
+                  unit={u.currencySymbol}
+                  color={savingsAmount != null && savingsAmount >= 0 ? '#22c55e' : '#ef4444'}
+                />
+              </div>
+
+              {gasEquivalent > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-5 rounded-full bg-[#1a1a1a] overflow-hidden relative">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${Math.min(100, (teslaCost / gasEquivalent) * 100)}%`,
+                          backgroundColor: '#3b82f6',
+                        }}
+                      />
+                    </div>
+                    <span className="text-xs text-[#9ca3af] tabular-nums w-12 text-right">
+                      {((teslaCost / gasEquivalent) * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-[#6b7280]">
+                    <span>Tesla</span>
+                    <span>{effectiveGasName || t('costs.gasEquivalent')}</span>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-[#6b7280]">{t('costs.configureGas')}</p>
+          )}
+        </div>
+      )}
+
+      {gasConfigLoaded && !hasGasConfig && !showGasSetup && (
+        <button
+          onClick={() => setShowGasSetup(true)}
+          className="w-full py-3 border border-dashed border-[#2a2a2a] rounded-xl text-sm text-[#9ca3af] hover:border-[#e31937] hover:text-white transition-colors"
+        >
+          + {t('costs.compareWith')}
+        </button>
+      )}
 
       {/* Cost by location */}
       {locationData.length > 0 && (

@@ -333,5 +333,6 @@ public record PeriodStatsDto
     public double? AvgTempC { get; init; }
     public double? EnergyAddedKwh { get; init; }
     public int ChargeCount { get; init; }
+    public decimal? ChargeCost { get; init; }
     public double? ConsumptionNetKwhPer100Km { get; init; }
 }

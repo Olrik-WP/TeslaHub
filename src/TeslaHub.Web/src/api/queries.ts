@@ -411,11 +411,32 @@ export interface PeriodStats {
   avgTempC: number | null;
   energyAddedKwh: number | null;
   chargeCount: number;
+  chargeCost: number | null;
   consumptionNetKwhPer100Km: number | null;
 }
 
 export const getPeriodicStats = (carId: number, period: string) =>
   api<PeriodStats[]>(`/statistics/${carId}?period=${period}`);
+
+// ─── Car Config (per-vehicle) ────────────────────────────────
+export interface CarConfig {
+  id: number;
+  carId: number;
+  displayName: string | null;
+  colorOverride: string | null;
+  isActive: boolean;
+  gasPricePerLiter: number | null;
+  gasConsumptionLPer100Km: number | null;
+  gasVehicleName: string | null;
+}
+
+export const getCarConfig = (carId: number) =>
+  api<CarConfig>(`/costs/car-config/${carId}`);
+export const updateCarConfig = (carId: number, data: Partial<CarConfig>) =>
+  api<CarConfig>(`/costs/car-config/${carId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
 
 // ─── Settings ───────────────────────────────────────────────────
 export const getSettings = () => api<GlobalSettings>('/costs/settings');

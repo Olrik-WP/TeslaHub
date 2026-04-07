@@ -177,5 +177,39 @@ public static class CostsEndpoints
             await db.SaveChangesAsync();
             return Results.Ok(settings);
         });
+
+        // ─── Car Config (per-vehicle settings) ──────────────────
+
+        group.MapGet("/car-config/{carId:int}", async (int carId, AppDbContext db) =>
+        {
+            var config = await db.CarConfigs.FirstOrDefaultAsync(c => c.CarId == carId);
+            if (config == null)
+            {
+                config = new CarConfig { CarId = carId };
+                db.CarConfigs.Add(config);
+                await db.SaveChangesAsync();
+            }
+            return Results.Ok(config);
+        });
+
+        group.MapPut("/car-config/{carId:int}", async (int carId, CarConfig update, AppDbContext db) =>
+        {
+            var config = await db.CarConfigs.FirstOrDefaultAsync(c => c.CarId == carId);
+            if (config == null)
+            {
+                config = new CarConfig { CarId = carId };
+                db.CarConfigs.Add(config);
+            }
+
+            config.DisplayName = update.DisplayName;
+            config.ColorOverride = update.ColorOverride;
+            config.IsActive = update.IsActive;
+            config.GasPricePerLiter = update.GasPricePerLiter;
+            config.GasConsumptionLPer100Km = update.GasConsumptionLPer100Km;
+            config.GasVehicleName = update.GasVehicleName;
+
+            await db.SaveChangesAsync();
+            return Results.Ok(config);
+        });
     }
 }

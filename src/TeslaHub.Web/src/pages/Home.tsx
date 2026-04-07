@@ -8,7 +8,7 @@ import { useDrives } from '../hooks/useDrives';
 import { useUnits } from '../hooks/useUnits';
 import BatteryGauge from '../components/BatteryGauge';
 import StatCard from '../components/StatCard';
-import { getStats, getChargingStats, getDriveStats, getSettings, getCostOverrides } from '../api/queries';
+import { getStats, getChargingStats, getDriveStats, getSettings, getCostOverrides, getCostSummary, getTeslaMateCostSummary, getCarConfig } from '../api/queries';
 import type { VehicleStatus } from '../api/queries';
 import { useTranslation } from 'react-i18next';
 import { utcDate } from '../utils/date';
@@ -105,6 +105,31 @@ export default function Home({ carId }: Props) {
     enabled: !!carId && costSource === 'teslahub',
     staleTime: 5 * 60_000,
   });
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth() + 1;
+  const { data: monthlyCost } = useQuery({
+    queryKey: ['monthlyCost', carId, costSource, curYear, curMonth],
+    queryFn: () =>
+      costSource === 'teslahub'
+        ? getCostSummary(carId!, 'month', curYear, curMonth)
+        : getTeslaMateCostSummary(carId!, 'month', curYear, curMonth),
+    enabled: !!carId,
+    staleTime: 5 * 60_000,
+  });
+  const { data: carConfig } = useQuery({
+    queryKey: ['carConfig', carId],
+    queryFn: () => getCarConfig(carId!),
+    enabled: !!carId,
+    staleTime: 5 * 60_000,
+  });
+  const monthlySavings = (() => {
+    if (!monthlyCost || !carConfig?.gasPricePerLiter || !carConfig?.gasConsumptionLPer100Km) return null;
+    const dist = monthlyCost.totalDistanceKm;
+    if (dist <= 0) return null;
+    const gasEquiv = dist * (carConfig.gasConsumptionLPer100Km / 100) * carConfig.gasPricePerLiter;
+    return gasEquiv - monthlyCost.totalCost;
+  })();
   const u = useUnits();
   const { t } = useTranslation();
   const [imgError, setImgError] = useState(false);
@@ -340,20 +365,26 @@ export default function Home({ carId }: Props) {
           </div>
         )}
 
-        {/* Bottom row: mileage extrapolations */}
+        {/* Bottom row: mileage extrapolations + monthly cost */}
         {driveStats && driveStats.driveCount > 0 && (
-          <div className="grid grid-cols-3 border-t border-[#2a2a2a]">
-            <div className="px-3 py-2 text-center">
-              <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.estMonthly')}</div>
-              <div className="text-base font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * (365 / 12))!).toLocaleString()} <span className="text-[11px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+          <div className="grid grid-cols-4 border-t border-[#2a2a2a]">
+            <div className="px-2 py-2 text-center">
+              <div className="text-[10px] sm:text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.estMonthly')}</div>
+              <div className="text-sm sm:text-base font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * (365 / 12))!).toLocaleString()} <span className="text-[10px] sm:text-[11px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
             </div>
-            <div className="px-3 py-2 text-center border-x border-[#2a2a2a]">
-              <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{driveStats.driveCount} {t('home.trips')}</div>
-              <div className="text-base font-bold tabular-nums text-[#e31937]">{Math.round(driveStats.totalDays)} <span className="text-[11px] font-normal text-[#9ca3af]">{t('home.days')}</span></div>
+            <div className="px-2 py-2 text-center border-x border-[#2a2a2a] cursor-pointer" onClick={() => navigate('/costs')}>
+              <div className="text-[10px] sm:text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.costThisMonth')}</div>
+              <div className="text-sm sm:text-base font-bold tabular-nums text-[#eab308]">
+                {monthlyCost ? `${monthlyCost.totalCost.toFixed(2)}` : '—'} <span className="text-[10px] sm:text-[11px] font-normal text-[#9ca3af]">{u.currencySymbol}</span>
+              </div>
             </div>
-            <div className="px-3 py-2 text-center">
-              <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.estAnnual')}</div>
-              <div className="text-base font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * 365)!).toLocaleString()} <span className="text-[11px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
+            <div className="px-2 py-2 text-center border-r border-[#2a2a2a]">
+              <div className="text-[10px] sm:text-xs text-[#9ca3af] uppercase tracking-wider">{driveStats.driveCount} {t('home.trips')}</div>
+              <div className="text-sm sm:text-base font-bold tabular-nums text-[#e31937]">{Math.round(driveStats.totalDays)} <span className="text-[10px] sm:text-[11px] font-normal text-[#9ca3af]">{t('home.days')}</span></div>
+            </div>
+            <div className="px-2 py-2 text-center">
+              <div className="text-[10px] sm:text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.estAnnual')}</div>
+              <div className="text-sm sm:text-base font-bold tabular-nums text-[#e31937]">{Math.round(u.convertDistance(driveStats.totalMileageKm / driveStats.totalDays * 365)!).toLocaleString()} <span className="text-[10px] sm:text-[11px] font-normal text-[#9ca3af]">{u.distanceUnit}</span></div>
             </div>
           </div>
         )}
@@ -453,6 +484,16 @@ export default function Home({ carId }: Props) {
             color="#eab308"
             subtitle={`${t('home.overallEfficiency')} ${(chargingStats.chargingEfficiency * 100).toFixed(1)}%`}
             subtitleColor="#22c55e"
+          />
+        )}
+        {monthlySavings != null && (
+          <StatCard
+            label={carConfig?.gasVehicleName
+              ? t('home.savingsVs', { name: carConfig.gasVehicleName })
+              : t('home.savingsThisMonth')}
+            value={Math.abs(monthlySavings).toFixed(2)}
+            unit={u.currencySymbol}
+            color={monthlySavings >= 0 ? '#22c55e' : '#ef4444'}
           />
         )}
       </div>

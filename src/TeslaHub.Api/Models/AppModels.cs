@@ -54,6 +54,15 @@ public class CarConfig
     public string? ColorOverride { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    [Column(TypeName = "decimal(10,4)")]
+    public decimal? GasPricePerLiter { get; set; }
+
+    [Column(TypeName = "decimal(10,2)")]
+    public decimal? GasConsumptionLPer100Km { get; set; }
+
+    [MaxLength(50)]
+    public string? GasVehicleName { get; set; }
 }
 
 /// <summary>

@@ -100,6 +100,8 @@ export default function Statistics({ carId }: { carId?: number }) {
                   <span className="text-white text-right tabular-nums">{r.chargeCount}</span>
                   <span className="text-[#9ca3af]">{u.consumptionUnit}</span>
                   <span className="text-white text-right tabular-nums">{u.fmtConsumption(r.consumptionNetKwhPer100Km)}</span>
+                  <span className="text-[#9ca3af]">{t('statisticsPage.cost')}</span>
+                  <span className="text-white text-right tabular-nums">{r.chargeCost != null && r.chargeCost > 0 ? `${r.chargeCost.toFixed(2)} ${u.currencySymbol}` : '—'}</span>
                   <span className="text-[#9ca3af]">°C</span>
                   <span className="text-white text-right tabular-nums">{r.avgTempC != null ? `${r.avgTempC.toFixed(1)}°` : '—'}</span>
                 </div>
@@ -119,6 +121,7 @@ export default function Statistics({ carId }: { carId?: number }) {
                   <th className="py-2 px-2 font-medium text-right">kWh</th>
                   <th className="py-2 px-2 font-medium text-right">{t('statisticsPage.charges')}</th>
                   <th className="py-2 px-2 font-medium text-right">{u.consumptionUnit}</th>
+                  <th className="py-2 px-2 font-medium text-right">{t('statisticsPage.cost')}</th>
                   <th className="py-2 px-2 font-medium text-right">°C</th>
                 </tr>
               </thead>
@@ -132,6 +135,7 @@ export default function Statistics({ carId }: { carId?: number }) {
                     <td className="py-2 px-2 text-right tabular-nums">{r.energyAddedKwh?.toFixed(1) ?? '—'}</td>
                     <td className="py-2 px-2 text-right tabular-nums">{r.chargeCount}</td>
                     <td className="py-2 px-2 text-right tabular-nums">{u.fmtConsumption(r.consumptionNetKwhPer100Km)}</td>
+                    <td className="py-2 px-2 text-right tabular-nums">{r.chargeCost != null && r.chargeCost > 0 ? `${r.chargeCost.toFixed(2)} ${u.currencySymbol}` : '—'}</td>
                     <td className="py-2 px-2 text-right tabular-nums">{r.avgTempC != null ? `${r.avgTempC.toFixed(1)}°` : '—'}</td>
                   </tr>
                 ))}

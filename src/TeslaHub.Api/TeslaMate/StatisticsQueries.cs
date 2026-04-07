@@ -21,7 +21,7 @@ public static class StatisticsQueries
         var labelExpr = validPeriod switch
         {
             "year" => "to_char(COALESCE(dd.date, cd.date), 'YYYY')",
-            "week" => "'W' || to_char(COALESCE(dd.date, cd.date), 'WW YYYY')",
+            "week" => "'W' || to_char(COALESCE(dd.date, cd.date), 'IW') || ' ' || to_char(COALESCE(dd.date, cd.date), 'IYYY')",
             "day" => "to_char(COALESCE(dd.date, cd.date), 'YYYY-MM-DD')",
             _ => "to_char(COALESCE(dd.date, cd.date), 'YYYY-MM')"
         };
