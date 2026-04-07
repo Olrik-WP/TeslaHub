@@ -99,6 +99,12 @@ app.MapChargingEndpoints();
 app.MapMapEndpoints();
 app.MapCostsEndpoints();
 app.MapVampireEndpoints();
+app.MapMileageEndpoints();
+app.MapUpdatesEndpoints();
+app.MapEfficiencyEndpoints();
+app.MapBatteryEndpoints();
+app.MapStatesEndpoints();
+app.MapStatisticsEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { Status = "OK", Timestamp = DateTime.UtcNow }))
     .AllowAnonymous();

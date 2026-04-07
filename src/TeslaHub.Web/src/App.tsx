@@ -19,6 +19,12 @@ const Costs = lazy(() => import('./pages/Costs'));
 const ChargingStats = lazy(() => import('./pages/ChargingStats'));
 const VampireDrain = lazy(() => import('./pages/VampireDrain'));
 const Settings = lazy(() => import('./pages/Settings'));
+const Battery = lazy(() => import('./pages/Battery'));
+const Efficiency = lazy(() => import('./pages/Efficiency'));
+const Mileage = lazy(() => import('./pages/Mileage'));
+const Updates = lazy(() => import('./pages/Updates'));
+const States = lazy(() => import('./pages/States'));
+const Statistics = lazy(() => import('./pages/Statistics'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -118,6 +124,12 @@ function AppLayout() {
               <Route path="/costs" element={<Costs carId={selectedCarId} />} />
               <Route path="/charging-stats" element={<ChargingStats carId={selectedCarId} />} />
               <Route path="/vampire" element={<VampireDrain carId={selectedCarId} />} />
+              <Route path="/battery" element={<Battery carId={selectedCarId} />} />
+              <Route path="/efficiency" element={<Efficiency carId={selectedCarId} />} />
+              <Route path="/mileage" element={<Mileage carId={selectedCarId} />} />
+              <Route path="/updates" element={<Updates carId={selectedCarId} />} />
+              <Route path="/states" element={<States carId={selectedCarId} />} />
+              <Route path="/statistics" element={<Statistics carId={selectedCarId} />} />
               <Route path="/settings" element={<Settings carId={selectedCarId} />} />
             </Routes>
           </Suspense>

@@ -24,7 +24,14 @@
     "map": "Map",
     "costs": "Costs",
     "settings": "Settings",
-    "vampire": "Vampire"
+    "vampire": "Vampire",
+    "more": "More",
+    "battery": "Battery",
+    "efficiency": "Efficiency",
+    "mileage": "Mileage",
+    "updates": "Updates",
+    "states": "States",
+    "statistics": "Statistics"
   },
   "home": {
     "loadingVehicle": "Loading vehicle data...",
@@ -222,6 +229,72 @@
   },
   "battery": {
     "charging": "Charge"
+  },
+  "batteryPage": {
+    "title": "Battery",
+    "health": "Health",
+    "chargeLevel": "Charge Level",
+    "projectedRange": "Projected Range",
+    "currentCapacity": "Current capacity",
+    "maxCapacity": "Max capacity",
+    "degradation": "Degradation",
+    "healthPct": "Battery health",
+    "soc": "Current SoC",
+    "storedEnergy": "Stored energy",
+    "chargeCount": "Charge count",
+    "chargeCycles": "Charge cycles",
+    "totalEnergyAdded": "Total energy added",
+    "chargingEfficiency": "Charging eff.",
+    "capacityByMileage": "Capacity by mileage",
+    "batteryLevelPct": "Battery level (%)",
+    "usableLevelPct": "Usable level (%)",
+    "noData": "No data for this period."
+  },
+  "efficiencyPage": {
+    "title": "Efficiency",
+    "consumptionNet": "Consumption (net)",
+    "consumptionGross": "Consumption (gross)",
+    "totalDistance": "Total distance",
+    "currentEfficiency": "Current eff.",
+    "derivedEfficiencies": "Derived efficiencies",
+    "tempVsConsumption": "Temperature vs Consumption"
+  },
+  "mileagePage": {
+    "title": "Mileage",
+    "odometer": "Odometer",
+    "dataPoints": "Data points",
+    "all": "All",
+    "noData": "No mileage data."
+  },
+  "updatesPage": {
+    "title": "Firmware Updates",
+    "totalUpdates": "Total updates",
+    "medianInterval": "Median interval",
+    "currentVersion": "Current version",
+    "noData": "No firmware updates recorded."
+  },
+  "statesPage": {
+    "title": "Vehicle States",
+    "statesTab": "States",
+    "timelineTab": "Timeline",
+    "currentState": "Current state",
+    "parkedPct": "Parked",
+    "drivingPct": "Driving",
+    "stateDistribution": "State distribution",
+    "noData": "No data for this period."
+  },
+  "statisticsPage": {
+    "title": "Statistics",
+    "day": "Day",
+    "week": "Week",
+    "month": "Month",
+    "year": "Year",
+    "period": "Period",
+    "drives": "Drives",
+    "duration": "Duration",
+    "charges": "Charges",
+    "cost": "Cost",
+    "noData": "No statistics available."
   },
   "vampire": {
     "title": "Vampire Drain",

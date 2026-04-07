@@ -208,3 +208,131 @@ public record VampireSummaryDto
     public double AvgWh { get; init; }
     public double AvgPowerW { get; init; }
 }
+
+// ─── Mileage ─────────────────────────────────────────────────────
+public record MileagePointDto
+{
+    public DateTime Date { get; init; }
+    public double OdometerKm { get; init; }
+}
+
+// ─── Updates ─────────────────────────────────────────────────────
+public record UpdateItemDto
+{
+    public DateTime StartDate { get; init; }
+    public DateTime? EndDate { get; init; }
+    public double? DurationMin { get; init; }
+    public string Version { get; init; } = string.Empty;
+    public double? SinceLastDays { get; init; }
+}
+
+public record UpdatesStatsDto
+{
+    public int TotalCount { get; init; }
+    public double? MedianIntervalDays { get; init; }
+    public string? CurrentVersion { get; init; }
+}
+
+// ─── Efficiency ──────────────────────────────────────────────────
+public record EfficiencySummaryDto
+{
+    public double? AvgConsumptionNetKwhPer100Km { get; init; }
+    public double? AvgConsumptionGrossKwhPer100Km { get; init; }
+    public double? TotalDistanceKm { get; init; }
+    public double? CurrentEfficiencyWhPerKm { get; init; }
+    public List<DerivedEfficiencyDto> DerivedEfficiencies { get; init; } = new();
+    public List<TempEfficiencyDto> TemperatureEfficiency { get; init; } = new();
+}
+
+public record DerivedEfficiencyDto
+{
+    public double EfficiencyKwhPer100Km { get; init; }
+    public int Count { get; init; }
+}
+
+public record TempEfficiencyDto
+{
+    public double TemperatureC { get; init; }
+    public double ConsumptionKwhPer100Km { get; init; }
+    public double TotalDistanceKm { get; init; }
+}
+
+// ─── Battery Health ──────────────────────────────────────────────
+public record BatteryHealthDto
+{
+    public double? CurrentCapacityKwh { get; init; }
+    public double? MaxCapacityKwh { get; init; }
+    public double? DegradationPct { get; init; }
+    public double? HealthPct { get; init; }
+    public double? StoredEnergyKwh { get; init; }
+    public int? ChargeCount { get; init; }
+    public double? ChargeCycles { get; init; }
+    public double? TotalEnergyAddedKwh { get; init; }
+    public double? TotalEnergyUsedKwh { get; init; }
+    public double? ChargingEfficiencyPct { get; init; }
+    public double? MedianCapacity { get; init; }
+    public List<CapacityPointDto> CapacityByMileage { get; init; } = new();
+}
+
+public record CapacityPointDto
+{
+    public double OdometerKm { get; init; }
+    public double CapacityKwh { get; init; }
+    public string Date { get; init; } = string.Empty;
+}
+
+public record ChargeLevelPointDto
+{
+    public DateTime Date { get; init; }
+    public double? BatteryLevel { get; init; }
+    public double? UsableBatteryLevel { get; init; }
+}
+
+public record ProjectedRangePointDto
+{
+    public DateTime Date { get; init; }
+    public double? ProjectedRangeKm { get; init; }
+    public double? BatteryLevel { get; init; }
+}
+
+// ─── States ──────────────────────────────────────────────────────
+public record StatesSummaryDto
+{
+    public string? CurrentState { get; init; }
+    public double? ParkedPct { get; init; }
+    public double? DrivingPct { get; init; }
+    public List<StateSegmentDto> Segments { get; init; } = new();
+}
+
+public record StateSegmentDto
+{
+    public string State { get; init; } = string.Empty;
+    public double Pct { get; init; }
+}
+
+public record TimelineEntryDto
+{
+    public string Action { get; init; } = string.Empty;
+    public DateTime StartDate { get; init; }
+    public DateTime? EndDate { get; init; }
+    public double? DurationMin { get; init; }
+    public string? StartAddress { get; init; }
+    public string? EndAddress { get; init; }
+    public double? DistanceKm { get; init; }
+    public double? EnergyKwh { get; init; }
+    public double? SocEnd { get; init; }
+}
+
+// ─── Statistics ──────────────────────────────────────────────────
+public record PeriodStatsDto
+{
+    public string Label { get; init; } = string.Empty;
+    public double? DistanceKm { get; init; }
+    public int DriveCount { get; init; }
+    public double? DriveDurationMin { get; init; }
+    public double? AvgTempC { get; init; }
+    public double? EnergyAddedKwh { get; init; }
+    public int ChargeCount { get; init; }
+    public double? ChargeCost { get; init; }
+    public double? ConsumptionNetKwhPer100Km { get; init; }
+}

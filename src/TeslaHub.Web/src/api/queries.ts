@@ -297,6 +297,127 @@ export const getTeslaMateCostSummary = (carId: number, period?: string, year?: n
 export const getTeslaMateMonthlyTrend = (carId: number) =>
   api<MonthlyTrend[]>(`/costs/teslamate-trend/${carId}`);
 
+// ─── Battery ─────────────────────────────────────────────────────
+export interface BatteryHealthData {
+  currentCapacityKwh: number | null;
+  maxCapacityKwh: number | null;
+  degradationPct: number | null;
+  healthPct: number | null;
+  storedEnergyKwh: number | null;
+  chargeCount: number | null;
+  chargeCycles: number | null;
+  totalEnergyAddedKwh: number | null;
+  totalEnergyUsedKwh: number | null;
+  chargingEfficiencyPct: number | null;
+  medianCapacity: number | null;
+  capacityByMileage: { odometerKm: number; capacityKwh: number; date: string }[];
+}
+
+export interface ChargeLevelPoint {
+  date: string;
+  batteryLevel: number | null;
+  usableBatteryLevel: number | null;
+}
+
+export interface ProjectedRangePoint {
+  date: string;
+  projectedRangeKm: number | null;
+  batteryLevel: number | null;
+}
+
+export const getBatteryHealth = (carId: number) =>
+  api<BatteryHealthData>(`/battery/${carId}/health`);
+export const getChargeLevelTimeSeries = (carId: number, days: number) =>
+  api<ChargeLevelPoint[]>(`/battery/${carId}/charge-level?days=${days}`);
+export const getProjectedRange = (carId: number, days: number) =>
+  api<ProjectedRangePoint[]>(`/battery/${carId}/projected-range?days=${days}`);
+
+// ─── Efficiency ──────────────────────────────────────────────────
+export interface EfficiencySummary {
+  avgConsumptionNetKwhPer100Km: number | null;
+  avgConsumptionGrossKwhPer100Km: number | null;
+  totalDistanceKm: number | null;
+  currentEfficiencyWhPerKm: number | null;
+  derivedEfficiencies: { efficiencyKwhPer100Km: number; count: number }[];
+  temperatureEfficiency: { temperatureC: number; consumptionKwhPer100Km: number; totalDistanceKm: number }[];
+}
+
+export const getEfficiencySummary = (carId: number) =>
+  api<EfficiencySummary>(`/efficiency/${carId}`);
+
+// ─── Mileage ─────────────────────────────────────────────────────
+export interface MileagePoint {
+  date: string;
+  odometerKm: number;
+}
+
+export const getMileageTimeSeries = (carId: number, days: number) =>
+  api<MileagePoint[]>(`/mileage/${carId}?days=${days}`);
+
+// ─── Updates ─────────────────────────────────────────────────────
+export interface UpdateItem {
+  startDate: string;
+  endDate: string | null;
+  durationMin: number | null;
+  version: string;
+  sinceLastDays: number | null;
+}
+
+export interface UpdatesStats {
+  totalCount: number;
+  medianIntervalDays: number | null;
+  currentVersion: string | null;
+}
+
+export interface UpdatesResponse {
+  items: UpdateItem[];
+  stats: UpdatesStats;
+}
+
+export const getUpdatesList = (carId: number) =>
+  api<UpdatesResponse>(`/updates/${carId}`);
+
+// ─── States ──────────────────────────────────────────────────────
+export interface StatesTimelineData {
+  currentState: string | null;
+  parkedPct: number | null;
+  drivingPct: number | null;
+  segments: { state: string; pct: number }[];
+}
+
+export interface TimelineEntry {
+  action: string;
+  startDate: string;
+  endDate: string | null;
+  durationMin: number | null;
+  startAddress: string | null;
+  endAddress: string | null;
+  distanceKm: number | null;
+  energyKwh: number | null;
+  socEnd: number | null;
+}
+
+export const getStatesTimeline = (carId: number, days: number) =>
+  api<StatesTimelineData>(`/states/${carId}/summary?days=${days}`);
+export const getTimeline = (carId: number, days: number) =>
+  api<TimelineEntry[]>(`/states/${carId}/timeline?days=${days}`);
+
+// ─── Statistics ──────────────────────────────────────────────────
+export interface PeriodStats {
+  label: string;
+  distanceKm: number | null;
+  driveCount: number;
+  driveDurationMin: number | null;
+  avgTempC: number | null;
+  energyAddedKwh: number | null;
+  chargeCount: number;
+  chargeCost: number | null;
+  consumptionNetKwhPer100Km: number | null;
+}
+
+export const getPeriodicStats = (carId: number, period: string) =>
+  api<PeriodStats[]>(`/statistics/${carId}?period=${period}`);
+
 // ─── Settings ───────────────────────────────────────────────────
 export const getSettings = () => api<GlobalSettings>('/costs/settings');
 
