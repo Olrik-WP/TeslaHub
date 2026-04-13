@@ -49,30 +49,16 @@ export default function Trips({ carId }: Props) {
   const { data: drives, isLoading } = useDrives(carId, 500, selectedPeriod.days);
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings, staleTime: 5 * 60_000 });
   const costSource = settings?.costSource ?? 'teslahub';
-  const { data: thCostSummary } = useQuery({
-    queryKey: ['trip-cost-th', carId],
-    queryFn: () => getCostSummary(carId!, 'all'),
+  const isTeslaHub = costSource !== 'teslamate';
+  const costQueryFn = isTeslaHub ? getCostSummary : getTeslaMateCostSummary;
+  const { data: costSummary } = useQuery({
+    queryKey: ['trip-cost', carId, costSource],
+    queryFn: () => costQueryFn(carId!),
     enabled: !!carId,
     staleTime: 5 * 60_000,
   });
-  const { data: tmCostSummary } = useQuery({
-    queryKey: ['trip-cost-tm', carId],
-    queryFn: () => getTeslaMateCostSummary(carId!, 'all'),
-    enabled: !!carId,
-    staleTime: 5 * 60_000,
-  });
-  const primaryCost = costSource === 'teslahub' ? thCostSummary : tmCostSummary;
-  const fallbackCost = costSource === 'teslahub' ? tmCostSummary : thCostSummary;
-  const costPerKm = (primaryCost?.costPerKm ?? 0) > 0
-    ? primaryCost!.costPerKm
-    : (fallbackCost?.costPerKm ?? 0) > 0
-      ? fallbackCost!.costPerKm
-      : null;
-  const avgPricePerKwh = (primaryCost?.avgPricePerKwh ?? 0) > 0
-    ? primaryCost!.avgPricePerKwh
-    : (fallbackCost?.avgPricePerKwh ?? 0) > 0
-      ? fallbackCost!.avgPricePerKwh
-      : null;
+  const costPerKm = (costSummary?.costPerKm ?? 0) > 0 ? costSummary!.costPerKm : null;
+  const avgPricePerKwh = (costSummary?.avgPricePerKwh ?? 0) > 0 ? costSummary!.avgPricePerKwh : null;
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>;
