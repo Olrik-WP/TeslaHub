@@ -15,11 +15,11 @@ public static class ChargingQueries
                     cp.car_id,
                     cp.start_date,
                     cp.end_date,
-                    cp.charge_energy_added,
+                    COALESCE(cp.charge_energy_added, last_ch.charge_energy_added) AS charge_energy_added,
                     cp.charge_energy_used,
-                    cp.start_battery_level,
+                    COALESCE(cp.start_battery_level, first_ch.battery_level) AS start_battery_level,
                     cp.end_battery_level,
-                    cp.duration_min,
+                    COALESCE(cp.duration_min, EXTRACT(EPOCH FROM (NOW() - cp.start_date)) / 60)::int AS duration_min,
                     cp.outside_temp_avg,
                     cp.start_rated_range_km,
                     cp.end_rated_range_km,
@@ -46,6 +46,20 @@ public static class ChargingQueries
                     FROM charges
                     WHERE charging_process_id = cp.id
                 ) ch ON true
+                LEFT JOIN LATERAL (
+                    SELECT battery_level
+                    FROM charges
+                    WHERE charging_process_id = cp.id
+                    ORDER BY date ASC
+                    LIMIT 1
+                ) first_ch ON true
+                LEFT JOIN LATERAL (
+                    SELECT charge_energy_added
+                    FROM charges
+                    WHERE charging_process_id = cp.id
+                    ORDER BY date DESC
+                    LIMIT 1
+                ) last_ch ON true
                 WHERE cp.car_id = @CarId
                   AND (@ChargeType IS NULL OR ch.charge_type = @ChargeType)
                   AND (@Days IS NULL OR cp.start_date >= NOW() - INTERVAL '1 day' * @Days)

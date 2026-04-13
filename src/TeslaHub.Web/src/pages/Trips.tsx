@@ -21,6 +21,14 @@ const PERIOD_OPTIONS: { key: PeriodKey; labelKey: string; days?: number }[] = [
   { key: 'all', labelKey: 'charging.all' },
 ];
 
+function fmtDuration(min: number | null) {
+  if (min == null || min <= 0) return '—';
+  if (min < 60) return `${Math.round(min)}m`;
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  return m > 0 ? `${h}h${m}m` : `${h}h`;
+}
+
 function efficiencyColor(eff: number | null): string {
   if (eff == null) return '#9ca3af';
   if (eff >= 1.0) return '#22c55e';
@@ -153,6 +161,9 @@ function TripCard({ drive, expanded, onToggle, onViewMap, u, t }: {
         <div className="flex items-center gap-2 flex-shrink-0 ml-2">
           <span className="text-xs text-[#9ca3af]">
             {utcDate(drive.startDate).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
+            {drive.endDate && (
+              <> → {utcDate(drive.endDate).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit' })}</>
+            )}
           </span>
           <button
             onClick={onToggle}
@@ -167,7 +178,7 @@ function TripCard({ drive, expanded, onToggle, onViewMap, u, t }: {
       {/* Compact stats row */}
       <div className="flex items-center gap-3 text-sm text-[#9ca3af]">
         <span>{u.fmtDist(drive.distance)} {u.distanceUnit}</span>
-        <span>{drive.durationMin ?? '—'} min</span>
+        <span>{fmtDuration(drive.durationMin)}</span>
         {drive.startBatteryLevel != null && drive.endBatteryLevel != null && (
           <span>{Math.round(drive.startBatteryLevel)}% → {Math.round(drive.endBatteryLevel)}%</span>
         )}
