@@ -123,16 +123,25 @@ export default function Home({ carId }: Props) {
     enabled: !!carId,
     staleTime: 5 * 60_000,
   });
-  const { data: allTimeCost } = useQuery({
-    queryKey: ['allTimeCost', carId, costSource],
-    queryFn: () =>
-      costSource === 'teslahub'
-        ? getCostSummary(carId!, 'all')
-        : getTeslaMateCostSummary(carId!, 'all'),
+  const { data: thAllCost } = useQuery({
+    queryKey: ['allTimeCost-th', carId],
+    queryFn: () => getCostSummary(carId!, 'all'),
     enabled: !!carId,
     staleTime: 5 * 60_000,
   });
-  const tripCostPerKm = allTimeCost?.costPerKm ?? null;
+  const { data: tmAllCost } = useQuery({
+    queryKey: ['allTimeCost-tm', carId],
+    queryFn: () => getTeslaMateCostSummary(carId!, 'all'),
+    enabled: !!carId,
+    staleTime: 5 * 60_000,
+  });
+  const primaryAllCost = costSource === 'teslahub' ? thAllCost : tmAllCost;
+  const fallbackAllCost = costSource === 'teslahub' ? tmAllCost : thAllCost;
+  const tripCostPerKm = (primaryAllCost?.costPerKm ?? 0) > 0
+    ? primaryAllCost!.costPerKm
+    : (fallbackAllCost?.costPerKm ?? 0) > 0
+      ? fallbackAllCost!.costPerKm
+      : null;
   const monthlySavings = (() => {
     if (!monthlyCost || !carConfig?.gasPricePerLiter || !carConfig?.gasConsumptionLPer100Km) return null;
     const dist = monthlyCost.totalDistanceKm;

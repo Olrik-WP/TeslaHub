@@ -49,16 +49,30 @@ export default function Trips({ carId }: Props) {
   const { data: drives, isLoading } = useDrives(carId, 500, selectedPeriod.days);
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings, staleTime: 5 * 60_000 });
   const costSource = settings?.costSource ?? 'teslahub';
-  const { data: costSummary } = useQuery({
-    queryKey: ['trip-cost-summary', carId, costSource, period],
-    queryFn: () =>
-      costSource === 'teslahub'
-        ? getCostSummary(carId!, 'all')
-        : getTeslaMateCostSummary(carId!, 'all'),
+  const { data: thCostSummary } = useQuery({
+    queryKey: ['trip-cost-th', carId],
+    queryFn: () => getCostSummary(carId!, 'all'),
     enabled: !!carId,
     staleTime: 5 * 60_000,
   });
-  const costPerKm = costSummary?.costPerKm ?? null;
+  const { data: tmCostSummary } = useQuery({
+    queryKey: ['trip-cost-tm', carId],
+    queryFn: () => getTeslaMateCostSummary(carId!, 'all'),
+    enabled: !!carId,
+    staleTime: 5 * 60_000,
+  });
+  const primaryCost = costSource === 'teslahub' ? thCostSummary : tmCostSummary;
+  const fallbackCost = costSource === 'teslahub' ? tmCostSummary : thCostSummary;
+  const costPerKm = (primaryCost?.costPerKm ?? 0) > 0
+    ? primaryCost!.costPerKm
+    : (fallbackCost?.costPerKm ?? 0) > 0
+      ? fallbackCost!.costPerKm
+      : null;
+  const avgPricePerKwh = (primaryCost?.avgPricePerKwh ?? 0) > 0
+    ? primaryCost!.avgPricePerKwh
+    : (fallbackCost?.avgPricePerKwh ?? 0) > 0
+      ? fallbackCost!.avgPricePerKwh
+      : null;
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>;
@@ -142,6 +156,7 @@ export default function Trips({ carId }: Props) {
             u={u}
             t={t}
             costPerKm={costPerKm}
+            avgPricePerKwh={avgPricePerKwh}
           />
         ))}
         {driveList.length === 0 && (
@@ -152,7 +167,7 @@ export default function Trips({ carId }: Props) {
   );
 }
 
-function TripCard({ drive, expanded, onToggle, onViewMap, u, t, costPerKm }: {
+function TripCard({ drive, expanded, onToggle, onViewMap, u, t, costPerKm, avgPricePerKwh }: {
   drive: Drive;
   expanded: boolean;
   onToggle: () => void;
@@ -160,12 +175,15 @@ function TripCard({ drive, expanded, onToggle, onViewMap, u, t, costPerKm }: {
   u: ReturnType<typeof useUnits>;
   t: (key: string) => string;
   costPerKm: number | null;
+  avgPricePerKwh: number | null;
 }) {
   const effPct = drive.efficiency != null ? Math.round(drive.efficiency * 100) : null;
   const netWh = drive.netEnergyKwh != null ? Math.round(drive.netEnergyKwh * 1000) : null;
   const tripCost = drive.distance != null && costPerKm != null && costPerKm > 0
     ? drive.distance * costPerKm
-    : null;
+    : drive.netEnergyKwh != null && avgPricePerKwh != null && avgPricePerKwh > 0
+      ? drive.netEnergyKwh * avgPricePerKwh
+      : null;
 
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
