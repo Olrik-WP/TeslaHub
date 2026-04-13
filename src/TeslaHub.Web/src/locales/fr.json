@@ -175,7 +175,8 @@
     "elevation": "Dénivelé",
     "consumption": "Consommation",
     "viewOnMap": "Voir sur la carte",
-    "coldBattery": "Batterie froide"
+    "coldBattery": "Batterie froide",
+    "cost": "Coût"
   },
   "map": {
     "7days": "7 jours",

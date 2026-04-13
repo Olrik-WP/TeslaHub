@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useDrives } from '../hooks/useDrives';
 import { useUnits } from '../hooks/useUnits';
 import { utcDate } from '../utils/date';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import StatCard from '../components/StatCard';
 import type { Drive } from '../api/queries';
+import { getSettings, getCostSummary, getTeslaMateCostSummary } from '../api/queries';
 
 interface Props {
   carId: number | undefined;
@@ -45,6 +47,18 @@ export default function Trips({ carId }: Props) {
 
   const selectedPeriod = PERIOD_OPTIONS.find((p) => p.key === period)!;
   const { data: drives, isLoading } = useDrives(carId, 500, selectedPeriod.days);
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings, staleTime: 5 * 60_000 });
+  const costSource = settings?.costSource ?? 'teslahub';
+  const { data: costSummary } = useQuery({
+    queryKey: ['trip-cost-summary', carId, costSource, period],
+    queryFn: () =>
+      costSource === 'teslahub'
+        ? getCostSummary(carId!, 'all')
+        : getTeslaMateCostSummary(carId!, 'all'),
+    enabled: !!carId,
+    staleTime: 5 * 60_000,
+  });
+  const avgPricePerKwh = costSummary?.avgPricePerKwh ?? null;
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>;
@@ -127,6 +141,7 @@ export default function Trips({ carId }: Props) {
             onViewMap={() => navigate(`/map?driveId=${drive.id}`)}
             u={u}
             t={t}
+            avgPricePerKwh={avgPricePerKwh}
           />
         ))}
         {driveList.length === 0 && (
@@ -137,16 +152,20 @@ export default function Trips({ carId }: Props) {
   );
 }
 
-function TripCard({ drive, expanded, onToggle, onViewMap, u, t }: {
+function TripCard({ drive, expanded, onToggle, onViewMap, u, t, avgPricePerKwh }: {
   drive: Drive;
   expanded: boolean;
   onToggle: () => void;
   onViewMap: () => void;
   u: ReturnType<typeof useUnits>;
   t: (key: string) => string;
+  avgPricePerKwh: number | null;
 }) {
   const effPct = drive.efficiency != null ? Math.round(drive.efficiency * 100) : null;
   const netWh = drive.netEnergyKwh != null ? Math.round(drive.netEnergyKwh * 1000) : null;
+  const tripCost = drive.netEnergyKwh != null && avgPricePerKwh != null && avgPricePerKwh > 0
+    ? drive.netEnergyKwh * avgPricePerKwh
+    : null;
 
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
@@ -182,6 +201,7 @@ function TripCard({ drive, expanded, onToggle, onViewMap, u, t }: {
         {drive.startBatteryLevel != null && drive.endBatteryLevel != null && (
           <span>{Math.round(drive.startBatteryLevel)}% → {Math.round(drive.endBatteryLevel)}%</span>
         )}
+        {tripCost != null && <span className="text-[#eab308]">{tripCost.toFixed(2)} {u.currencySymbol}</span>}
         {drive.hasReducedRange && <span title={t('trips.coldBattery')}>❄</span>}
       </div>
 
@@ -257,6 +277,14 @@ function TripCard({ drive, expanded, onToggle, onViewMap, u, t }: {
               <div>
                 <span className="text-[#9ca3af]">📈 {t('trips.consumption')}</span>
                 <span className="ml-1 text-white font-medium">{u.fmtConsumption(drive.consumptionKWhPer100Km)} {u.consumptionUnit}</span>
+              </div>
+            )}
+
+            {/* Cost */}
+            {tripCost != null && (
+              <div>
+                <span className="text-[#9ca3af]">💰 {t('trips.cost')}</span>
+                <span className="ml-1 font-medium text-[#eab308]">{tripCost.toFixed(2)} {u.currencySymbol}</span>
               </div>
             )}
           </div>

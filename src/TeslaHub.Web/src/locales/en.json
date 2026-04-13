@@ -175,7 +175,8 @@
     "elevation": "Elevation",
     "consumption": "Consumption",
     "viewOnMap": "View on map",
-    "coldBattery": "Cold battery"
+    "coldBattery": "Cold battery",
+    "cost": "Cost"
   },
   "map": {
     "7days": "7 days",
