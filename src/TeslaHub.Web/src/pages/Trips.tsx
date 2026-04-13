@@ -58,7 +58,7 @@ export default function Trips({ carId }: Props) {
     enabled: !!carId,
     staleTime: 5 * 60_000,
   });
-  const avgPricePerKwh = costSummary?.avgPricePerKwh ?? null;
+  const costPerKm = costSummary?.costPerKm ?? null;
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>;
@@ -141,7 +141,7 @@ export default function Trips({ carId }: Props) {
             onViewMap={() => navigate(`/map?driveId=${drive.id}`)}
             u={u}
             t={t}
-            avgPricePerKwh={avgPricePerKwh}
+            costPerKm={costPerKm}
           />
         ))}
         {driveList.length === 0 && (
@@ -152,19 +152,19 @@ export default function Trips({ carId }: Props) {
   );
 }
 
-function TripCard({ drive, expanded, onToggle, onViewMap, u, t, avgPricePerKwh }: {
+function TripCard({ drive, expanded, onToggle, onViewMap, u, t, costPerKm }: {
   drive: Drive;
   expanded: boolean;
   onToggle: () => void;
   onViewMap: () => void;
   u: ReturnType<typeof useUnits>;
   t: (key: string) => string;
-  avgPricePerKwh: number | null;
+  costPerKm: number | null;
 }) {
   const effPct = drive.efficiency != null ? Math.round(drive.efficiency * 100) : null;
   const netWh = drive.netEnergyKwh != null ? Math.round(drive.netEnergyKwh * 1000) : null;
-  const tripCost = drive.netEnergyKwh != null && avgPricePerKwh != null && avgPricePerKwh > 0
-    ? drive.netEnergyKwh * avgPricePerKwh
+  const tripCost = drive.distance != null && costPerKm != null && costPerKm > 0
+    ? drive.distance * costPerKm
     : null;
 
   return (
