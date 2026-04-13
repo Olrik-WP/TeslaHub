@@ -390,6 +390,34 @@ export default function Home({ carId }: Props) {
         )}
       </div>
 
+      {/* Charging in progress */}
+      {isCharging && lastCharge && (
+        <div className="bg-[#141414] border border-[#3b82f6]/30 rounded-xl p-3 sm:p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[#3b82f6] text-lg">⚡</span>
+            <span className="font-medium">{t('home.chargingInProgress')}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard
+              label={t('home.added')}
+              value={lastCharge.chargeEnergyAdded?.toFixed(1) ?? '—'}
+              unit="kWh"
+              color="#3b82f6"
+            />
+            <StatCard
+              label={t('home.battery')}
+              value={`${lastCharge.startBatteryLevel ?? '?'} → ${vehicle.batteryLevel ?? '?'}`}
+              unit="%"
+            />
+            <StatCard
+              label={t('home.duration')}
+              value={lastCharge.durationMin ?? '—'}
+              unit="min"
+            />
+          </div>
+        </div>
+      )}
+
       {/* Stats grid */}
       <div className="grid grid-cols-3 gap-3">
         <StatCard
@@ -583,33 +611,6 @@ export default function Home({ carId }: Props) {
         </div>
       </div>
 
-      {/* Charging in progress */}
-      {isCharging && lastCharge && (
-        <div className="bg-[#141414] border border-[#3b82f6]/30 rounded-xl p-3 sm:p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-[#3b82f6] text-lg">⚡</span>
-            <span className="font-medium">{t('home.chargingInProgress')}</span>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <StatCard
-              label={t('home.added')}
-              value={lastCharge.chargeEnergyAdded?.toFixed(1) ?? '—'}
-              unit="kWh"
-              color="#3b82f6"
-            />
-            <StatCard
-              label={t('home.battery')}
-              value={`${lastCharge.startBatteryLevel ?? '?'} → ${vehicle.batteryLevel ?? '?'}`}
-              unit="%"
-            />
-            <StatCard
-              label={t('home.duration')}
-              value={lastCharge.durationMin ?? '—'}
-              unit="min"
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
