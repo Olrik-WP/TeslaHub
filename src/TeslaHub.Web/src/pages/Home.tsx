@@ -569,7 +569,10 @@ export default function Home({ carId }: Props) {
                 </div>
               )}
               <div className="text-[#6b7280] text-xs mt-2">
-                {utcDate(lastDrive.startDate).toLocaleDateString()}
+                {utcDate(lastDrive.startDate).toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                {lastDrive.endDate && (
+                  <> → {utcDate(lastDrive.endDate).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit' })}</>
+                )}
               </div>
             </div>
           ) : (
