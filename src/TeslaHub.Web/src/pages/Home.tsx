@@ -132,7 +132,7 @@ export default function Home({ carId }: Props) {
     enabled: !!carId,
     staleTime: 5 * 60_000,
   });
-  const avgPricePerKwh = allTimeCost?.avgPricePerKwh ?? null;
+  const tripCostPerKm = allTimeCost?.costPerKm ?? null;
   const monthlySavings = (() => {
     if (!monthlyCost || !carConfig?.gasPricePerLiter || !carConfig?.gasConsumptionLPer100Km) return null;
     const dist = monthlyCost.totalDistanceKm;
@@ -600,8 +600,8 @@ export default function Home({ carId }: Props) {
               </div>
               <div className="text-[#9ca3af] text-sm mt-1">
                 {u.fmtDist(lastDrive.distance)} {u.distanceUnit} · {lastDrive.durationMin ?? '?'} min
-                {lastDrive.netEnergyKwh != null && avgPricePerKwh != null && avgPricePerKwh > 0 && (
-                  <> · <span className="text-[#eab308]">{(lastDrive.netEnergyKwh * avgPricePerKwh).toFixed(2)} {u.currencySymbol}</span></>
+                {lastDrive.distance != null && tripCostPerKm != null && tripCostPerKm > 0 && (
+                  <> · <span className="text-[#eab308]">{(lastDrive.distance * tripCostPerKm).toFixed(2)} {u.currencySymbol}</span></>
                 )}
               </div>
               {lastDrive.consumptionKWhPer100Km != null && (
