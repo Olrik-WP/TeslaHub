@@ -165,6 +165,8 @@ public class MqttLiveDataService : BackgroundService
             ? Encoding.UTF8.GetString(payload)
             : "";
 
+        if (string.IsNullOrEmpty(value)) return;
+
         var data = _liveData.GetOrAdd(carId, _ => new MqttLiveData());
         ApplyValue(data, key, value);
         data.LastUpdated = DateTime.UtcNow;
@@ -178,23 +180,23 @@ public class MqttLiveDataService : BackgroundService
 
         switch (key)
         {
-            case "locked":                    data.Locked = boolVal; break;
-            case "doors_open":                data.DoorsOpen = boolVal; break;
-            case "driver_front_door_open":    data.DriverFrontDoorOpen = boolVal; break;
-            case "driver_rear_door_open":     data.DriverRearDoorOpen = boolVal; break;
-            case "passenger_front_door_open": data.PassengerFrontDoorOpen = boolVal; break;
-            case "passenger_rear_door_open":  data.PassengerRearDoorOpen = boolVal; break;
-            case "trunk_open":                data.TrunkOpen = boolVal; break;
-            case "frunk_open":          data.FrunkOpen = boolVal; break;
-            case "windows_open":        data.WindowsOpen = boolVal; break;
-            case "sentry_mode":         data.SentryMode = boolVal; break;
-            case "is_user_present":     data.IsUserPresent = boolVal; break;
-            case "tpms_soft_warning_fl": data.TpmsSoftWarningFl = boolVal; break;
-            case "tpms_soft_warning_fr": data.TpmsSoftWarningFr = boolVal; break;
-            case "tpms_soft_warning_rl": data.TpmsSoftWarningRl = boolVal; break;
-            case "tpms_soft_warning_rr": data.TpmsSoftWarningRr = boolVal; break;
+            case "locked"                    when boolVal.HasValue: data.Locked = boolVal; break;
+            case "doors_open"                when boolVal.HasValue: data.DoorsOpen = boolVal; break;
+            case "driver_front_door_open"    when boolVal.HasValue: data.DriverFrontDoorOpen = boolVal; break;
+            case "driver_rear_door_open"     when boolVal.HasValue: data.DriverRearDoorOpen = boolVal; break;
+            case "passenger_front_door_open" when boolVal.HasValue: data.PassengerFrontDoorOpen = boolVal; break;
+            case "passenger_rear_door_open"  when boolVal.HasValue: data.PassengerRearDoorOpen = boolVal; break;
+            case "trunk_open"                when boolVal.HasValue: data.TrunkOpen = boolVal; break;
+            case "frunk_open"                when boolVal.HasValue: data.FrunkOpen = boolVal; break;
+            case "windows_open"              when boolVal.HasValue: data.WindowsOpen = boolVal; break;
+            case "sentry_mode"               when boolVal.HasValue: data.SentryMode = boolVal; break;
+            case "is_user_present"           when boolVal.HasValue: data.IsUserPresent = boolVal; break;
+            case "tpms_soft_warning_fl"      when boolVal.HasValue: data.TpmsSoftWarningFl = boolVal; break;
+            case "tpms_soft_warning_fr"      when boolVal.HasValue: data.TpmsSoftWarningFr = boolVal; break;
+            case "tpms_soft_warning_rl"      when boolVal.HasValue: data.TpmsSoftWarningRl = boolVal; break;
+            case "tpms_soft_warning_rr"      when boolVal.HasValue: data.TpmsSoftWarningRr = boolVal; break;
             case "climate_keeper_mode":  data.ClimateKeeperMode = value; break;
-            case "is_preconditioning":   data.IsPreconditioning = boolVal; break;
+            case "is_preconditioning"        when boolVal.HasValue: data.IsPreconditioning = boolVal; break;
         }
     }
 
