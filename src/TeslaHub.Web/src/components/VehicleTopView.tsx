@@ -147,10 +147,16 @@ export default function VehicleTopView({ vehicle }: Props) {
               </g>
 
               {/* Sentry mode eye */}
-              {vehicle.sentryMode === true && (
-                <g transform="translate(150, 240)">
-                  <circle r="5" fill="#3b82f6" opacity="0.8" />
-                  <circle r="2" fill="white" />
+              {vehicle.sentryMode != null && (
+                <g transform="translate(150, 245)">
+                  {/* Outer gray ring */}
+                  <circle r="12" fill="none" stroke="#6b7280" strokeWidth="2" />
+                  {/* Inner fill — red when active, dark when inactive */}
+                  <circle r="9" fill={vehicle.sentryMode ? '#ef4444' : '#1a1a1a'} />
+                  {/* Eye shape */}
+                  <ellipse rx="7" ry="4" fill="none" stroke={vehicle.sentryMode ? '#fff' : '#6b7280'} strokeWidth="1.5" />
+                  {/* Pupil */}
+                  <circle r="2" fill={vehicle.sentryMode ? '#fff' : '#6b7280'} />
                 </g>
               )}
 
