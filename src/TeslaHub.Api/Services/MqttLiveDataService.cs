@@ -25,6 +25,23 @@ public class MqttLiveData
     public bool? TpmsSoftWarningRr { get; set; }
     public string? ClimateKeeperMode { get; set; }
     public bool? IsPreconditioning { get; set; }
+    public bool? IsClimateOn { get; set; }
+
+    public int? BatteryLevel { get; set; }
+    public int? UsableBatteryLevel { get; set; }
+    public double? RatedBatteryRangeKm { get; set; }
+    public double? IdealBatteryRangeKm { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    public double? InsideTemp { get; set; }
+    public double? OutsideTemp { get; set; }
+    public double? Odometer { get; set; }
+    public int? Speed { get; set; }
+    public int? Power { get; set; }
+    public double? DriverTempSetting { get; set; }
+    public double? PassengerTempSetting { get; set; }
+    public string? State { get; set; }
+
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 }
 
@@ -44,7 +61,14 @@ public class MqttLiveDataService : BackgroundService
         "sentry_mode", "is_user_present",
         "tpms_soft_warning_fl", "tpms_soft_warning_fr",
         "tpms_soft_warning_rl", "tpms_soft_warning_rr",
-        "climate_keeper_mode", "is_preconditioning"
+        "climate_keeper_mode", "is_preconditioning", "is_climate_on",
+        "battery_level", "usable_battery_level",
+        "rated_battery_range_km", "ideal_battery_range_km",
+        "latitude", "longitude",
+        "inside_temp", "outside_temp",
+        "odometer", "speed", "power",
+        "driver_temp_setting", "passenger_temp_setting",
+        "state"
     };
 
     public bool IsConnected => _client?.IsConnected == true;
@@ -197,6 +221,21 @@ public class MqttLiveDataService : BackgroundService
             case "tpms_soft_warning_rr"      when boolVal.HasValue: data.TpmsSoftWarningRr = boolVal; break;
             case "climate_keeper_mode":  data.ClimateKeeperMode = value; break;
             case "is_preconditioning"        when boolVal.HasValue: data.IsPreconditioning = boolVal; break;
+            case "is_climate_on"             when boolVal.HasValue: data.IsClimateOn = boolVal; break;
+            case "battery_level":       if (int.TryParse(value, out var bl))  data.BatteryLevel = bl; break;
+            case "usable_battery_level": if (int.TryParse(value, out var ubl)) data.UsableBatteryLevel = ubl; break;
+            case "rated_battery_range_km":  if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var rbr)) data.RatedBatteryRangeKm = rbr; break;
+            case "ideal_battery_range_km":  if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var ibr)) data.IdealBatteryRangeKm = ibr; break;
+            case "latitude":            if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var lat)) data.Latitude = lat; break;
+            case "longitude":           if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var lng)) data.Longitude = lng; break;
+            case "inside_temp":         if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var it)) data.InsideTemp = it; break;
+            case "outside_temp":        if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var ot)) data.OutsideTemp = ot; break;
+            case "odometer":            if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var odo)) data.Odometer = odo; break;
+            case "speed":               if (int.TryParse(value, out var spd)) data.Speed = spd; break;
+            case "power":               if (int.TryParse(value, out var pwr)) data.Power = pwr; break;
+            case "driver_temp_setting":    if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var dts)) data.DriverTempSetting = dts; break;
+            case "passenger_temp_setting": if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var pts)) data.PassengerTempSetting = pts; break;
+            case "state":               data.State = value; break;
         }
     }
 

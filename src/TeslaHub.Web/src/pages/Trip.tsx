@@ -10,23 +10,25 @@ interface Props {
   carId: number | undefined;
 }
 
-function defaultFrom() {
+function defaultFromDate() {
   const d = new Date();
   d.setDate(d.getDate() - 7);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 16);
+  return d.toISOString().slice(0, 10);
 }
-function defaultTo() {
-  const d = new Date();
-  d.setHours(23, 59, 0, 0);
-  return d.toISOString().slice(0, 16);
+function defaultToDate() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function Trip({ carId }: Props) {
   const { t } = useTranslation();
   const u = useUnits();
-  const [from, setFrom] = useState(defaultFrom);
-  const [to, setTo] = useState(defaultTo);
+  const [fromDate, setFromDate] = useState(defaultFromDate);
+  const [fromTime, setFromTime] = useState('00:00');
+  const [toDate, setToDate] = useState(defaultToDate);
+  const [toTime, setToTime] = useState('23:59');
+
+  const from = `${fromDate}T${fromTime}`;
+  const to = `${toDate}T${toTime}`;
 
   const { data: summary, isLoading: sumLoading } = useQuery({
     queryKey: ['tripSummary', carId, from, to],
@@ -48,24 +50,40 @@ export default function Trip({ carId }: Props) {
       <p className="text-xs text-[#6b7280]">{t('tripPage.description')}</p>
 
       {/* Date range picker */}
-      <div className="flex flex-wrap gap-2 items-end">
+      <div className="flex flex-wrap gap-3 items-end">
         <div>
           <label className="text-xs text-[#9ca3af] block mb-1">{t('tripPage.from')}</label>
-          <input
-            type="datetime-local"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px]"
-          />
+          <div className="flex gap-1">
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px]"
+            />
+            <input
+              type="time"
+              value={fromTime}
+              onChange={(e) => setFromTime(e.target.value)}
+              className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-2 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px] w-[90px]"
+            />
+          </div>
         </div>
         <div>
           <label className="text-xs text-[#9ca3af] block mb-1">{t('tripPage.to')}</label>
-          <input
-            type="datetime-local"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px]"
-          />
+          <div className="flex gap-1">
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px]"
+            />
+            <input
+              type="time"
+              value={toTime}
+              onChange={(e) => setToTime(e.target.value)}
+              className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-2 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px] w-[90px]"
+            />
+          </div>
         </div>
       </div>
 

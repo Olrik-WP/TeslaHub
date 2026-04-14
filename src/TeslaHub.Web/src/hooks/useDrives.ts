@@ -6,7 +6,7 @@ export function useDrives(carId: number | undefined, limit = 20, days?: number) 
     queryKey: ['drives', carId, limit, days],
     queryFn: () => getDrives(carId!, limit, 0, days),
     enabled: !!carId,
-    staleTime: 30_000,
+    staleTime: 2 * 60_000,
     placeholderData: keepPreviousData,
   });
 }

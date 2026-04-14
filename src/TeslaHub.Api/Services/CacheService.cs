@@ -6,7 +6,7 @@ public class CacheService
 {
     private readonly IMemoryCache _cache;
 
-    private static readonly TimeSpan LiveDataTtl = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan LiveDataTtl = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan HistoricalDataTtl = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan StaticDataTtl = TimeSpan.FromMinutes(30);
 

@@ -114,7 +114,7 @@ public static class TripQueries
                 WHERE cp.car_id = @CarId
                   AND cp.start_date >= @From AND cp.start_date <= @To
             ) combined
-            ORDER BY "StartDate" ASC
+            ORDER BY "StartDate" DESC
             """, new { CarId = carId, From = from, To = to });
     }
 }

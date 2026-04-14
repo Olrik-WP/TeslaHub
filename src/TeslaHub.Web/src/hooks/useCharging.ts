@@ -6,7 +6,7 @@ export function useChargingSessions(carId: number | undefined, limit = 20) {
     queryKey: ['charging', carId, limit],
     queryFn: () => getChargingSessions(carId!, limit),
     enabled: !!carId,
-    staleTime: 30_000,
+    staleTime: 2 * 60_000,
     placeholderData: keepPreviousData,
   });
 }

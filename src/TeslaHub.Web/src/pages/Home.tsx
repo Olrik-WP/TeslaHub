@@ -400,9 +400,6 @@ export default function Home({ carId }: Props) {
         )}
       </div>
 
-      {/* Vehicle status: TPMS, Body, Climate */}
-      <VehicleTopView vehicle={vehicle} />
-
       {/* Charging in progress */}
       {isCharging && lastCharge && (
         <div className="bg-[#141414] border border-[#3b82f6]/30 rounded-xl p-3 sm:p-4">
@@ -430,6 +427,9 @@ export default function Home({ carId }: Props) {
           </div>
         </div>
       )}
+
+      {/* Vehicle status: TPMS, Body, Climate */}
+      <VehicleTopView vehicle={vehicle} />
 
       {/* Stats grid */}
       <div className="grid grid-cols-3 gap-3">

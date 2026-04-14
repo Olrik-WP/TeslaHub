@@ -19,9 +19,13 @@ const RANGE_OPTIONS: { key: RangeKey; labelKey: string; hours?: number }[] = [
   { key: 'custom', labelKey: 'map.custom' },
 ];
 
-function formatDateForInput(d: Date): string {
+function fmtDate(d: Date) {
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+function fmtTime(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export default function MapPage({ carId }: Props) {
@@ -36,8 +40,13 @@ export default function MapPage({ carId }: Props) {
   const posLng = positionMode ? parseFloat(lngParam) : null;
 
   const [rangeKey, setRangeKey] = useState<RangeKey>('48h');
-  const [customFrom, setCustomFrom] = useState(() => formatDateForInput(new Date(Date.now() - 48 * 3600_000)));
-  const [customTo, setCustomTo] = useState(() => formatDateForInput(new Date()));
+  const [customFromDate, setCustomFromDate] = useState(() => fmtDate(new Date(Date.now() - 48 * 3600_000)));
+  const [customFromTime, setCustomFromTime] = useState(() => fmtTime(new Date(Date.now() - 48 * 3600_000)));
+  const [customToDate, setCustomToDate] = useState(() => fmtDate(new Date()));
+  const [customToTime, setCustomToTime] = useState(() => fmtTime(new Date()));
+
+  const customFrom = `${customFromDate}T${customFromTime}`;
+  const customTo = `${customToDate}T${customToTime}`;
 
   const selectedRange = RANGE_OPTIONS.find((r) => r.key === rangeKey)!;
 
@@ -133,19 +142,19 @@ export default function MapPage({ carId }: Props) {
 
           {/* Custom date inputs */}
           {rangeKey === 'custom' && (
-            <div className="flex gap-2 px-2 pb-2 bg-[#0a0a0a]">
-              <input
-                type="datetime-local"
-                value={customFrom}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-lg px-2 py-1.5 text-white text-xs focus:border-[#e31937] focus:outline-none min-h-[40px]"
-              />
-              <input
-                type="datetime-local"
-                value={customTo}
-                onChange={(e) => setCustomTo(e.target.value)}
-                className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-lg px-2 py-1.5 text-white text-xs focus:border-[#e31937] focus:outline-none min-h-[40px]"
-              />
+            <div className="flex flex-wrap gap-2 px-2 pb-2 bg-[#0a0a0a]">
+              <div className="flex gap-1 flex-1 min-w-0">
+                <input type="date" value={customFromDate} onChange={(e) => setCustomFromDate(e.target.value)}
+                  className="flex-1 min-w-0 bg-[#141414] border border-[#2a2a2a] rounded-lg px-2 py-1.5 text-white text-xs focus:border-[#e31937] focus:outline-none min-h-[40px]" />
+                <input type="time" value={customFromTime} onChange={(e) => setCustomFromTime(e.target.value)}
+                  className="bg-[#141414] border border-[#2a2a2a] rounded-lg px-2 py-1.5 text-white text-xs focus:border-[#e31937] focus:outline-none min-h-[40px] w-[80px]" />
+              </div>
+              <div className="flex gap-1 flex-1 min-w-0">
+                <input type="date" value={customToDate} onChange={(e) => setCustomToDate(e.target.value)}
+                  className="flex-1 min-w-0 bg-[#141414] border border-[#2a2a2a] rounded-lg px-2 py-1.5 text-white text-xs focus:border-[#e31937] focus:outline-none min-h-[40px]" />
+                <input type="time" value={customToTime} onChange={(e) => setCustomToTime(e.target.value)}
+                  className="bg-[#141414] border border-[#2a2a2a] rounded-lg px-2 py-1.5 text-white text-xs focus:border-[#e31937] focus:outline-none min-h-[40px] w-[80px]" />
+              </div>
             </div>
           )}
 

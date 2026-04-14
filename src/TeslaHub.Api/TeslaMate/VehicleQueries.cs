@@ -48,10 +48,7 @@ public static class VehicleQueries
                 p.is_rear_defroster_on AS "IsRearDefrosterOn",
 
                 s.state AS "State",
-                u.version AS "FirmwareVersion",
-                cap.current_capacity_kwh AS "CurrentCapacityKwh",
-                maxcap.max_capacity_kwh AS "MaxCapacityKwh",
-                COALESCE(kms.km_since_last_charge, 0) AS "KmSinceLastCharge"
+                u.version AS "FirmwareVersion"
             FROM cars c
             LEFT JOIN LATERAL (
                 SELECT * FROM positions
@@ -87,6 +84,20 @@ public static class VehicleQueries
                 ORDER BY start_date DESC
                 LIMIT 1
             ) u ON true
+            WHERE c.id = @CarId
+            """, new { CarId = carId });
+    }
+
+    public static async Task<(double? CurrentCapacityKwh, double? MaxCapacityKwh, double KmSinceLastCharge)>
+        GetVehicleComputedAsync(this TeslaMateConnectionFactory db, int carId)
+    {
+        using var conn = db.CreateConnection();
+        var row = await conn.QueryFirstOrDefaultAsync<dynamic>("""
+            SELECT
+                cap.current_capacity_kwh AS currentcap,
+                maxcap.max_capacity_kwh AS maxcap,
+                COALESCE(kms.km_since_last_charge, 0) AS kms
+            FROM cars c
             LEFT JOIN LATERAL (
                 SELECT COALESCE(
                     (
@@ -146,5 +157,8 @@ public static class VehicleQueries
             ) kms ON true
             WHERE c.id = @CarId
             """, new { CarId = carId });
+
+        if (row == null) return (null, null, 0);
+        return ((double?)row.currentcap, (double?)row.maxcap, (double)(row.kms ?? 0m));
     }
 }
