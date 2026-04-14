@@ -77,11 +77,11 @@ export default function VehicleTopView({ vehicle }: Props) {
               {/* Roof */}
               <rect x="88" y="150" width="124" height="170" rx="8" fill="#1e1e1e" stroke="#333" strokeWidth="1" />
 
-              {/* Tires — direct TPMS (pressures) or indirect TPMS (warnings only) */}
-              {hasTpms && TIRE_POSITIONS.map((tp) => {
-                const warn = getWarning(vehicle, tp.key);
-                const pressure = getPressure(vehicle, tp.key);
-                const color = warn ? '#ef4444' : pressure != null ? '#22c55e' : '#555';
+              {/* Tires — always visible; colored when TPMS data is available */}
+              {TIRE_POSITIONS.map((tp) => {
+                const warn = hasTpms ? getWarning(vehicle, tp.key) : false;
+                const pressure = hasTpmsPressure ? getPressure(vehicle, tp.key) : null;
+                const color = warn ? '#ef4444' : pressure != null ? '#22c55e' : '#444';
                 return (
                   <g key={tp.key}>
                     <rect
@@ -97,7 +97,6 @@ export default function VehicleTopView({ vehicle }: Props) {
                         {u.fmtPressure(pressure)}
                       </text>
                     )}
-                    {/* Indirect TPMS: warning icon when no pressure value */}
                     {pressure == null && warn && (
                       <text
                         x={tp.x} y={tp.y + 5}
@@ -210,8 +209,8 @@ export default function VehicleTopView({ vehicle }: Props) {
                 </g>
               )}
 
-              {/* Pressure unit label */}
-              {hasTpms && (
+              {/* Pressure unit label — only when actual pressure values exist */}
+              {hasTpmsPressure && (
                 <text x="150" y="435" textAnchor="middle" fill="#6b7280" fontSize="10">
                   {u.pressureUnit}
                 </text>
