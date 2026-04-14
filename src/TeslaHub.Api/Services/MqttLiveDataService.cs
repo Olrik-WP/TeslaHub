@@ -19,6 +19,10 @@ public class MqttLiveData
     public bool? WindowsOpen { get; set; }
     public bool? SentryMode { get; set; }
     public bool? IsUserPresent { get; set; }
+    public double? TpmsPressureFl { get; set; }
+    public double? TpmsPressureFr { get; set; }
+    public double? TpmsPressureRl { get; set; }
+    public double? TpmsPressureRr { get; set; }
     public bool? TpmsSoftWarningFl { get; set; }
     public bool? TpmsSoftWarningFr { get; set; }
     public bool? TpmsSoftWarningRl { get; set; }
@@ -61,6 +65,8 @@ public class MqttLiveDataService : BackgroundService
         "passenger_front_door_open", "passenger_rear_door_open",
         "trunk_open", "frunk_open", "windows_open",
         "sentry_mode", "is_user_present",
+        "tpms_pressure_fl", "tpms_pressure_fr",
+        "tpms_pressure_rl", "tpms_pressure_rr",
         "tpms_soft_warning_fl", "tpms_soft_warning_fr",
         "tpms_soft_warning_rl", "tpms_soft_warning_rr",
         "climate_keeper_mode", "is_preconditioning", "is_climate_on",
@@ -218,6 +224,10 @@ public class MqttLiveDataService : BackgroundService
             case "windows_open"              when boolVal.HasValue: data.WindowsOpen = boolVal; break;
             case "sentry_mode"               when boolVal.HasValue: data.SentryMode = boolVal; break;
             case "is_user_present"           when boolVal.HasValue: data.IsUserPresent = boolVal; break;
+            case "tpms_pressure_fl":    if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var tpfl)) data.TpmsPressureFl = tpfl; break;
+            case "tpms_pressure_fr":    if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var tpfr)) data.TpmsPressureFr = tpfr; break;
+            case "tpms_pressure_rl":    if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var tprl)) data.TpmsPressureRl = tprl; break;
+            case "tpms_pressure_rr":    if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var tprr)) data.TpmsPressureRr = tprr; break;
             case "tpms_soft_warning_fl"      when boolVal.HasValue: data.TpmsSoftWarningFl = boolVal; break;
             case "tpms_soft_warning_fr"      when boolVal.HasValue: data.TpmsSoftWarningFr = boolVal; break;
             case "tpms_soft_warning_rl"      when boolVal.HasValue: data.TpmsSoftWarningRl = boolVal; break;

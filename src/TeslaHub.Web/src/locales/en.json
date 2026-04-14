@@ -411,6 +411,8 @@
     "security": "Security",
     "climate": "Climate",
     "tirePressure": "Tire pressure",
+    "tpmsIndirect": "indirect",
+    "lowPressure": "Low!",
     "tireFL": "FL",
     "tireFR": "FR",
     "tireRL": "RL",

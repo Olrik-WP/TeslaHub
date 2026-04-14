@@ -411,6 +411,8 @@
     "security": "Sécurité",
     "climate": "Climatisation",
     "tirePressure": "Pression des pneus",
+    "tpmsIndirect": "indirect",
+    "lowPressure": "Bas !",
     "tireFL": "AVG",
     "tireFR": "AVD",
     "tireRL": "ARG",

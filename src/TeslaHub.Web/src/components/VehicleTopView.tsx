@@ -33,7 +33,9 @@ export default function VehicleTopView({ vehicle }: Props) {
   const u = useUnits();
   const [hintDismissed, setHintDismissed] = useState(() => localStorage.getItem(MQTT_HINT_KEY) === '1');
 
-  const hasTpms = vehicle.tpmsPressureFl != null;
+  const hasTpmsPressure = vehicle.tpmsPressureFl != null;
+  const hasTpmsWarning = vehicle.tpmsSoftWarningFl != null;
+  const hasTpms = hasTpmsPressure || hasTpmsWarning;
   const hasBody = vehicle.doorsOpen != null || vehicle.trunkOpen != null || vehicle.isLocked != null;
   const hasClimate = vehicle.isClimateOn != null || vehicle.driverTempSetting != null;
   const isCharging = vehicle.state?.toLowerCase() === 'charging';
@@ -75,7 +77,7 @@ export default function VehicleTopView({ vehicle }: Props) {
               {/* Roof */}
               <rect x="88" y="150" width="124" height="170" rx="8" fill="#1e1e1e" stroke="#333" strokeWidth="1" />
 
-              {/* Tires — only rendered when TPMS data exists */}
+              {/* Tires — direct TPMS (pressures) or indirect TPMS (warnings only) */}
               {hasTpms && TIRE_POSITIONS.map((tp) => {
                 const warn = getWarning(vehicle, tp.key);
                 const pressure = getPressure(vehicle, tp.key);
@@ -93,6 +95,16 @@ export default function VehicleTopView({ vehicle }: Props) {
                         fontSize="11" fontWeight="bold" fontFamily="monospace"
                       >
                         {u.fmtPressure(pressure)}
+                      </text>
+                    )}
+                    {/* Indirect TPMS: warning icon when no pressure value */}
+                    {pressure == null && warn && (
+                      <text
+                        x={tp.x} y={tp.y + 5}
+                        textAnchor="middle" fill="#ef4444"
+                        fontSize="18" fontWeight="bold"
+                      >
+                        ⚠
                       </text>
                     )}
                   </g>
@@ -344,25 +356,45 @@ export default function VehicleTopView({ vehicle }: Props) {
             </div>
           )}
 
-          {/* TPMS */}
+          {/* TPMS — direct (pressures) or indirect (warnings only) */}
           {hasTpms && (
             <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3">
-              <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2">{t('vehicleView.tirePressure')}</div>
-              <div className="grid grid-cols-2 gap-2">
-                {TIRE_POSITIONS.map((tp) => {
-                  const p = getPressure(vehicle, tp.key);
-                  const warn = getWarning(vehicle, tp.key);
-                  return (
-                    <div key={tp.key} className="flex items-center gap-2">
-                      <span className="text-xs text-[#9ca3af] w-8">{t(tp.labelKey)}</span>
-                      <span className={`text-sm font-mono font-bold ${warn ? 'text-[#ef4444]' : 'text-white'}`}>
-                        {u.fmtPressure(p)} {u.pressureUnit}
-                      </span>
-                      {warn && <span className="text-[#ef4444] text-xs">⚠</span>}
-                    </div>
-                  );
-                })}
+              <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2">
+                {t('vehicleView.tirePressure')}
+                {!hasTpmsPressure && <span className="text-[10px] normal-case ml-1">({t('vehicleView.tpmsIndirect')})</span>}
               </div>
+              {hasTpmsPressure ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {TIRE_POSITIONS.map((tp) => {
+                    const p = getPressure(vehicle, tp.key);
+                    const warn = getWarning(vehicle, tp.key);
+                    return (
+                      <div key={tp.key} className="flex items-center gap-2">
+                        <span className="text-xs text-[#9ca3af] w-8">{t(tp.labelKey)}</span>
+                        <span className={`text-sm font-mono font-bold ${warn ? 'text-[#ef4444]' : 'text-white'}`}>
+                          {u.fmtPressure(p)} {u.pressureUnit}
+                        </span>
+                        {warn && <span className="text-[#ef4444] text-xs">⚠</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {TIRE_POSITIONS.map((tp) => {
+                    const warn = getWarning(vehicle, tp.key);
+                    return (
+                      <StatusPill
+                        key={tp.key}
+                        label={t(tp.labelKey)}
+                        active={warn}
+                        color={warn ? '#ef4444' : '#22c55e'}
+                        text={warn ? t('vehicleView.lowPressure') : 'OK'}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
