@@ -430,6 +430,8 @@
     "on": "Actif",
     "off": "Inactif",
     "yes": "Oui",
-    "no": "Non"
+    "no": "Non",
+    "mqttDisconnected": "MQTT non connecté — données carrosserie/sécurité indisponibles",
+    "mqttHint": "Activez MQTT pour voir portes, coffre, verrouillage, Sentinelle et plus — voir docs"
   }
 }

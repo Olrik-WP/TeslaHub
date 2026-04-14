@@ -1,3 +1,4 @@
+using TeslaHub.Api.Models;
 using TeslaHub.Api.Services;
 using TeslaHub.Api.TeslaMate;
 
@@ -15,12 +16,34 @@ public static class VehicleEndpoints
             return Results.Ok(cars);
         });
 
-        group.MapGet("/{carId:int}/status", async (int carId, TeslaMateConnectionFactory tm, CacheService cache) =>
+        group.MapGet("/{carId:int}/status", async (int carId, TeslaMateConnectionFactory tm, CacheService cache, MqttLiveDataService mqtt) =>
         {
             var vehicle = await cache.GetOrSetLiveAsync(
                 $"vehicle:{carId}",
                 () => tm.GetVehicleStatusAsync(carId));
-            return vehicle != null ? Results.Ok(vehicle) : Results.NotFound();
+
+            if (vehicle == null) return Results.NotFound();
+
+            var live = mqtt.GetLiveData(carId);
+            var merged = vehicle with
+            {
+                IsLocked = live?.Locked ?? vehicle.IsLocked,
+                DoorsOpen = live?.DoorsOpen ?? vehicle.DoorsOpen,
+                TrunkOpen = live?.TrunkOpen ?? vehicle.TrunkOpen,
+                FrunkOpen = live?.FrunkOpen ?? vehicle.FrunkOpen,
+                WindowsOpen = live?.WindowsOpen ?? vehicle.WindowsOpen,
+                SentryMode = live?.SentryMode ?? vehicle.SentryMode,
+                IsUserPresent = live?.IsUserPresent ?? vehicle.IsUserPresent,
+                TpmsSoftWarningFl = live?.TpmsSoftWarningFl ?? vehicle.TpmsSoftWarningFl,
+                TpmsSoftWarningFr = live?.TpmsSoftWarningFr ?? vehicle.TpmsSoftWarningFr,
+                TpmsSoftWarningRl = live?.TpmsSoftWarningRl ?? vehicle.TpmsSoftWarningRl,
+                TpmsSoftWarningRr = live?.TpmsSoftWarningRr ?? vehicle.TpmsSoftWarningRr,
+                ClimateKeeperMode = live?.ClimateKeeperMode ?? vehicle.ClimateKeeperMode,
+                IsPreconditioning = live?.IsPreconditioning ?? vehicle.IsPreconditioning,
+                MqttConnected = mqtt.IsConnected
+            };
+
+            return Results.Ok(merged);
         });
     }
 }

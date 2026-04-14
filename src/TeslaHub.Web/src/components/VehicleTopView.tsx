@@ -37,6 +37,14 @@ export default function VehicleTopView({ vehicle }: Props) {
 
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
+      {/* MQTT status */}
+      {!vehicle.mqttConnected && (
+        <div className="text-[10px] text-[#6b7280] mb-2 flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#6b7280] inline-block" />
+          {hasBody ? t('vehicleView.mqttDisconnected') : t('vehicleView.mqttHint')}
+        </div>
+      )}
+
       <div className="flex flex-col lg:flex-row gap-4">
         {/* SVG vehicle top-down view */}
         <div className="flex-shrink-0 flex justify-center">
@@ -148,7 +156,10 @@ export default function VehicleTopView({ vehicle }: Props) {
           {/* Body / Security */}
           {hasBody && (
             <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3">
-              <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2">{t('vehicleView.security')}</div>
+              <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                {t('vehicleView.security')}
+                {vehicle.mqttConnected && <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] inline-block" title="MQTT live" />}
+              </div>
               <div className="flex flex-wrap gap-2">
                 <StatusPill
                   label={t('vehicleView.locked')}

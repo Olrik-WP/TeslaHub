@@ -430,6 +430,8 @@
     "on": "On",
     "off": "Off",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "mqttDisconnected": "MQTT not connected — body/security data unavailable",
+    "mqttHint": "Enable MQTT to see doors, trunk, lock, Sentry Mode and more — see docs"
   }
 }

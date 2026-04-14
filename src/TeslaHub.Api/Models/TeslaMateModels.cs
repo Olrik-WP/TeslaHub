@@ -30,33 +30,40 @@ public record VehicleDto
     public double? MaxCapacityKwh { get; init; }
     public double KmSinceLastCharge { get; init; }
 
-    // TPMS
+    // TPMS pressures (persisted in positions table)
     public double? TpmsPressureFl { get; init; }
     public double? TpmsPressureFr { get; init; }
     public double? TpmsPressureRl { get; init; }
     public double? TpmsPressureRr { get; init; }
+
+    // Climate (persisted in positions table)
+    public bool? IsClimateOn { get; init; }
+    public double? DriverTempSetting { get; init; }
+    public double? PassengerTempSetting { get; init; }
+    public bool? IsFrontDefrosterOn { get; init; }
+    public bool? IsRearDefrosterOn { get; init; }
+
+    // TPMS warnings (MQTT live only)
     public bool? TpmsSoftWarningFl { get; init; }
     public bool? TpmsSoftWarningFr { get; init; }
     public bool? TpmsSoftWarningRl { get; init; }
     public bool? TpmsSoftWarningRr { get; init; }
 
-    // Body / Security
+    // Body / Security (MQTT live only)
+    public bool? IsLocked { get; init; }
     public bool? DoorsOpen { get; init; }
     public bool? TrunkOpen { get; init; }
     public bool? FrunkOpen { get; init; }
     public bool? WindowsOpen { get; init; }
-    public bool? IsLocked { get; init; }
     public bool? SentryMode { get; init; }
     public bool? IsUserPresent { get; init; }
 
-    // Climate
-    public bool? IsClimateOn { get; init; }
+    // Climate extras (MQTT live only)
     public string? ClimateKeeperMode { get; init; }
-    public double? DriverTempSetting { get; init; }
-    public double? PassengerTempSetting { get; init; }
     public bool? IsPreconditioning { get; init; }
-    public bool? IsFrontDefrosterOn { get; init; }
-    public bool? IsRearDefrosterOn { get; init; }
+
+    // MQTT connectivity
+    public bool MqttConnected { get; init; }
 }
 
 public record DriveDto

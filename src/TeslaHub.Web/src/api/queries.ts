@@ -36,33 +36,40 @@ export interface VehicleStatus {
   kmSinceLastCharge: number;
   maxCapacityKwh: number | null;
 
-  // TPMS
+  // TPMS pressures (from DB)
   tpmsPressureFl: number | null;
   tpmsPressureFr: number | null;
   tpmsPressureRl: number | null;
   tpmsPressureRr: number | null;
+
+  // Climate (from DB)
+  isClimateOn: boolean | null;
+  driverTempSetting: number | null;
+  passengerTempSetting: number | null;
+  isFrontDefrosterOn: boolean | null;
+  isRearDefrosterOn: boolean | null;
+
+  // TPMS warnings (MQTT live)
   tpmsSoftWarningFl: boolean | null;
   tpmsSoftWarningFr: boolean | null;
   tpmsSoftWarningRl: boolean | null;
   tpmsSoftWarningRr: boolean | null;
 
-  // Body / Security
+  // Body / Security (MQTT live)
+  isLocked: boolean | null;
   doorsOpen: boolean | null;
   trunkOpen: boolean | null;
   frunkOpen: boolean | null;
   windowsOpen: boolean | null;
-  isLocked: boolean | null;
   sentryMode: boolean | null;
   isUserPresent: boolean | null;
 
-  // Climate
-  isClimateOn: boolean | null;
+  // Climate extras (MQTT live)
   climateKeeperMode: string | null;
-  driverTempSetting: number | null;
-  passengerTempSetting: number | null;
   isPreconditioning: boolean | null;
-  isFrontDefrosterOn: boolean | null;
-  isRearDefrosterOn: boolean | null;
+
+  // MQTT connectivity
+  mqttConnected: boolean;
 }
 
 export interface Drive {

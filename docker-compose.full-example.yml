@@ -13,7 +13,7 @@ services:
       - DATABASE_PASS=${TM_DB_PASS}
       - DATABASE_NAME=${TM_DB_NAME:-teslamate}
       - DATABASE_HOST=database
-      - DISABLE_MQTT=true
+      - MQTT_HOST=mosquitto
       - TZ=${TZ:-Europe/Paris}
     ports:
       - "127.0.0.1:4000:4000"
@@ -44,6 +44,15 @@ services:
       - teslamate-grafana-data:/var/lib/grafana
     depends_on:
       - database
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: always
+    command: mosquitto -c /mosquitto-no-auth.conf
+    ports:
+      - "127.0.0.1:1883:1883"
+    volumes:
+      - mosquitto-data:/mosquitto/data
 
   # ─── TeslaHub ──────────────────────────────────────────────────
   teslahub-init:
@@ -80,6 +89,11 @@ services:
       - TESLAHUB_JWT_SECRET=${TESLAHUB_JWT_SECRET}
       - MAP_TILE_URL=${MAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
       - TESLAHUB_ALLOWED_IPS=${TESLAHUB_ALLOWED_IPS:-}
+      - MQTT_HOST=${MQTT_HOST:-mosquitto}
+      - MQTT_PORT=${MQTT_PORT:-1883}
+      - MQTT_USER=${MQTT_USER:-}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-}
+      - MQTT_NAMESPACE=${MQTT_NAMESPACE:-}
       - TZ=${TZ:-Europe/Paris}
     ports:
       - "127.0.0.1:4001:8080"
@@ -99,3 +113,4 @@ services:
 volumes:
   teslamate-db:
   teslamate-grafana-data:
+  mosquitto-data:

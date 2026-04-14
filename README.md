@@ -39,13 +39,16 @@ TeslaMate remains your telemetry source. TeslaHub is the UX layer.
 Your Server (Docker)
 ├── TeslaMate           (existing)
 ├── PostgreSQL          (existing — hosts both teslamate and teslahub databases)
+├── Mosquitto           (existing or new — MQTT broker)
 ├── Grafana             (existing)
 ├── TeslaHub Init       (one-shot — creates DB users automatically)
-├── TeslaHub API        (ASP.NET Core 9 — reads TeslaMate DB, manages App DB)
+├── TeslaHub API        (ASP.NET Core 9 — reads TeslaMate DB + MQTT live data)
 └── TeslaHub Web        (React + Caddy — serves the UI)
 ```
 
 TeslaHub connects to your existing PostgreSQL instance via the Docker internal network, just like Grafana does. Your TeslaMate database is **never modified** — TeslaHub uses a read-only user.
+
+Optionally, TeslaHub also connects to TeslaMate's MQTT broker to receive **live vehicle data** (door/trunk/frunk status, lock state, Sentry Mode, TPMS warnings, preconditioning). See [MQTT Setup](#mqtt-setup-live-vehicle-status) below.
 
 ---
 
@@ -80,6 +83,13 @@ TESLAHUB_JWT_SECRET=generate_a_64_char_random_string
 
 # Optional — restrict access by IP (empty = allow all)
 # TESLAHUB_ALLOWED_IPS=192.168.1.0/24
+
+# Optional — MQTT for live vehicle status (doors, trunk, lock, sentry...)
+# See "MQTT Setup" section below
+MQTT_HOST=mosquitto
+MQTT_PORT=1883
+# MQTT_USER=
+# MQTT_PASSWORD=
 ```
 
 > **Tip:** Generate a JWT secret with: `openssl rand -hex 32`
@@ -125,6 +135,11 @@ Add the following services to your **existing** TeslaMate `docker-compose.yml`:
       - TESLAHUB_JWT_SECRET=${TESLAHUB_JWT_SECRET}
       - MAP_TILE_URL=${MAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
       - TESLAHUB_ALLOWED_IPS=${TESLAHUB_ALLOWED_IPS:-}
+      - MQTT_HOST=${MQTT_HOST:-}
+      - MQTT_PORT=${MQTT_PORT:-1883}
+      - MQTT_USER=${MQTT_USER:-}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-}
+      - MQTT_NAMESPACE=${MQTT_NAMESPACE:-}
       - TZ=${TZ:-Europe/Paris}
     ports:
       - "127.0.0.1:4001:8080"
@@ -160,6 +175,67 @@ The `teslahub-init` container will automatically:
 Then `teslahub-api` starts and auto-migrates the TeslaHub database schema.
 
 TeslaHub is now available at **http://your-server:4002**.
+
+---
+
+## MQTT Setup (Live Vehicle Status)
+
+TeslaMate publishes real-time vehicle data to an MQTT broker (Mosquitto). Some data — like door/trunk/frunk status, lock state, Sentry Mode, TPMS pressure warnings, and preconditioning — is **only available via MQTT** and is never stored in the PostgreSQL database.
+
+TeslaHub can connect to this MQTT broker to display these live features on the Home page.
+
+### What you need
+
+1. **A Mosquitto broker** running in your Docker stack
+2. **TeslaMate with MQTT enabled** (i.e. `DISABLE_MQTT` must NOT be set to `true`)
+
+> **⚠️ Important:** If your TeslaMate has `DISABLE_MQTT=true`, you must remove this line (or set `MQTT_HOST=mosquitto` instead) for MQTT to work. Without it, TeslaMate will not publish any data to the broker and live vehicle status will be unavailable in TeslaHub.
+
+### If you already have Mosquitto
+
+Most TeslaMate installations include Mosquitto. Just add `MQTT_HOST=mosquitto` to your `.env` (or to the `teslahub-api` environment) where `mosquitto` is the Docker service name of your broker.
+
+### If you don't have Mosquitto yet
+
+Add this service to your `docker-compose.yml`:
+
+```yaml
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: always
+    command: mosquitto -c /mosquitto-no-auth.conf
+    ports:
+      - "127.0.0.1:1883:1883"
+    volumes:
+      - mosquitto-data:/mosquitto/data
+```
+
+And add `mosquitto-data:` to your `volumes:` section.
+
+Then update your TeslaMate service:
+- Remove `DISABLE_MQTT=true`
+- Add `MQTT_HOST=mosquitto`
+
+### What happens without MQTT?
+
+TeslaHub works perfectly fine without MQTT. All database-backed features (charging, trips, statistics, battery health, TPMS pressures, climate on/off, temperatures, etc.) continue to work.
+
+Only the following **live features** require MQTT:
+
+| Feature | MQTT Topic |
+|---|---|
+| Door status (open/closed) | `teslamate/cars/$id/doors_open` |
+| Trunk status | `teslamate/cars/$id/trunk_open` |
+| Frunk status | `teslamate/cars/$id/frunk_open` |
+| Window status | `teslamate/cars/$id/windows_open` |
+| Lock state | `teslamate/cars/$id/locked` |
+| Sentry Mode | `teslamate/cars/$id/sentry_mode` |
+| User present | `teslamate/cars/$id/is_user_present` |
+| TPMS warnings | `teslamate/cars/$id/tpms_soft_warning_*` |
+| Climate keeper mode | `teslamate/cars/$id/climate_keeper_mode` |
+| Preconditioning | `teslamate/cars/$id/is_preconditioning` |
+
+When MQTT is not connected, TeslaHub shows a subtle indicator and hides the body/security panel.
 
 ---
 
@@ -239,6 +315,11 @@ Your data is safe — TeslaHub data lives in the PostgreSQL volume. Only the app
 | `TESLAHUB_JWT_SECRET` | *(required)* | Secret key for JWT signing |
 | `MAP_TILE_URL` | OpenStreetMap | Custom tile server URL |
 | `TESLAHUB_ALLOWED_IPS` | *(empty = all)* | Restrict access by IP/CIDR |
+| `MQTT_HOST` | *(empty = disabled)* | MQTT broker hostname (e.g. `mosquitto`). Enables live vehicle status |
+| `MQTT_PORT` | `1883` | MQTT broker port |
+| `MQTT_USER` | *(empty)* | MQTT username (if broker requires auth) |
+| `MQTT_PASSWORD` | *(empty)* | MQTT password |
+| `MQTT_NAMESPACE` | *(empty)* | TeslaMate MQTT namespace (if configured) |
 | `TZ` | `Europe/Paris` | Timezone |
 
 ---
