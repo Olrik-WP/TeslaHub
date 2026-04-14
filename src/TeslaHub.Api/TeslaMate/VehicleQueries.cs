@@ -35,6 +35,32 @@ public static class VehicleQueries
                 COALESCE(p.outside_temp, fallback.outside_temp) AS "OutsideTemp",
                 p.speed AS "Speed", p.power AS "Power",
                 p.date AS "PositionDate",
+
+                COALESCE(p.tpms_pressure_fl, tpms.tpms_pressure_fl) AS "TpmsPressureFl",
+                COALESCE(p.tpms_pressure_fr, tpms.tpms_pressure_fr) AS "TpmsPressureFr",
+                COALESCE(p.tpms_pressure_rl, tpms.tpms_pressure_rl) AS "TpmsPressureRl",
+                COALESCE(p.tpms_pressure_rr, tpms.tpms_pressure_rr) AS "TpmsPressureRr",
+                COALESCE(p.tpms_soft_warning_fl, false) AS "TpmsSoftWarningFl",
+                COALESCE(p.tpms_soft_warning_fr, false) AS "TpmsSoftWarningFr",
+                COALESCE(p.tpms_soft_warning_rl, false) AS "TpmsSoftWarningRl",
+                COALESCE(p.tpms_soft_warning_rr, false) AS "TpmsSoftWarningRr",
+
+                p.doors_open AS "DoorsOpen",
+                p.trunk_open AS "TrunkOpen",
+                p.frunk_open AS "FrunkOpen",
+                p.windows_open AS "WindowsOpen",
+                p.is_locked AS "IsLocked",
+                p.sentry_mode AS "SentryMode",
+                p.is_user_present AS "IsUserPresent",
+
+                p.is_climate_on AS "IsClimateOn",
+                p.climate_keeper_mode AS "ClimateKeeperMode",
+                COALESCE(p.driver_temp_setting, fallback.driver_temp_setting) AS "DriverTempSetting",
+                COALESCE(p.passenger_temp_setting, fallback.passenger_temp_setting) AS "PassengerTempSetting",
+                p.is_preconditioning AS "IsPreconditioning",
+                p.is_front_defroster_on AS "IsFrontDefrosterOn",
+                p.is_rear_defroster_on AS "IsRearDefrosterOn",
+
                 s.state AS "State",
                 u.version AS "FirmwareVersion",
                 cap.current_capacity_kwh AS "CurrentCapacityKwh",
@@ -48,13 +74,21 @@ public static class VehicleQueries
                 LIMIT 1
             ) p ON true
             LEFT JOIN LATERAL (
-                SELECT inside_temp, outside_temp, rated_battery_range_km, ideal_battery_range_km
+                SELECT inside_temp, outside_temp, rated_battery_range_km, ideal_battery_range_km,
+                       driver_temp_setting, passenger_temp_setting
                 FROM positions
                 WHERE car_id = c.id
                   AND (inside_temp IS NOT NULL OR outside_temp IS NOT NULL OR rated_battery_range_km IS NOT NULL)
                 ORDER BY date DESC
                 LIMIT 1
             ) fallback ON true
+            LEFT JOIN LATERAL (
+                SELECT tpms_pressure_fl, tpms_pressure_fr, tpms_pressure_rl, tpms_pressure_rr
+                FROM positions
+                WHERE car_id = c.id AND tpms_pressure_fl IS NOT NULL
+                ORDER BY date DESC
+                LIMIT 1
+            ) tpms ON true
             LEFT JOIN LATERAL (
                 SELECT state FROM states
                 WHERE car_id = c.id

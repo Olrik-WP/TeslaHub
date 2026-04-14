@@ -29,6 +29,34 @@ public record VehicleDto
     public double? CurrentCapacityKwh { get; init; }
     public double? MaxCapacityKwh { get; init; }
     public double KmSinceLastCharge { get; init; }
+
+    // TPMS
+    public double? TpmsPressureFl { get; init; }
+    public double? TpmsPressureFr { get; init; }
+    public double? TpmsPressureRl { get; init; }
+    public double? TpmsPressureRr { get; init; }
+    public bool? TpmsSoftWarningFl { get; init; }
+    public bool? TpmsSoftWarningFr { get; init; }
+    public bool? TpmsSoftWarningRl { get; init; }
+    public bool? TpmsSoftWarningRr { get; init; }
+
+    // Body / Security
+    public bool? DoorsOpen { get; init; }
+    public bool? TrunkOpen { get; init; }
+    public bool? FrunkOpen { get; init; }
+    public bool? WindowsOpen { get; init; }
+    public bool? IsLocked { get; init; }
+    public bool? SentryMode { get; init; }
+    public bool? IsUserPresent { get; init; }
+
+    // Climate
+    public bool? IsClimateOn { get; init; }
+    public string? ClimateKeeperMode { get; init; }
+    public double? DriverTempSetting { get; init; }
+    public double? PassengerTempSetting { get; init; }
+    public bool? IsPreconditioning { get; init; }
+    public bool? IsFrontDefrosterOn { get; init; }
+    public bool? IsRearDefrosterOn { get; init; }
 }
 
 public record DriveDto
@@ -105,6 +133,9 @@ public record ChargingSessionDto
     public double? CostPerKwh { get; init; }
     public double? Odometer { get; init; }
     public double? DistanceSinceLastCharge { get; init; }
+    public int? MaxCurrent { get; init; }
+    public int? MaxVoltage { get; init; }
+    public string? ConnChargeCable { get; init; }
 }
 
 public record ChargePointDto
@@ -114,6 +145,9 @@ public record ChargePointDto
     public double? ChargeEnergyAdded { get; init; }
     public int? ChargerPower { get; init; }
     public double? RatedBatteryRangeKm { get; init; }
+    public int? ChargerActualCurrent { get; init; }
+    public int? ChargerVoltage { get; init; }
+    public string? ConnChargeCable { get; init; }
 }
 
 public record GeofenceDto
@@ -335,4 +369,106 @@ public record PeriodStatsDto
     public int ChargeCount { get; init; }
     public decimal? ChargeCost { get; init; }
     public double? ConsumptionNetKwhPer100Km { get; init; }
+}
+
+// ─── Database Info ──────────────────────────────────────────────
+public record DatabaseInfoDto
+{
+    public string PostgresVersion { get; init; } = string.Empty;
+    public string Timezone { get; init; } = string.Empty;
+    public long? SharedBuffersBytes { get; init; }
+    public long? TotalSizeBytes { get; init; }
+}
+
+public record TableSizeDto
+{
+    public string TableName { get; init; } = string.Empty;
+    public long DataBytes { get; init; }
+    public long IndexBytes { get; init; }
+    public long TotalBytes { get; init; }
+}
+
+public record TableRowCountDto
+{
+    public string TableName { get; init; } = string.Empty;
+    public long RowCount { get; init; }
+}
+
+public record IndexStatDto
+{
+    public string TableName { get; init; } = string.Empty;
+    public string IndexName { get; init; } = string.Empty;
+    public long IndexScans { get; init; }
+    public long TuplesRead { get; init; }
+    public long TuplesFetched { get; init; }
+    public long IndexSizeBytes { get; init; }
+}
+
+public record DataStatsDto
+{
+    public int DriveCount { get; init; }
+    public int ChargeCount { get; init; }
+    public int UpdateCount { get; init; }
+    public double? TotalDistanceKm { get; init; }
+    public double? OdometerKm { get; init; }
+    public string? CurrentFirmware { get; init; }
+    public int UnclosedDrives { get; init; }
+    public int UnclosedCharges { get; init; }
+}
+
+public record LocationStatsDto
+{
+    public int AddressCount { get; init; }
+    public int CityCount { get; init; }
+    public int StateCount { get; init; }
+    public int CountryCount { get; init; }
+}
+
+public record VisitedLocationDto
+{
+    public string Address { get; init; } = string.Empty;
+    public string? City { get; init; }
+    public string? State { get; init; }
+    public string? Country { get; init; }
+    public double? Latitude { get; init; }
+    public double? Longitude { get; init; }
+    public int VisitCount { get; init; }
+    public DateTime LastVisited { get; init; }
+}
+
+public record TopCityDto
+{
+    public string City { get; init; } = string.Empty;
+    public int Count { get; init; }
+}
+
+public record TripSummaryDto
+{
+    public int DriveCount { get; init; }
+    public int ChargeCount { get; init; }
+    public double TotalDistanceKm { get; init; }
+    public int TotalDriveMin { get; init; }
+    public int TotalChargeMin { get; init; }
+    public double TotalEnergyUsedKwh { get; init; }
+    public double TotalEnergyAddedKwh { get; init; }
+    public double? AvgConsumption { get; init; }
+    public double? AvgSpeedKmh { get; init; }
+    public double? AvgOutsideTemp { get; init; }
+}
+
+public record TripSegmentDto
+{
+    public string Type { get; init; } = string.Empty;
+    public int Id { get; init; }
+    public DateTime StartDate { get; init; }
+    public DateTime? EndDate { get; init; }
+    public int? DurationMin { get; init; }
+    public double? DistanceKm { get; init; }
+    public double? EnergyKwh { get; init; }
+    public string? StartAddress { get; init; }
+    public string? EndAddress { get; init; }
+    public int? StartBattery { get; init; }
+    public int? EndBattery { get; init; }
+    public double? AvgSpeedKmh { get; init; }
+    public double? Consumption { get; init; }
 }

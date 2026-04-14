@@ -8,6 +8,7 @@ import { useDrives } from '../hooks/useDrives';
 import { useUnits } from '../hooks/useUnits';
 import BatteryGauge from '../components/BatteryGauge';
 import StatCard from '../components/StatCard';
+import VehicleTopView from '../components/VehicleTopView';
 import { getStats, getChargingStats, getDriveStats, getSettings, getCostOverrides, getCostSummary, getTeslaMateCostSummary, getCarConfig } from '../api/queries';
 import type { VehicleStatus } from '../api/queries';
 import { useTranslation } from 'react-i18next';
@@ -398,6 +399,9 @@ export default function Home({ carId }: Props) {
           </div>
         )}
       </div>
+
+      {/* Vehicle status: TPMS, Body, Climate */}
+      <VehicleTopView vehicle={vehicle} />
 
       {/* Charging in progress */}
       {isCharging && lastCharge && (

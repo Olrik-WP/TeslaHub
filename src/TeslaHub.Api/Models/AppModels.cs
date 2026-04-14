@@ -31,6 +31,9 @@ public class GlobalSettings
     [MaxLength(10)]
     public string UnitOfTemperature { get; set; } = "C";
 
+    [MaxLength(10)]
+    public string UnitOfPressure { get; set; } = "bar";
+
     public int? DefaultCarId { get; set; }
 
     [MaxLength(500)]

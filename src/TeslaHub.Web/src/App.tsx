@@ -25,6 +25,9 @@ const Mileage = lazy(() => import('./pages/Mileage'));
 const Updates = lazy(() => import('./pages/Updates'));
 const States = lazy(() => import('./pages/States'));
 const Statistics = lazy(() => import('./pages/Statistics'));
+const DatabaseInfo = lazy(() => import('./pages/DatabaseInfo'));
+const Locations = lazy(() => import('./pages/Locations'));
+const Trip = lazy(() => import('./pages/Trip'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -130,6 +133,9 @@ function AppLayout() {
               <Route path="/updates" element={<Updates carId={selectedCarId} />} />
               <Route path="/states" element={<States carId={selectedCarId} />} />
               <Route path="/statistics" element={<Statistics carId={selectedCarId} />} />
+              <Route path="/database" element={<DatabaseInfo carId={selectedCarId} />} />
+              <Route path="/locations" element={<Locations carId={selectedCarId} />} />
+              <Route path="/trip" element={<Trip carId={selectedCarId} />} />
               <Route path="/settings" element={<Settings carId={selectedCarId} />} />
             </Routes>
           </Suspense>

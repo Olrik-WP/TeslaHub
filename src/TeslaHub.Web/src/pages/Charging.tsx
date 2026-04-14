@@ -353,6 +353,16 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
             <span className="text-white font-medium">{Math.round(u.convertDistance(session.distanceSinceLastCharge)!)}</span> {u.distanceUnit}
           </div>
         )}
+        {session.maxCurrent != null && session.maxVoltage != null && (
+          <div>
+            <span className="text-white font-medium">{session.maxCurrent}</span>A · <span className="text-white font-medium">{session.maxVoltage}</span>V
+          </div>
+        )}
+        {session.connChargeCable != null && (
+          <div>
+            <span className="text-white font-medium">{session.connChargeCable}</span>
+          </div>
+        )}
       </div>
 
       {/* Temp row */}

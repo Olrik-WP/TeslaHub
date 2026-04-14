@@ -35,6 +35,34 @@ export interface VehicleStatus {
   currentCapacityKwh: number | null;
   kmSinceLastCharge: number;
   maxCapacityKwh: number | null;
+
+  // TPMS
+  tpmsPressureFl: number | null;
+  tpmsPressureFr: number | null;
+  tpmsPressureRl: number | null;
+  tpmsPressureRr: number | null;
+  tpmsSoftWarningFl: boolean | null;
+  tpmsSoftWarningFr: boolean | null;
+  tpmsSoftWarningRl: boolean | null;
+  tpmsSoftWarningRr: boolean | null;
+
+  // Body / Security
+  doorsOpen: boolean | null;
+  trunkOpen: boolean | null;
+  frunkOpen: boolean | null;
+  windowsOpen: boolean | null;
+  isLocked: boolean | null;
+  sentryMode: boolean | null;
+  isUserPresent: boolean | null;
+
+  // Climate
+  isClimateOn: boolean | null;
+  climateKeeperMode: string | null;
+  driverTempSetting: number | null;
+  passengerTempSetting: number | null;
+  isPreconditioning: boolean | null;
+  isFrontDefrosterOn: boolean | null;
+  isRearDefrosterOn: boolean | null;
 }
 
 export interface Drive {
@@ -101,6 +129,9 @@ export interface ChargingSession {
   costPerKwh: number | null;
   odometer: number | null;
   distanceSinceLastCharge: number | null;
+  maxCurrent: number | null;
+  maxVoltage: number | null;
+  connChargeCable: string | null;
 }
 
 export interface ChargingSummary {
@@ -117,6 +148,9 @@ export interface ChargePoint {
   batteryLevel: number | null;
   chargeEnergyAdded: number | null;
   chargerPower: number | null;
+  chargerActualCurrent: number | null;
+  chargerVoltage: number | null;
+  connChargeCable: string | null;
 }
 
 export interface ChargingLocation {
@@ -164,6 +198,7 @@ export interface GlobalSettings {
   currency: string;
   unitOfLength: string;
   unitOfTemperature: string;
+  unitOfPressure: string;
   defaultCarId: number | null;
   mapTileUrl: string;
   costSource: string;
@@ -479,3 +514,112 @@ export const getVampireDrain = (
   params.set('page', String(page));
   return api<VampireDrainResponse>(`/vampire/${carId}?${params}`);
 };
+
+// ─── Database Info ──────────────────────────────────────────────
+export interface DatabaseInfo {
+  postgresVersion: string;
+  timezone: string;
+  sharedBuffersBytes: number | null;
+  totalSizeBytes: number | null;
+}
+
+export interface TableSize {
+  tableName: string;
+  dataBytes: number;
+  indexBytes: number;
+  totalBytes: number;
+}
+
+export interface TableRowCount {
+  tableName: string;
+  rowCount: number;
+}
+
+export interface IndexStat {
+  tableName: string;
+  indexName: string;
+  indexScans: number;
+  tuplesRead: number;
+  tuplesFetched: number;
+  indexSizeBytes: number;
+}
+
+export interface DataStats {
+  driveCount: number;
+  chargeCount: number;
+  updateCount: number;
+  totalDistanceKm: number | null;
+  odometerKm: number | null;
+  currentFirmware: string | null;
+  unclosedDrives: number;
+  unclosedCharges: number;
+}
+
+export const getDatabaseInfo = () => api<DatabaseInfo>('/database/info');
+export const getTableSizes = () => api<TableSize[]>('/database/tables');
+export const getTableRowCounts = () => api<TableRowCount[]>('/database/row-counts');
+export const getIndexStats = () => api<IndexStat[]>('/database/indexes');
+export const getDataStats = (carId: number) => api<DataStats>(`/database/${carId}/stats`);
+
+// ─── Locations ──────────────────────────────────────────────────
+export interface LocationStats {
+  addressCount: number;
+  cityCount: number;
+  stateCount: number;
+  countryCount: number;
+}
+
+export interface VisitedLocation {
+  address: string;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  visitCount: number;
+  lastVisited: string;
+}
+
+export interface TopCity {
+  city: string;
+  count: number;
+}
+
+export const getLocationStats = (carId: number) => api<LocationStats>(`/locations/${carId}/stats`);
+export const getVisitedLocations = (carId: number) => api<VisitedLocation[]>(`/locations/${carId}/visited`);
+export const getTopCities = (carId: number) => api<TopCity[]>(`/locations/${carId}/top-cities`);
+
+// ─── Trip ───────────────────────────────────────────────────────
+export interface TripSummary {
+  driveCount: number;
+  chargeCount: number;
+  totalDistanceKm: number;
+  totalDriveMin: number;
+  totalChargeMin: number;
+  totalEnergyUsedKwh: number;
+  totalEnergyAddedKwh: number;
+  avgConsumption: number | null;
+  avgSpeedKmh: number | null;
+  avgOutsideTemp: number | null;
+}
+
+export interface TripSegment {
+  type: 'drive' | 'charge';
+  id: number;
+  startDate: string;
+  endDate: string | null;
+  durationMin: number | null;
+  distanceKm: number | null;
+  energyKwh: number | null;
+  startAddress: string | null;
+  endAddress: string | null;
+  startBattery: number | null;
+  endBattery: number | null;
+  avgSpeedKmh: number | null;
+  consumption: number | null;
+}
+
+export const getTripSummary = (carId: number, from: string, to: string) =>
+  api<TripSummary>(`/trip/${carId}/summary?from=${from}&to=${to}`);
+export const getTripSegments = (carId: number, from: string, to: string) =>
+  api<TripSegment[]>(`/trip/${carId}/segments?from=${from}&to=${to}`);

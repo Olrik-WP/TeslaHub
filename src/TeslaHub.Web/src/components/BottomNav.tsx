@@ -19,6 +19,9 @@ const drawerLinks = [
   { to: '/updates', labelKey: 'nav.updates', icon: '💾' },
   { to: '/states', labelKey: 'nav.states', icon: '🔄' },
   { to: '/vampire', labelKey: 'nav.vampire', icon: '🧛' },
+  { to: '/locations', labelKey: 'nav.locations', icon: '📍' },
+  { to: '/trip', labelKey: 'nav.trip', icon: '🗺' },
+  { to: '/database', labelKey: 'nav.database', icon: '🗄' },
   { to: '/settings', labelKey: 'nav.settings', icon: '⚙' },
 ];
 

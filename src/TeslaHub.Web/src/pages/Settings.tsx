@@ -250,6 +250,17 @@ export default function Settings({ carId }: Props) {
           />
         </div>
         <div>
+          <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.pressure')}</label>
+          <CustomSelect
+            value={form.unitOfPressure ?? 'bar'}
+            onChange={(v) => setForm({ ...form, unitOfPressure: v })}
+            options={[
+              { value: 'bar', label: 'bar' },
+              { value: 'psi', label: 'psi' },
+            ]}
+          />
+        </div>
+        <div>
           <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.costSource')}</label>
           <CustomSelect
             value={form.costSource ?? 'teslahub'}

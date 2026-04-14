@@ -105,6 +105,9 @@ app.MapEfficiencyEndpoints();
 app.MapBatteryEndpoints();
 app.MapStatesEndpoints();
 app.MapStatisticsEndpoints();
+app.MapDatabaseEndpoints();
+app.MapLocationsEndpoints();
+app.MapTripEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { Status = "OK", Timestamp = DateTime.UtcNow }))
     .AllowAnonymous();

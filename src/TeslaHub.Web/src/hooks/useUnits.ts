@@ -12,6 +12,7 @@ export function useUnits() {
 
   const isMi = settings?.unitOfLength === 'mi';
   const isF = settings?.unitOfTemperature === 'F';
+  const isPsi = settings?.unitOfPressure === 'psi';
   const currency = settings?.currency ?? 'EUR';
 
   const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -29,6 +30,7 @@ export function useUnits() {
   const distanceUnit = isMi ? 'mi' : 'km';
   const speedUnit = isMi ? 'mph' : 'km/h';
   const tempUnit = isF ? '°F' : '°C';
+  const pressureUnit = isPsi ? 'psi' : 'bar';
   const consumptionUnit = isMi ? 'kWh/100mi' : 'kWh/100km';
 
   const convertDistance = (km: number | null | undefined): number | null => {
@@ -44,6 +46,17 @@ export function useUnits() {
   const convertTemp = (celsius: number | null | undefined): number | null => {
     if (celsius == null) return null;
     return isF ? celsius * 9 / 5 + 32 : celsius;
+  };
+
+  const BAR_TO_PSI = 14.5038;
+  const convertPressure = (bar: number | null | undefined): number | null => {
+    if (bar == null) return null;
+    return isPsi ? bar * BAR_TO_PSI : bar;
+  };
+
+  const fmtPressure = (bar: number | null | undefined, decimals = 1): string => {
+    const v = convertPressure(bar);
+    return v != null ? v.toFixed(decimals) : '—';
   };
 
   const convertConsumption = (kwhPer100km: number | null | undefined): number | null => {
@@ -75,16 +88,19 @@ export function useUnits() {
     distanceUnit,
     speedUnit,
     tempUnit,
+    pressureUnit,
     consumptionUnit,
     currency,
     currencySymbol,
     convertDistance,
     convertSpeed,
     convertTemp,
+    convertPressure,
     convertConsumption,
     fmtDist,
     fmtSpeed,
     fmtTemp,
+    fmtPressure,
     fmtConsumption,
   };
 }

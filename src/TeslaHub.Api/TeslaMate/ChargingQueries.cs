@@ -32,6 +32,9 @@ public static class ChargingQueries
                     ch.fast_charger_present,
                     ch.fast_charger_type,
                     ch.charge_type,
+                    ch.max_current,
+                    ch.max_voltage,
+                    ch.conn_charge_cable,
                     p.odometer,
                     p.odometer - LAG(p.odometer) OVER (ORDER BY cp.start_date) AS distance_since_last_charge
                 FROM charging_processes cp
@@ -42,7 +45,10 @@ public static class ChargingQueries
                     SELECT bool_or(fast_charger_present) AS fast_charger_present,
                            mode() WITHIN GROUP (ORDER BY fast_charger_type) AS fast_charger_type,
                            CASE WHEN NULLIF(mode() WITHIN GROUP (ORDER BY charger_phases), 0) IS NULL
-                                THEN 'DC' ELSE 'AC' END AS charge_type
+                                THEN 'DC' ELSE 'AC' END AS charge_type,
+                           MAX(charger_actual_current) AS max_current,
+                           MAX(charger_voltage) AS max_voltage,
+                           mode() WITHIN GROUP (ORDER BY conn_charge_cable) AS conn_charge_cable
                     FROM charges
                     WHERE charging_process_id = cp.id
                 ) ch ON true
@@ -98,7 +104,10 @@ public static class ChargingQueries
                      THEN cost / GREATEST(charge_energy_used, charge_energy_added)
                      ELSE NULL END AS "CostPerKwh",
                 odometer AS "Odometer",
-                distance_since_last_charge AS "DistanceSinceLastCharge"
+                distance_since_last_charge AS "DistanceSinceLastCharge",
+                max_current AS "MaxCurrent",
+                max_voltage AS "MaxVoltage",
+                conn_charge_cable AS "ConnChargeCable"
             FROM data
             ORDER BY start_date DESC
             LIMIT @Limit OFFSET @Offset
@@ -114,7 +123,10 @@ public static class ChargingQueries
                 battery_level AS "BatteryLevel",
                 charge_energy_added AS "ChargeEnergyAdded",
                 charger_power AS "ChargerPower",
-                rated_battery_range_km AS "RatedBatteryRangeKm"
+                rated_battery_range_km AS "RatedBatteryRangeKm",
+                charger_actual_current AS "ChargerActualCurrent",
+                charger_voltage AS "ChargerVoltage",
+                conn_charge_cable AS "ConnChargeCable"
             FROM charges
             WHERE charging_process_id = @Id
             ORDER BY date
