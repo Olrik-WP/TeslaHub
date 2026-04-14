@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUnits } from '../hooks/useUnits';
 import type { VehicleStatus } from '../api/queries';
+
+const MQTT_HINT_KEY = 'teslahub:mqtt-hint-dismissed';
 
 interface Props {
   vehicle: VehicleStatus;
@@ -28,6 +31,7 @@ function getWarning(v: VehicleStatus, k: TireKey) {
 export default function VehicleTopView({ vehicle }: Props) {
   const { t } = useTranslation();
   const u = useUnits();
+  const [hintDismissed, setHintDismissed] = useState(() => localStorage.getItem(MQTT_HINT_KEY) === '1');
 
   const hasTpms = vehicle.tpmsPressureFl != null;
   const hasBody = vehicle.doorsOpen != null || vehicle.trunkOpen != null || vehicle.isLocked != null;
@@ -35,13 +39,20 @@ export default function VehicleTopView({ vehicle }: Props) {
 
   if (!hasTpms && !hasBody && !hasClimate) return null;
 
+  const dismissHint = () => {
+    localStorage.setItem(MQTT_HINT_KEY, '1');
+    setHintDismissed(true);
+  };
+
+  const showMqttBanner = !vehicle.mqttConnected && !hintDismissed;
+
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
-      {/* MQTT status */}
-      {!vehicle.mqttConnected && (
+      {showMqttBanner && (
         <div className="text-[10px] text-[#6b7280] mb-2 flex items-center gap-1">
           <span className="w-1.5 h-1.5 rounded-full bg-[#6b7280] inline-block" />
-          {hasBody ? t('vehicleView.mqttDisconnected') : t('vehicleView.mqttHint')}
+          <span className="flex-1">{hasBody ? t('vehicleView.mqttDisconnected') : t('vehicleView.mqttHint')}</span>
+          <button onClick={dismissHint} className="text-[#6b7280] hover:text-[#9ca3af] ml-1 px-1 leading-none" aria-label="Dismiss">✕</button>
         </div>
       )}
 
@@ -85,8 +96,15 @@ export default function VehicleTopView({ vehicle }: Props) {
               );
             })}
 
-            {/* Door indicators */}
-            {vehicle.doorsOpen === true && (
+            {/* Door indicators — per-door if available, otherwise generic */}
+            {vehicle.driverFrontDoorOpen != null ? (
+              <>
+                {vehicle.driverFrontDoorOpen && <line x1="58" y1="165" x2="38" y2="180" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />}
+                {vehicle.driverRearDoorOpen && <line x1="58" y1="230" x2="38" y2="245" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />}
+                {vehicle.passengerFrontDoorOpen && <line x1="242" y1="165" x2="262" y2="180" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />}
+                {vehicle.passengerRearDoorOpen && <line x1="242" y1="230" x2="262" y2="245" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />}
+              </>
+            ) : vehicle.doorsOpen === true && (
               <>
                 <line x1="58" y1="170" x2="40" y2="190" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
                 <line x1="242" y1="170" x2="260" y2="190" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
@@ -167,12 +185,26 @@ export default function VehicleTopView({ vehicle }: Props) {
                   color={vehicle.isLocked === true ? '#22c55e' : vehicle.isLocked === false ? '#ef4444' : undefined}
                   text={vehicle.isLocked === true ? t('vehicleView.yes') : vehicle.isLocked === false ? t('vehicleView.no') : '—'}
                 />
-                <StatusPill
-                  label={t('vehicleView.doors')}
-                  active={vehicle.doorsOpen === true}
-                  color={vehicle.doorsOpen ? '#f59e0b' : '#22c55e'}
-                  text={vehicle.doorsOpen ? t('vehicleView.open') : t('vehicleView.closed')}
-                />
+                {vehicle.driverFrontDoorOpen != null ? (
+                  <>
+                    <StatusPill label={t('vehicleView.doorDF')} active={vehicle.driverFrontDoorOpen === true}
+                      color={vehicle.driverFrontDoorOpen ? '#f59e0b' : '#22c55e'}
+                      text={vehicle.driverFrontDoorOpen ? t('vehicleView.open') : t('vehicleView.closed')} />
+                    <StatusPill label={t('vehicleView.doorDR')} active={vehicle.driverRearDoorOpen === true}
+                      color={vehicle.driverRearDoorOpen ? '#f59e0b' : '#22c55e'}
+                      text={vehicle.driverRearDoorOpen ? t('vehicleView.open') : t('vehicleView.closed')} />
+                    <StatusPill label={t('vehicleView.doorPF')} active={vehicle.passengerFrontDoorOpen === true}
+                      color={vehicle.passengerFrontDoorOpen ? '#f59e0b' : '#22c55e'}
+                      text={vehicle.passengerFrontDoorOpen ? t('vehicleView.open') : t('vehicleView.closed')} />
+                    <StatusPill label={t('vehicleView.doorPR')} active={vehicle.passengerRearDoorOpen === true}
+                      color={vehicle.passengerRearDoorOpen ? '#f59e0b' : '#22c55e'}
+                      text={vehicle.passengerRearDoorOpen ? t('vehicleView.open') : t('vehicleView.closed')} />
+                  </>
+                ) : (
+                  <StatusPill label={t('vehicleView.doors')} active={vehicle.doorsOpen === true}
+                    color={vehicle.doorsOpen ? '#f59e0b' : '#22c55e'}
+                    text={vehicle.doorsOpen ? t('vehicleView.open') : t('vehicleView.closed')} />
+                )}
                 <StatusPill
                   label={t('vehicleView.frunk')}
                   active={vehicle.frunkOpen === true}

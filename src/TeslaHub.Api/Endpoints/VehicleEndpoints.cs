@@ -29,6 +29,10 @@ public static class VehicleEndpoints
             {
                 IsLocked = live?.Locked ?? vehicle.IsLocked,
                 DoorsOpen = live?.DoorsOpen ?? vehicle.DoorsOpen,
+                DriverFrontDoorOpen = live?.DriverFrontDoorOpen ?? vehicle.DriverFrontDoorOpen,
+                DriverRearDoorOpen = live?.DriverRearDoorOpen ?? vehicle.DriverRearDoorOpen,
+                PassengerFrontDoorOpen = live?.PassengerFrontDoorOpen ?? vehicle.PassengerFrontDoorOpen,
+                PassengerRearDoorOpen = live?.PassengerRearDoorOpen ?? vehicle.PassengerRearDoorOpen,
                 TrunkOpen = live?.TrunkOpen ?? vehicle.TrunkOpen,
                 FrunkOpen = live?.FrunkOpen ?? vehicle.FrunkOpen,
                 WindowsOpen = live?.WindowsOpen ?? vehicle.WindowsOpen,

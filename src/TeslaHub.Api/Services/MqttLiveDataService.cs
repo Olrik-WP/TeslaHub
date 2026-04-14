@@ -10,6 +10,10 @@ public class MqttLiveData
 {
     public bool? Locked { get; set; }
     public bool? DoorsOpen { get; set; }
+    public bool? DriverFrontDoorOpen { get; set; }
+    public bool? DriverRearDoorOpen { get; set; }
+    public bool? PassengerFrontDoorOpen { get; set; }
+    public bool? PassengerRearDoorOpen { get; set; }
     public bool? TrunkOpen { get; set; }
     public bool? FrunkOpen { get; set; }
     public bool? WindowsOpen { get; set; }
@@ -33,7 +37,10 @@ public class MqttLiveDataService : BackgroundService
 
     private static readonly HashSet<string> TrackedKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        "locked", "doors_open", "trunk_open", "frunk_open", "windows_open",
+        "locked", "doors_open",
+        "driver_front_door_open", "driver_rear_door_open",
+        "passenger_front_door_open", "passenger_rear_door_open",
+        "trunk_open", "frunk_open", "windows_open",
         "sentry_mode", "is_user_present",
         "tpms_soft_warning_fl", "tpms_soft_warning_fr",
         "tpms_soft_warning_rl", "tpms_soft_warning_rr",
@@ -171,9 +178,13 @@ public class MqttLiveDataService : BackgroundService
 
         switch (key)
         {
-            case "locked":              data.Locked = boolVal; break;
-            case "doors_open":          data.DoorsOpen = boolVal; break;
-            case "trunk_open":          data.TrunkOpen = boolVal; break;
+            case "locked":                    data.Locked = boolVal; break;
+            case "doors_open":                data.DoorsOpen = boolVal; break;
+            case "driver_front_door_open":    data.DriverFrontDoorOpen = boolVal; break;
+            case "driver_rear_door_open":     data.DriverRearDoorOpen = boolVal; break;
+            case "passenger_front_door_open": data.PassengerFrontDoorOpen = boolVal; break;
+            case "passenger_rear_door_open":  data.PassengerRearDoorOpen = boolVal; break;
+            case "trunk_open":                data.TrunkOpen = boolVal; break;
             case "frunk_open":          data.FrunkOpen = boolVal; break;
             case "windows_open":        data.WindowsOpen = boolVal; break;
             case "sentry_mode":         data.SentryMode = boolVal; break;

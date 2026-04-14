@@ -58,6 +58,10 @@ export interface VehicleStatus {
   // Body / Security (MQTT live)
   isLocked: boolean | null;
   doorsOpen: boolean | null;
+  driverFrontDoorOpen: boolean | null;
+  driverRearDoorOpen: boolean | null;
+  passengerFrontDoorOpen: boolean | null;
+  passengerRearDoorOpen: boolean | null;
   trunkOpen: boolean | null;
   frunkOpen: boolean | null;
   windowsOpen: boolean | null;

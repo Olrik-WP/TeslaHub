@@ -52,6 +52,10 @@ public record VehicleDto
     // Body / Security (MQTT live only)
     public bool? IsLocked { get; init; }
     public bool? DoorsOpen { get; init; }
+    public bool? DriverFrontDoorOpen { get; init; }
+    public bool? DriverRearDoorOpen { get; init; }
+    public bool? PassengerFrontDoorOpen { get; init; }
+    public bool? PassengerRearDoorOpen { get; init; }
     public bool? TrunkOpen { get; init; }
     public bool? FrunkOpen { get; init; }
     public bool? WindowsOpen { get; init; }
