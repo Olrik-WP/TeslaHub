@@ -277,7 +277,7 @@ function TripCard({ drive, expanded, onToggle, onViewMap, u, t, costPerKm, avgPr
             )}
 
             {/* Consumption */}
-            {drive.consumptionKWhPer100Km != null && (
+            {drive.consumptionKWhPer100Km != null && (drive.distance ?? 0) >= 1 && (
               <div>
                 <span className="text-[#9ca3af]">📈 {t('trips.consumption')}</span>
                 <span className="ml-1 text-white font-medium">{u.fmtConsumption(drive.consumptionKWhPer100Km)} {u.consumptionUnit}</span>

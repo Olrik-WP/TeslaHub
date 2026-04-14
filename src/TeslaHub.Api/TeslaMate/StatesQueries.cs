@@ -64,6 +64,8 @@ public static class StatesQueries
                     d.duration_min AS "DurationMin",
                     COALESCE(sg.name, CONCAT_WS(', ', COALESCE(sa.name, NULLIF(CONCAT_WS(' ', sa.road, sa.house_number), '')), sa.city)) AS "StartAddress",
                     COALESCE(eg.name, CONCAT_WS(', ', COALESCE(ea.name, NULLIF(CONCAT_WS(' ', ea.road, ea.house_number), '')), ea.city)) AS "EndAddress",
+                    sa.latitude AS "StartLat", sa.longitude AS "StartLng",
+                    ea.latitude AS "EndLat", ea.longitude AS "EndLng",
                     d.distance AS "DistanceKm",
                     (d.start_rated_range_km - d.end_rated_range_km) * c.efficiency AS "EnergyKwh",
                     ep.battery_level AS "SocEnd"
@@ -83,6 +85,8 @@ public static class StatesQueries
                     cp.start_date, cp.end_date, cp.duration_min,
                     COALESCE(g.name, CONCAT_WS(', ', COALESCE(a.name, NULLIF(CONCAT_WS(' ', a.road, a.house_number), '')), a.city)),
                     NULL,
+                    a.latitude, a.longitude,
+                    NULL::decimal, NULL::decimal,
                     NULL,
                     cp.charge_energy_added,
                     cp.end_battery_level::double precision
@@ -98,7 +102,9 @@ public static class StatesQueries
                     'updating' AS "Action",
                     u.start_date, u.end_date,
                     EXTRACT(EPOCH FROM (u.end_date - u.start_date)) / 60.0,
-                    split_part(u.version, ' ', 1), NULL, NULL, NULL, NULL
+                    split_part(u.version, ' ', 1), NULL,
+                    NULL::decimal, NULL::decimal, NULL::decimal, NULL::decimal,
+                    NULL, NULL, NULL
                 FROM updates u
                 WHERE u.car_id = @CarId AND u.start_date >= NOW() - INTERVAL '1 day' * @Days
             ) combined

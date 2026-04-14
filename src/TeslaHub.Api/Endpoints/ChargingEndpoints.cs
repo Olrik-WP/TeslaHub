@@ -9,7 +9,8 @@ public static class ChargingEndpoints
     {
         var group = app.MapGroup("/api/charging").RequireAuthorization();
 
-        group.MapGet("/{carId:int}", async (int carId, int? limit, int? offset, string? chargeType, int? days, TeslaMateConnectionFactory tm, CacheService cache) =>
+        group.MapGet("/{carId:int}", async (int carId, int? limit, int? offset, string? chargeType, int? days,
+            TeslaMateConnectionFactory tm, CacheService cache, LocationNameService locSvc) =>
         {
             var l = limit ?? 20;
             var o = offset ?? 0;
@@ -17,7 +18,13 @@ public static class ChargingEndpoints
             var sessions = await cache.GetOrSetHistoricalAsync(
                 $"charging:{carId}:{l}:{o}:{ct}:{days}",
                 () => tm.GetChargingSessionsAsync(carId, l, o, ct, days));
-            return Results.Ok(sessions);
+            var locations = await locSvc.GetLocationsAsync();
+            var enriched = sessions?.Select(s =>
+            {
+                var hubName = locSvc.FindName(locations, s.Latitude, s.Longitude, carId);
+                return hubName != null ? s with { Address = hubName, GeofenceName = hubName } : s;
+            }).ToList();
+            return Results.Ok(enriched);
         });
 
         group.MapGet("/{carId:int}/{chargingProcessId:int}/points", async (int carId, int chargingProcessId, TeslaMateConnectionFactory tm, CacheService cache) =>

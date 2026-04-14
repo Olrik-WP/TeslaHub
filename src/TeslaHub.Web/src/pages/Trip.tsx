@@ -13,10 +13,13 @@ interface Props {
 function defaultFrom() {
   const d = new Date();
   d.setDate(d.getDate() - 7);
-  return d.toISOString().slice(0, 10);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 16);
 }
 function defaultTo() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  d.setHours(23, 59, 0, 0);
+  return d.toISOString().slice(0, 16);
 }
 
 export default function Trip({ carId }: Props) {
@@ -49,7 +52,7 @@ export default function Trip({ carId }: Props) {
         <div>
           <label className="text-xs text-[#9ca3af] block mb-1">{t('tripPage.from')}</label>
           <input
-            type="date"
+            type="datetime-local"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
             className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px]"
@@ -58,7 +61,7 @@ export default function Trip({ carId }: Props) {
         <div>
           <label className="text-xs text-[#9ca3af] block mb-1">{t('tripPage.to')}</label>
           <input
-            type="date"
+            type="datetime-local"
             value={to}
             onChange={(e) => setTo(e.target.value)}
             className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px]"
@@ -163,7 +166,7 @@ export default function Trip({ carId }: Props) {
                     {seg.avgSpeedKmh != null && (
                       <span><span className="text-white font-medium">{Math.round(u.convertSpeed(seg.avgSpeedKmh)!)}</span> {u.speedUnit}</span>
                     )}
-                    {seg.consumption != null && (
+                    {seg.consumption != null && (seg.distanceKm ?? 0) >= 1 && (
                       <span><span className="text-white font-medium">{u.fmtConsumption(seg.consumption)}</span> {u.consumptionUnit}</span>
                     )}
                     {seg.energyKwh != null && (

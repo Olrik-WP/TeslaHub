@@ -30,8 +30,10 @@ public static class DrivesQueries
                 d.outside_temp_avg AS "OutsideTempAvg",
                 d.inside_temp_avg AS "InsideTempAvg",
                 d.ascent AS "Ascent", d.descent AS "Descent",
-                sa.display_name AS "StartAddress",
-                ea.display_name AS "EndAddress",
+                COALESCE(sg.name, CONCAT_WS(', ', COALESCE(sa.name, NULLIF(CONCAT_WS(' ', sa.road, sa.house_number), '')), sa.city)) AS "StartAddress",
+                COALESCE(eg.name, CONCAT_WS(', ', COALESCE(ea.name, NULLIF(CONCAT_WS(' ', ea.road, ea.house_number), '')), ea.city)) AS "EndAddress",
+                sa.latitude AS "StartLat", sa.longitude AS "StartLng",
+                ea.latitude AS "EndLat", ea.longitude AS "EndLng",
                 sp.battery_level AS "StartBatteryLevel",
                 ep.battery_level AS "EndBatteryLevel",
                 CASE WHEN d.distance > 0
@@ -55,6 +57,8 @@ public static class DrivesQueries
             JOIN cars c ON d.car_id = c.id
             LEFT JOIN addresses sa ON d.start_address_id = sa.id
             LEFT JOIN addresses ea ON d.end_address_id = ea.id
+            LEFT JOIN geofences sg ON d.start_geofence_id = sg.id
+            LEFT JOIN geofences eg ON d.end_geofence_id = eg.id
             LEFT JOIN positions sp ON d.start_position_id = sp.id
             LEFT JOIN positions ep ON d.end_position_id = ep.id
             LEFT JOIN reduced_range_info rr ON d.id = rr.drive_id

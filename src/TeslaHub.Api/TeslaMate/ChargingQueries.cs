@@ -24,7 +24,7 @@ public static class ChargingQueries
                     cp.start_rated_range_km,
                     cp.end_rated_range_km,
                     cp.cost,
-                    a.display_name AS address,
+                    COALESCE(g.name, CONCAT_WS(', ', COALESCE(a.name, NULLIF(CONCAT_WS(' ', a.road, a.house_number), '')), a.city)) AS address,
                     a.latitude,
                     a.longitude,
                     cp.geofence_id,
@@ -206,7 +206,7 @@ public static class ChargingQueries
 
         var locationRows = await conn.QueryAsync<(string Name, decimal Cost)>("""
             SELECT
-                COALESCE(g.name, SPLIT_PART(a.display_name, ',', 1), 'Other') AS "Name",
+                COALESCE(g.name, CONCAT_WS(', ', COALESCE(a.name, NULLIF(CONCAT_WS(' ', a.road, a.house_number), '')), a.city), 'Other') AS "Name",
                 SUM(cp.cost) AS "Cost"
             FROM charging_processes cp
             LEFT JOIN geofences g ON cp.geofence_id = g.id
@@ -216,7 +216,7 @@ public static class ChargingQueries
               AND cp.cost > 0
               AND (@Start IS NULL OR cp.start_date >= @Start)
               AND (@End IS NULL OR cp.start_date < @End)
-            GROUP BY COALESCE(g.name, SPLIT_PART(a.display_name, ',', 1), 'Other')
+            GROUP BY COALESCE(g.name, CONCAT_WS(', ', COALESCE(a.name, NULLIF(CONCAT_WS(' ', a.road, a.house_number), '')), a.city), 'Other')
             ORDER BY "Cost" DESC
             """, new { CarId = carId, Start = start, End = end });
 
@@ -261,7 +261,7 @@ public static class ChargingQueries
                 c.battery_level AS "SoC",
                 ROUND(AVG(c.charger_power)::numeric, 0) AS "Power",
                 c.charging_process_id AS "ChargingProcessId",
-                COALESCE(g.name, SPLIT_PART(a.display_name, ',', 1))
+                COALESCE(g.name, CONCAT_WS(', ', COALESCE(a.name, NULLIF(CONCAT_WS(' ', a.road, a.house_number), '')), a.city))
                     || ' ' || TO_CHAR(c.date, 'YYYY-MM-DD') AS "Label"
             FROM charges c
             JOIN charging_processes p ON p.id = c.charging_process_id
@@ -271,7 +271,7 @@ public static class ChargingQueries
               AND c.charger_power > 0
               AND c.fast_charger_present
             GROUP BY c.battery_level, c.charging_process_id,
-                     a.display_name, g.name,
+                     a.name, a.road, a.house_number, a.city, g.name,
                      TO_CHAR(c.date, 'YYYY-MM-DD')
             ORDER BY c.battery_level
             """, new { CarId = carId });

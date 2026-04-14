@@ -17,12 +17,18 @@ public static class LocationsEndpoints
             return Results.Ok(data);
         });
 
-        group.MapGet("/{carId:int}/visited", async (int carId, TeslaMateConnectionFactory tm, CacheService cache) =>
+        group.MapGet("/{carId:int}/visited", async (int carId, TeslaMateConnectionFactory tm, CacheService cache, LocationNameService locSvc) =>
         {
             var data = await cache.GetOrSetHistoricalAsync(
                 $"loc:visited:{carId}",
                 () => tm.GetVisitedLocationsAsync(carId));
-            return Results.Ok(data);
+            var locations = await locSvc.GetLocationsAsync();
+            var enriched = data?.Select(v =>
+            {
+                var hubName = locSvc.FindName(locations, v.Latitude, v.Longitude, carId);
+                return hubName != null ? v with { Address = hubName } : v;
+            }).ToList();
+            return Results.Ok(enriched);
         });
 
         group.MapGet("/{carId:int}/top-cities", async (int carId, TeslaMateConnectionFactory tm, CacheService cache) =>

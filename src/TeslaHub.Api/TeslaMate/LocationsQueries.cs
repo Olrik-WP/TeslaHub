@@ -37,7 +37,7 @@ public static class LocationsQueries
                 FROM drives WHERE car_id = @CarId
             )
             SELECT
-                COALESCE(g.name, array_to_string((string_to_array(a.display_name, ', ', ''))[1:2], ', ')) AS "Address",
+                COALESCE(g.name, CONCAT_WS(', ', COALESCE(a.name, NULLIF(CONCAT_WS(' ', a.road, a.house_number), '')), a.city)) AS "Address",
                 COALESCE(a.city, a.neighbourhood) AS "City",
                 a.state AS "State",
                 a.country AS "Country",

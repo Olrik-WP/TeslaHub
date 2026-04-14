@@ -69,8 +69,10 @@ public static class TripQueries
                     CASE WHEN d.distance > 0
                          THEN (d.start_rated_range_km - d.end_rated_range_km) * c.efficiency
                          ELSE NULL END AS "EnergyKwh",
-                    sa.display_name AS "StartAddress",
-                    ea.display_name AS "EndAddress",
+                    COALESCE(sg.name, CONCAT_WS(', ', COALESCE(sa.name, NULLIF(CONCAT_WS(' ', sa.road, sa.house_number), '')), sa.city)) AS "StartAddress",
+                    COALESCE(eg.name, CONCAT_WS(', ', COALESCE(ea.name, NULLIF(CONCAT_WS(' ', ea.road, ea.house_number), '')), ea.city)) AS "EndAddress",
+                    sa.latitude AS "StartLat", sa.longitude AS "StartLng",
+                    ea.latitude AS "EndLat", ea.longitude AS "EndLng",
                     d.start_km AS "StartBattery",
                     d.end_km AS "EndBattery",
                     CASE WHEN d.duration_min > 0
@@ -83,6 +85,8 @@ public static class TripQueries
                 JOIN cars c ON c.id = d.car_id
                 LEFT JOIN addresses sa ON d.start_address_id = sa.id
                 LEFT JOIN addresses ea ON d.end_address_id = ea.id
+                LEFT JOIN geofences sg ON d.start_geofence_id = sg.id
+                LEFT JOIN geofences eg ON d.end_geofence_id = eg.id
                 WHERE d.car_id = @CarId
                   AND d.start_date >= @From AND d.start_date <= @To
 
@@ -96,14 +100,17 @@ public static class TripQueries
                     cp.duration_min AS "DurationMin",
                     NULL AS "DistanceKm",
                     cp.charge_energy_added AS "EnergyKwh",
-                    a.display_name AS "StartAddress",
+                    COALESCE(cg.name, CONCAT_WS(', ', COALESCE(a.name, NULLIF(CONCAT_WS(' ', a.road, a.house_number), '')), a.city)) AS "StartAddress",
                     NULL AS "EndAddress",
+                    a.latitude AS "StartLat", a.longitude AS "StartLng",
+                    NULL::decimal AS "EndLat", NULL::decimal AS "EndLng",
                     cp.start_battery_level AS "StartBattery",
                     cp.end_battery_level AS "EndBattery",
                     NULL AS "AvgSpeedKmh",
                     NULL AS "Consumption"
                 FROM charging_processes cp
                 LEFT JOIN addresses a ON cp.address_id = a.id
+                LEFT JOIN geofences cg ON cp.geofence_id = cg.id
                 WHERE cp.car_id = @CarId
                   AND cp.start_date >= @From AND cp.start_date <= @To
             ) combined

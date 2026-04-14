@@ -91,6 +91,10 @@ public record DriveDto
     public double? Descent { get; init; }
     public string? StartAddress { get; init; }
     public string? EndAddress { get; init; }
+    public double? StartLat { get; init; }
+    public double? StartLng { get; init; }
+    public double? EndLat { get; init; }
+    public double? EndLng { get; init; }
     public double? ConsumptionKWhPer100Km { get; init; }
     public double? StartBatteryLevel { get; init; }
     public double? EndBatteryLevel { get; init; }
@@ -363,6 +367,10 @@ public record TimelineEntryDto
     public double? DurationMin { get; init; }
     public string? StartAddress { get; init; }
     public string? EndAddress { get; init; }
+    public double? StartLat { get; init; }
+    public double? StartLng { get; init; }
+    public double? EndLat { get; init; }
+    public double? EndLng { get; init; }
     public double? DistanceKm { get; init; }
     public double? EnergyKwh { get; init; }
     public double? SocEnd { get; init; }
@@ -478,6 +486,10 @@ public record TripSegmentDto
     public double? EnergyKwh { get; init; }
     public string? StartAddress { get; init; }
     public string? EndAddress { get; init; }
+    public double? StartLat { get; init; }
+    public double? StartLng { get; init; }
+    public double? EndLat { get; init; }
+    public double? EndLng { get; init; }
     public int? StartBattery { get; init; }
     public int? EndBattery { get; init; }
     public double? AvgSpeedKmh { get; init; }

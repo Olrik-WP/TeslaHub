@@ -160,6 +160,19 @@ export default function VehicleTopView({ vehicle }: Props) {
                 </g>
               )}
 
+              {/* User present indicator */}
+              {vehicle.isUserPresent != null && (
+                <g transform="translate(150, 280)">
+                  <circle r="12" fill="none" stroke="#6b7280" strokeWidth="2" />
+                  <circle r="9" fill={vehicle.isUserPresent ? '#22c55e' : '#1a1a1a'} />
+                  {/* Head */}
+                  <circle cy="-2.5" r="2.5" fill={vehicle.isUserPresent ? '#fff' : '#6b7280'} />
+                  {/* Body */}
+                  <path d="M-4 3 Q-4 0.5 0 0.5 Q4 0.5 4 3 L3.5 7 L-3.5 7Z"
+                    fill={vehicle.isUserPresent ? '#fff' : '#6b7280'} />
+                </g>
+              )}
+
               {/* Climate indicator */}
               {vehicle.isClimateOn === true && (
                 <g transform="translate(150, 180)">

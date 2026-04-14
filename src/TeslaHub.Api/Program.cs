@@ -29,6 +29,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddSingleton(new TeslaMateConnectionFactory(tmConnectionString));
 builder.Services.AddScoped<CostService>();
+builder.Services.AddScoped<LocationNameService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<CacheService>();
 builder.Services.AddSingleton<MqttLiveDataService>();
