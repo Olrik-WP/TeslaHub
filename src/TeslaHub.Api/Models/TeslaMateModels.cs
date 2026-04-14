@@ -65,6 +65,8 @@ public record VehicleDto
     // Climate extras (MQTT live only)
     public string? ClimateKeeperMode { get; init; }
     public bool? IsPreconditioning { get; init; }
+    public bool? ChargePortDoorOpen { get; init; }
+    public bool? PluggedIn { get; init; }
 
     // MQTT connectivity
     public bool MqttConnected { get; init; }

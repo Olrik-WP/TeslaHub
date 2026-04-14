@@ -26,6 +26,8 @@ public class MqttLiveData
     public string? ClimateKeeperMode { get; set; }
     public bool? IsPreconditioning { get; set; }
     public bool? IsClimateOn { get; set; }
+    public bool? ChargePortDoorOpen { get; set; }
+    public bool? PluggedIn { get; set; }
 
     public int? BatteryLevel { get; set; }
     public int? UsableBatteryLevel { get; set; }
@@ -62,6 +64,7 @@ public class MqttLiveDataService : BackgroundService
         "tpms_soft_warning_fl", "tpms_soft_warning_fr",
         "tpms_soft_warning_rl", "tpms_soft_warning_rr",
         "climate_keeper_mode", "is_preconditioning", "is_climate_on",
+        "charge_port_door_open", "plugged_in",
         "battery_level", "usable_battery_level",
         "rated_battery_range_km", "ideal_battery_range_km",
         "latitude", "longitude",
@@ -222,6 +225,8 @@ public class MqttLiveDataService : BackgroundService
             case "climate_keeper_mode":  data.ClimateKeeperMode = value; break;
             case "is_preconditioning"        when boolVal.HasValue: data.IsPreconditioning = boolVal; break;
             case "is_climate_on"             when boolVal.HasValue: data.IsClimateOn = boolVal; break;
+            case "charge_port_door_open"     when boolVal.HasValue: data.ChargePortDoorOpen = boolVal; break;
+            case "plugged_in"                when boolVal.HasValue: data.PluggedIn = boolVal; break;
             case "battery_level":       if (int.TryParse(value, out var bl))  data.BatteryLevel = bl; break;
             case "usable_battery_level": if (int.TryParse(value, out var ubl)) data.UsableBatteryLevel = ubl; break;
             case "rated_battery_range_km":  if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var rbr)) data.RatedBatteryRangeKm = rbr; break;

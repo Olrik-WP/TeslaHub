@@ -53,6 +53,8 @@ public static class VehicleEndpoints
                 ClimateKeeperMode = live?.ClimateKeeperMode ?? vehicle.ClimateKeeperMode,
                 IsPreconditioning = live?.IsPreconditioning ?? vehicle.IsPreconditioning,
                 IsClimateOn = live?.IsClimateOn ?? vehicle.IsClimateOn,
+                ChargePortDoorOpen = live?.ChargePortDoorOpen ?? vehicle.ChargePortDoorOpen,
+                PluggedIn = live?.PluggedIn ?? vehicle.PluggedIn,
                 BatteryLevel = live?.BatteryLevel ?? vehicle.BatteryLevel,
                 UsableBatteryLevel = live?.UsableBatteryLevel ?? vehicle.UsableBatteryLevel,
                 RatedBatteryRangeKm = live?.RatedBatteryRangeKm ?? vehicle.RatedBatteryRangeKm,

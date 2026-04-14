@@ -71,6 +71,8 @@ export interface VehicleStatus {
   // Climate extras (MQTT live)
   climateKeeperMode: string | null;
   isPreconditioning: boolean | null;
+  chargePortDoorOpen: boolean | null;
+  pluggedIn: boolean | null;
 
   // MQTT connectivity
   mqttConnected: boolean;

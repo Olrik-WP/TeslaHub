@@ -10,10 +10,10 @@ interface Props {
 }
 
 const TIRE_POSITIONS = [
-  { key: 'fl', label: 'FL', x: 72, y: 72 },
-  { key: 'fr', label: 'FR', x: 228, y: 72 },
-  { key: 'rl', label: 'RL', x: 72, y: 328 },
-  { key: 'rr', label: 'RR', x: 228, y: 328 },
+  { key: 'fl', labelKey: 'vehicleView.tireFL', x: 72, y: 72 },
+  { key: 'fr', labelKey: 'vehicleView.tireFR', x: 228, y: 72 },
+  { key: 'rl', labelKey: 'vehicleView.tireRL', x: 72, y: 328 },
+  { key: 'rr', labelKey: 'vehicleView.tireRR', x: 228, y: 328 },
 ] as const;
 
 type TireKey = 'fl' | 'fr' | 'rl' | 'rr';
@@ -36,8 +36,10 @@ export default function VehicleTopView({ vehicle }: Props) {
   const hasTpms = vehicle.tpmsPressureFl != null;
   const hasBody = vehicle.doorsOpen != null || vehicle.trunkOpen != null || vehicle.isLocked != null;
   const hasClimate = vehicle.isClimateOn != null || vehicle.driverTempSetting != null;
+  const isCharging = vehicle.state?.toLowerCase() === 'charging';
+  const hasChargePort = vehicle.chargePortDoorOpen != null || vehicle.pluggedIn != null;
 
-  if (!hasTpms && !hasBody && !hasClimate) return null;
+  if (!hasTpms && !hasBody && !hasClimate && !isCharging && !hasChargePort) return null;
 
   const dismissHint = () => {
     localStorage.setItem(MQTT_HINT_KEY, '1');
@@ -58,7 +60,7 @@ export default function VehicleTopView({ vehicle }: Props) {
 
       <div className="flex flex-col lg:flex-row gap-4">
         {/* SVG vehicle top-down view — only when there is visual data to display */}
-        {(hasTpms || hasBody) && (
+        {(hasTpms || hasBody || isCharging || hasChargePort) && (
           <div className="flex-shrink-0 flex justify-center">
             <svg viewBox="0 0 300 440" className="w-[220px] sm:w-[260px]" xmlns="http://www.w3.org/2000/svg">
               {/* Vehicle body outline */}
@@ -110,6 +112,22 @@ export default function VehicleTopView({ vehicle }: Props) {
                   <line x1="58" y1="170" x2="40" y2="190" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
                   <line x1="242" y1="170" x2="260" y2="190" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
                 </>
+              )}
+
+              {/* Charge port flap — on left body between rear window and RL tire */}
+              {vehicle.chargePortDoorOpen === true && (
+                <path d="M60 295 L42 305" fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
+              )}
+
+              {/* Plugged in / charging — cable + bolt */}
+              {(vehicle.pluggedIn === true || isCharging) && (
+                <g>
+                  <path d="M42 305 Q30 315 22 330 Q16 345 18 360" fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" />
+                  <rect x="13" y="360" width="10" height="6" rx="2" fill="#3b82f6" />
+                  <g transform="translate(15, 340)">
+                    <path d="M-1 -7 L-4 1 L-1 0 L1 7 L4 -1 L1 0Z" fill={isCharging ? '#3b82f6' : '#6b7280'} />
+                  </g>
+                </g>
               )}
 
               {/* Frunk indicator */}
@@ -244,6 +262,22 @@ export default function VehicleTopView({ vehicle }: Props) {
                   color={vehicle.windowsOpen ? '#3b82f6' : '#22c55e'}
                   text={vehicle.windowsOpen ? t('vehicleView.open') : t('vehicleView.closed')}
                 />
+                {vehicle.chargePortDoorOpen != null && (
+                  <StatusPill
+                    label={t('vehicleView.chargePort')}
+                    active={vehicle.chargePortDoorOpen === true}
+                    color={vehicle.chargePortDoorOpen ? '#f59e0b' : '#22c55e'}
+                    text={vehicle.chargePortDoorOpen ? t('vehicleView.open') : t('vehicleView.closed')}
+                  />
+                )}
+                {vehicle.pluggedIn != null && (
+                  <StatusPill
+                    label={t('vehicleView.pluggedIn')}
+                    active={vehicle.pluggedIn === true}
+                    color={vehicle.pluggedIn ? '#3b82f6' : '#6b7280'}
+                    text={vehicle.pluggedIn ? t('vehicleView.yes') : t('vehicleView.no')}
+                  />
+                )}
                 {vehicle.sentryMode != null && (
                   <StatusPill
                     label={t('vehicleView.sentry')}
@@ -320,7 +354,7 @@ export default function VehicleTopView({ vehicle }: Props) {
                   const warn = getWarning(vehicle, tp.key);
                   return (
                     <div key={tp.key} className="flex items-center gap-2">
-                      <span className="text-xs text-[#9ca3af] w-5">{tp.label}</span>
+                      <span className="text-xs text-[#9ca3af] w-8">{t(tp.labelKey)}</span>
                       <span className={`text-sm font-mono font-bold ${warn ? 'text-[#ef4444]' : 'text-white'}`}>
                         {u.fmtPressure(p)} {u.pressureUnit}
                       </span>
