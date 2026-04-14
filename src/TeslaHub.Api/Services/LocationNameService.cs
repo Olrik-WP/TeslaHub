@@ -22,6 +22,7 @@ public class LocationNameService
         return await _cache.GetOrCreateAsync(CacheKey, async entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+            entry.Size = 1;
             return await _db.ChargingLocations.AsNoTracking().ToListAsync();
         }) ?? [];
     }
