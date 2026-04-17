@@ -18,7 +18,9 @@ export function useVehicleStatus(carId: number | undefined) {
     queryFn: () => getVehicleStatus(carId!),
     enabled: !!carId,
     refetchInterval: visible ? 60_000 : false,
-    staleTime: 60_000,
+    staleTime: 30_000,
     placeholderData: keepPreviousData,
+    refetchOnReconnect: 'always',
+    refetchOnWindowFocus: 'always',
   });
 }

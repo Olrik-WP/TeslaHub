@@ -44,26 +44,65 @@ export function useLiveStream(carId: number | undefined, enabled = true) {
       return;
     }
 
-    const token = localStorage.getItem('teslahub_token');
-    const url = `/api/vehicle/${carId}/live-stream${token ? `?access_token=${encodeURIComponent(token)}` : ''}`;
-    const source = new EventSource(url);
-    sourceRef.current = source;
+    let disposed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+    let reconnectDelay = 1000;
 
-    source.onopen = () => setConnected(true);
+    function open() {
+      if (disposed) return;
+      if (sourceRef.current) {
+        sourceRef.current.close();
+      }
 
-    source.onmessage = (e) => {
-      try {
-        setData(JSON.parse(e.data));
-      } catch { /* ignore parse errors */ }
-    };
+      const token = localStorage.getItem('teslahub_token');
+      const url = `/api/vehicle/${carId}/live-stream${token ? `?access_token=${encodeURIComponent(token)}` : ''}`;
+      const source = new EventSource(url);
+      sourceRef.current = source;
 
-    source.onerror = () => {
-      setConnected(false);
-    };
+      source.onopen = () => {
+        if (disposed) return;
+        setConnected(true);
+        reconnectDelay = 1000;
+      };
+
+      source.onmessage = (e) => {
+        if (disposed) return;
+        try {
+          setData(JSON.parse(e.data));
+        } catch { /* ignore parse errors */ }
+      };
+
+      source.onerror = () => {
+        if (disposed) return;
+        setConnected(false);
+        if (source.readyState === EventSource.CLOSED) {
+          sourceRef.current = null;
+          const delay = reconnectDelay;
+          reconnectDelay = Math.min(delay * 2, 30_000);
+          reconnectTimer = setTimeout(open, delay);
+        }
+      };
+    }
+
+    function handleVisibilityChange() {
+      if (disposed) return;
+      if (!document.hidden) {
+        reconnectDelay = 1000;
+        open();
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    open();
 
     return () => {
-      source.close();
-      sourceRef.current = null;
+      disposed = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearTimeout(reconnectTimer);
+      if (sourceRef.current) {
+        sourceRef.current.close();
+        sourceRef.current = null;
+      }
       setConnected(false);
     };
   }, [carId, enabled]);
