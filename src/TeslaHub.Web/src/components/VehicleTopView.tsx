@@ -10,10 +10,10 @@ interface Props {
 }
 
 const TIRE_POSITIONS = [
-  { key: 'fl', labelKey: 'vehicleView.tireFL', x: 56, y: 100 },
-  { key: 'fr', labelKey: 'vehicleView.tireFR', x: 244, y: 100 },
-  { key: 'rl', labelKey: 'vehicleView.tireRL', x: 56, y: 340 },
-  { key: 'rr', labelKey: 'vehicleView.tireRR', x: 244, y: 340 },
+  { key: 'fl', labelKey: 'vehicleView.tireFL', x: 70, y: 100 },
+  { key: 'fr', labelKey: 'vehicleView.tireFR', x: 230, y: 100 },
+  { key: 'rl', labelKey: 'vehicleView.tireRL', x: 62, y: 340 },
+  { key: 'rr', labelKey: 'vehicleView.tireRR', x: 238, y: 340 },
 ] as const;
 
 type TireKey = 'fl' | 'fr' | 'rl' | 'rr';
@@ -139,21 +139,21 @@ export default function VehicleTopView({ vehicle }: Props) {
                 </>
               )}
 
-              {/* Charge port flap — opens outward from the rear-left body curve */}
+              {/* Charge port flap — starts AT the body edge, opens outward */}
               {vehicle.chargePortDoorOpen === true && (
-                <path d="M68 392 L50 400" fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
+                <path d="M80 390 L62 398" fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
               )}
 
-              {/* Plugged in / charging — cable from car body port, station below, bolt offset */}
+              {/* Plugged in / charging — cable from body, to the right of the flap */}
               {(vehicle.pluggedIn === true || isCharging) && (
                 <g>
-                  {/* Cable — neon green, from the body charge port down to the station */}
-                  <path d="M68 392 Q50 415 35 440 Q28 452 22 458" fill="none" stroke="#39ff14" strokeWidth="3" strokeLinecap="round" />
+                  {/* Cable — neon green, from body (right of flap), curves down to station */}
+                  <path d="M83 396 Q65 420 45 445 Q35 455 28 460" fill="none" stroke="#39ff14" strokeWidth="3" strokeLinecap="round" />
                   {/* Charging station (borne) — blue, well below tire */}
-                  <rect x="13" y="458" width="18" height="12" rx="3" fill="#3b82f6" />
-                  <rect x="18" y="453" width="8" height="5" rx="1.5" fill="#3b82f6" />
+                  <rect x="19" y="460" width="18" height="12" rx="3" fill="#3b82f6" />
+                  <rect x="24" y="455" width="8" height="5" rx="1.5" fill="#3b82f6" />
                   {/* Lightning bolt — electric yellow, offset right of the cable */}
-                  <g transform="translate(52, 432)">
+                  <g transform="translate(58, 435)">
                     <path d="M-2 -10 L-6 2 L-1 0 L2 10 L6 -2 L1 0Z" fill={isCharging ? '#facc15' : '#6b7280'} />
                   </g>
                 </g>
