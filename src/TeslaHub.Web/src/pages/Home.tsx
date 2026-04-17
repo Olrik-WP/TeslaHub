@@ -24,6 +24,7 @@ const STICKY_FIELDS: (keyof VehicleStatus)[] = [
   'odometer', 'outsideTemp', 'insideTemp', 'ratedBatteryRangeKm',
   'batteryLevel', 'latitude', 'longitude', 'firmwareVersion',
   'currentCapacityKwh', 'maxCapacityKwh', 'usableBatteryLevel',
+  'estBatteryRangeKm',
 ];
 
 function loadSticky(): Partial<VehicleStatus> {
@@ -406,11 +407,14 @@ export default function Home({ carId }: Props) {
           <div className="flex items-center gap-2 mb-3">
             <span className="text-[#3b82f6] text-lg">⚡</span>
             <span className="font-medium">{t('home.chargingInProgress')}</span>
+            {vehicle.chargingState && (
+              <span className="ml-auto text-xs text-[#9ca3af] bg-[#2a2a2a] px-2 py-0.5 rounded">{vehicle.chargingState}</span>
+            )}
           </div>
           <div className="grid grid-cols-3 gap-3">
             <StatCard
               label={t('home.added')}
-              value={lastCharge.chargeEnergyAdded?.toFixed(1) ?? '—'}
+              value={vehicle.chargeEnergyAdded?.toFixed(1) ?? lastCharge.chargeEnergyAdded?.toFixed(1) ?? '—'}
               unit="kWh"
               color="#3b82f6"
             />
@@ -418,12 +422,41 @@ export default function Home({ carId }: Props) {
               label={t('home.battery')}
               value={`${lastCharge.startBatteryLevel ?? '?'} → ${vehicle.batteryLevel ?? '?'}`}
               unit="%"
+              subtitle={vehicle.chargeLimitSoc != null ? `${t('home.targetSoc')}: ${vehicle.chargeLimitSoc}%` : undefined}
+              subtitleColor="#3b82f6"
+              progress={vehicle.batteryLevel}
             />
             <StatCard
               label={t('home.duration')}
               value={lastCharge.durationMin ?? '—'}
               unit="min"
+              subtitle={vehicle.timeToFullCharge != null && vehicle.timeToFullCharge > 0
+                ? `${t('home.timeRemaining')}: ${vehicle.timeToFullCharge < 1 ? `${Math.round(vehicle.timeToFullCharge * 60)}min` : `${vehicle.timeToFullCharge.toFixed(1)}h`}`
+                : undefined}
+              subtitleColor="#22c55e"
             />
+            {vehicle.chargerPower != null && vehicle.chargerPower > 0 && (
+              <StatCard
+                label={t('home.chargerPower')}
+                value={vehicle.chargerPower.toFixed(1)}
+                unit="kW"
+                color="#8b5cf6"
+              />
+            )}
+            {vehicle.chargerVoltage != null && vehicle.chargerActualCurrent != null && (
+              <StatCard
+                label={t('home.voltageCurrentLabel')}
+                value={`${vehicle.chargerVoltage}V · ${vehicle.chargerActualCurrent.toFixed(0)}A`}
+              />
+            )}
+            {vehicle.estBatteryRangeKm != null && (
+              <StatCard
+                label={t('home.estRange')}
+                value={Math.round(u.convertDistance(vehicle.estBatteryRangeKm)!)}
+                unit={u.distanceUnit}
+                color="#22c55e"
+              />
+            )}
           </div>
         </div>
       )}

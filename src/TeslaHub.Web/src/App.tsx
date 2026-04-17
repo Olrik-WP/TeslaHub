@@ -28,6 +28,7 @@ const Statistics = lazy(() => import('./pages/Statistics'));
 const DatabaseInfo = lazy(() => import('./pages/DatabaseInfo'));
 const Locations = lazy(() => import('./pages/Locations'));
 const Trip = lazy(() => import('./pages/Trip'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -87,6 +88,13 @@ function AppLayout() {
   const [selectedCarId, setSelectedCarId] = useState<number | undefined>();
 
   useEffect(() => {
+    if (settings?.language && settings.language !== i18n.language) {
+      i18n.changeLanguage(settings.language);
+      localStorage.setItem('teslahub_lang', settings.language);
+    }
+  }, [settings?.language]);
+
+  useEffect(() => {
     if (!cars || cars.length === 0 || selectedCarId) return;
 
     const stored = localStorage.getItem(CAR_STORAGE_KEY);
@@ -136,6 +144,7 @@ function AppLayout() {
               <Route path="/database" element={<DatabaseInfo carId={selectedCarId} />} />
               <Route path="/locations" element={<Locations carId={selectedCarId} />} />
               <Route path="/trip" element={<Trip carId={selectedCarId} />} />
+              <Route path="/dashboard" element={<Dashboard carId={selectedCarId} />} />
               <Route path="/settings" element={<Settings carId={selectedCarId} />} />
             </Routes>
           </Suspense>

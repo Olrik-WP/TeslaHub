@@ -41,6 +41,17 @@ public class GlobalSettings
 
     [MaxLength(20)]
     public string CostSource { get; set; } = "teslahub";
+
+    [MaxLength(5)]
+    public string Language { get; set; } = "en";
+
+    [MaxLength(20)]
+    public string DashboardGaugeMode { get; set; } = "analog";
+
+    [MaxLength(20)]
+    public string DashboardColorPreset { get; set; } = "teslaRed";
+
+    public int DashboardMaxScale { get; set; } = 200;
 }
 
 public class CarConfig

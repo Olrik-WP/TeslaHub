@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text;
+using System.Text.Json;
 using MQTTnet;
 using MQTTnet.Packets;
 using MQTTnet.Protocol;
@@ -48,6 +49,22 @@ public class MqttLiveData
     public double? PassengerTempSetting { get; set; }
     public string? State { get; set; }
 
+    // Charging live data
+    public string? ChargingState { get; set; }
+    public double? ChargeEnergyAdded { get; set; }
+    public double? ChargerPower { get; set; }
+    public int? ChargerVoltage { get; set; }
+    public double? ChargerActualCurrent { get; set; }
+    public int? ChargeLimitSoc { get; set; }
+    public double? TimeToFullCharge { get; set; }
+    public double? EstBatteryRangeKm { get; set; }
+
+    // Driving live data
+    public string? ShiftState { get; set; }
+    public int? Heading { get; set; }
+    public int? Elevation { get; set; }
+    public string? Geofence { get; set; }
+
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 }
 
@@ -77,8 +94,23 @@ public class MqttLiveDataService : BackgroundService
         "inside_temp", "outside_temp",
         "odometer", "speed", "power",
         "driver_temp_setting", "passenger_temp_setting",
-        "state"
+        "state",
+        // Charging live
+        "charging_state", "charge_energy_added", "charger_power",
+        "charger_voltage", "charger_actual_current",
+        "charge_limit_soc", "time_to_full_charge",
+        "est_battery_range_km",
+        // Driving live
+        "shift_state", "heading", "elevation", "geofence"
     };
+
+    private static readonly JsonSerializerOptions _jsonOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    public event Action<int, MqttLiveData>? OnLiveDataChanged;
 
     public bool IsConnected => _client?.IsConnected == true;
 
@@ -203,6 +235,7 @@ public class MqttLiveDataService : BackgroundService
         var data = _liveData.GetOrAdd(carId, _ => new MqttLiveData());
         ApplyValue(data, key, value);
         data.LastUpdated = DateTime.UtcNow;
+        OnLiveDataChanged?.Invoke(carId, data);
     }
 
     private static void ApplyValue(MqttLiveData data, string key, string value)
@@ -251,6 +284,20 @@ public class MqttLiveDataService : BackgroundService
             case "driver_temp_setting":    if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var dts)) data.DriverTempSetting = dts; break;
             case "passenger_temp_setting": if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var pts)) data.PassengerTempSetting = pts; break;
             case "state":               data.State = value; break;
+            // Charging live
+            case "charging_state":      data.ChargingState = value; break;
+            case "charge_energy_added": if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var cea)) data.ChargeEnergyAdded = cea; break;
+            case "charger_power":       if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var cpw)) data.ChargerPower = cpw; break;
+            case "charger_voltage":     if (int.TryParse(value, out var cv)) data.ChargerVoltage = cv; break;
+            case "charger_actual_current": if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var cac)) data.ChargerActualCurrent = cac; break;
+            case "charge_limit_soc":    if (int.TryParse(value, out var cls)) data.ChargeLimitSoc = cls; break;
+            case "time_to_full_charge": if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var ttfc)) data.TimeToFullCharge = ttfc; break;
+            case "est_battery_range_km": if (double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var ebr)) data.EstBatteryRangeKm = ebr; break;
+            // Driving live
+            case "shift_state":         data.ShiftState = value; break;
+            case "heading":             if (int.TryParse(value, out var hdg)) data.Heading = hdg; break;
+            case "elevation":           if (int.TryParse(value, out var elv)) data.Elevation = elv; break;
+            case "geofence":            data.Geofence = value; break;
         }
     }
 

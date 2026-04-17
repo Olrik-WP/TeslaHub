@@ -279,10 +279,11 @@ export default function Settings({ carId }: Props) {
         <div>
           <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.language')}</label>
           <CustomSelect
-            value={i18n.language}
+            value={form.language ?? i18n.language}
             onChange={(v) => {
               i18n.changeLanguage(v);
               localStorage.setItem('teslahub_lang', v);
+              setForm({ ...form, language: v });
             }}
             options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
           />

@@ -125,18 +125,22 @@ export default function VehicleTopView({ vehicle }: Props) {
                 </>
               )}
 
-              {/* Charge port flap — on left body between rear window and RL tire */}
+              {/* Charge port flap — rear-left body curve */}
               {vehicle.chargePortDoorOpen === true && (
-                <path d="M60 295 L42 305" fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
+                <path d="M66 360 L48 368" fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
               )}
 
-              {/* Plugged in / charging — cable + bolt */}
+              {/* Plugged in / charging — cable + bolt + station */}
               {(vehicle.pluggedIn === true || isCharging) && (
                 <g>
-                  <path d="M42 305 Q30 315 22 330 Q16 345 18 360" fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" />
-                  <rect x="13" y="360" width="10" height="6" rx="2" fill="#3b82f6" />
-                  <g transform="translate(15, 340)">
-                    <path d="M-1 -7 L-4 1 L-1 0 L1 7 L4 -1 L1 0Z" fill={isCharging ? '#3b82f6' : '#6b7280'} />
+                  {/* Cable — neon green, curves down past the tire */}
+                  <path d="M48 368 Q36 378 28 395 Q22 408 20 420" fill="none" stroke="#39ff14" strokeWidth="3" strokeLinecap="round" />
+                  {/* Charging station (borne) — blue, below tire */}
+                  <rect x="12" y="420" width="16" height="10" rx="3" fill="#3b82f6" />
+                  <rect x="17" y="416" width="6" height="4" rx="1" fill="#3b82f6" />
+                  {/* Lightning bolt — electric yellow, between flap and station */}
+                  <g transform="translate(32, 398)">
+                    <path d="M-2 -9 L-5 1 L-1 0 L2 9 L5 -1 L1 0Z" fill={isCharging ? '#facc15' : '#6b7280'} />
                   </g>
                 </g>
               )}

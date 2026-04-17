@@ -34,7 +34,8 @@
     "statistics": "Statistics",
     "locations": "Locations",
     "trip": "Trip",
-    "database": "Database"
+    "database": "Database",
+    "dashboard": "Dashboard"
   },
   "home": {
     "loadingVehicle": "Loading vehicle data...",
@@ -74,7 +75,12 @@
     "sinceCharge": "since charge",
     "costPerKm": "cost/{{unit}}",
     "costExplain": "Shows how much of your accumulated charge costs ({{total}}) you've consumed so far, based on your actual battery usage. Accounts for multiple recent charges when your battery level drops below the start of the latest one.",
-    "subscription": "Subscription"
+    "subscription": "Subscription",
+    "chargerPower": "Charger power",
+    "voltageCurrentLabel": "Voltage / Current",
+    "estRange": "Est. range",
+    "targetSoc": "Target",
+    "timeRemaining": "Remaining"
   },
   "charging": {
     "7days": "7 days",
@@ -445,5 +451,22 @@
     "no": "No",
     "mqttDisconnected": "MQTT not connected — body/security data unavailable",
     "mqttHint": "Enable MQTT to see doors, trunk, lock, Sentry Mode and more — see docs"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "analog": "Analog",
+    "digital": "Digital",
+    "colorPreset": "Color theme",
+    "maxScale": "Max scale",
+    "speed": "Speed",
+    "odometer": "Odometer",
+    "estRange": "Est. range",
+    "power": "Power",
+    "regen": "Regen",
+    "consumption": "Power",
+    "compass": "Compass",
+    "elevation": "Elevation",
+    "geofence": "Location",
+    "shiftState": "Gear"
   }
 }

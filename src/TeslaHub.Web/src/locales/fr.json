@@ -34,7 +34,8 @@
     "statistics": "Stats",
     "locations": "Lieux",
     "trip": "Voyage",
-    "database": "Base"
+    "database": "Base",
+    "dashboard": "Compteur"
   },
   "home": {
     "loadingVehicle": "Chargement des données...",
@@ -74,7 +75,12 @@
     "sinceCharge": "depuis charge",
     "costPerKm": "coût/{{unit}}",
     "costExplain": "Indique combien de vos charges cumulées ({{total}}) a été consommé, basé sur votre utilisation réelle de la batterie. Prend en compte les charges précédentes quand le niveau descend en dessous du début de la dernière.",
-    "subscription": "Abonnement"
+    "subscription": "Abonnement",
+    "chargerPower": "Puissance",
+    "voltageCurrentLabel": "Tension / Courant",
+    "estRange": "Autonomie est.",
+    "targetSoc": "Cible",
+    "timeRemaining": "Restant"
   },
   "charging": {
     "7days": "7 jours",
@@ -445,5 +451,22 @@
     "no": "Non",
     "mqttDisconnected": "MQTT non connecté — données carrosserie/sécurité indisponibles",
     "mqttHint": "Activez MQTT pour voir portes, coffre, verrouillage, Sentinelle et plus — voir docs"
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "analog": "Analogique",
+    "digital": "Numérique",
+    "colorPreset": "Thème couleur",
+    "maxScale": "Échelle max",
+    "speed": "Vitesse",
+    "odometer": "Compteur",
+    "estRange": "Autonomie est.",
+    "power": "Puissance",
+    "regen": "Régén.",
+    "consumption": "Puissance",
+    "compass": "Boussole",
+    "elevation": "Altitude",
+    "geofence": "Lieu",
+    "shiftState": "Rapport"
   }
 }

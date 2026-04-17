@@ -23,6 +23,7 @@ const icons: Record<string, ReactNode> = {
   vampire:    <Svg><path d="M12 3c-4 0-7 3-7 7 0 5 7 11 7 11s7-6 7-11c0-4-3-7-7-7z" /><path d="M9 11l1.5-3 1.5 3M12 11l1.5-3 1.5 3" /></Svg>,
   locations:  <Svg><circle cx="12" cy="10" r="2" /><path d="M12 2a8 8 0 00-8 8c0 5 8 12 8 12s8-7 8-12a8 8 0 00-8-8z" /><path d="M7 20h10" /></Svg>,
   trip:       <Svg><path d="M3 6h18M3 6l3 12h12l3-12" /><circle cx="9" cy="18" r="2" fill="currentColor" opacity=".3" /><circle cx="15" cy="18" r="2" fill="currentColor" opacity=".3" /><path d="M9 6V4a3 3 0 016 0v2" /></Svg>,
+  dashboard:  <Svg><circle cx="12" cy="14" r="8" /><path d="M12 14V8" /><path d="M12 14l4 3" /><path d="M8 10h0" /><path d="M16 10h0" /><circle cx="12" cy="14" r="1.5" /></Svg>,
   database:   <Svg><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5" /><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" /></Svg>,
   settings:   <Svg><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1.08-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" /></Svg>,
   more:       <Svg><line x1="4" y1="6" x2="20" y2="6" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="18" x2="20" y2="18" /></Svg>,
@@ -31,12 +32,13 @@ const icons: Record<string, ReactNode> = {
 
 const primaryLinks = [
   { to: '/', labelKey: 'nav.home', icon: 'home' },
+  { to: '/dashboard', labelKey: 'nav.dashboard', icon: 'dashboard' },
   { to: '/charging', labelKey: 'nav.charging', icon: 'charging' },
   { to: '/trips', labelKey: 'nav.trips', icon: 'trips' },
-  { to: '/costs', labelKey: 'nav.costs', icon: 'costs' },
 ];
 
 const drawerLinks = [
+  { to: '/costs', labelKey: 'nav.costs', icon: 'costs' },
   { to: '/map', labelKey: 'nav.map', icon: 'map' },
   { to: '/charging-stats', labelKey: 'nav.dcCurve', icon: 'dcCurve' },
   { to: '/battery', labelKey: 'nav.battery', icon: 'battery' },

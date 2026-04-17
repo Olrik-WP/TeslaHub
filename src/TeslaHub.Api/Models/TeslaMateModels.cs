@@ -68,6 +68,22 @@ public record VehicleDto
     public bool? ChargePortDoorOpen { get; init; }
     public bool? PluggedIn { get; init; }
 
+    // Charging live (MQTT live only)
+    public string? ChargingState { get; init; }
+    public double? ChargeEnergyAdded { get; init; }
+    public double? ChargerPower { get; init; }
+    public int? ChargerVoltage { get; init; }
+    public double? ChargerActualCurrent { get; init; }
+    public int? ChargeLimitSoc { get; init; }
+    public double? TimeToFullCharge { get; init; }
+    public double? EstBatteryRangeKm { get; init; }
+
+    // Driving live (MQTT live only)
+    public string? ShiftState { get; init; }
+    public int? Heading { get; init; }
+    public int? Elevation { get; init; }
+    public string? Geofence { get; init; }
+
     // MQTT connectivity
     public bool MqttConnected { get; init; }
 }

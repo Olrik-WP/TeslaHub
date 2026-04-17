@@ -74,6 +74,22 @@ export interface VehicleStatus {
   chargePortDoorOpen: boolean | null;
   pluggedIn: boolean | null;
 
+  // Charging live (MQTT live)
+  chargingState: string | null;
+  chargeEnergyAdded: number | null;
+  chargerPower: number | null;
+  chargerVoltage: number | null;
+  chargerActualCurrent: number | null;
+  chargeLimitSoc: number | null;
+  timeToFullCharge: number | null;
+  estBatteryRangeKm: number | null;
+
+  // Driving live (MQTT live)
+  shiftState: string | null;
+  heading: number | null;
+  elevation: number | null;
+  geofence: string | null;
+
   // MQTT connectivity
   mqttConnected: boolean;
 }
@@ -215,6 +231,10 @@ export interface GlobalSettings {
   defaultCarId: number | null;
   mapTileUrl: string;
   costSource: string;
+  language: string;
+  dashboardGaugeMode: string;
+  dashboardColorPreset: string;
+  dashboardMaxScale: number;
 }
 
 export interface MonthlyTrend {

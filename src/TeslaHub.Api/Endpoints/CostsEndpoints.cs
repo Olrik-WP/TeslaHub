@@ -171,8 +171,13 @@ public static class CostsEndpoints
             settings.Currency = update.Currency;
             settings.UnitOfLength = update.UnitOfLength;
             settings.UnitOfTemperature = update.UnitOfTemperature;
+            settings.UnitOfPressure = update.UnitOfPressure;
             settings.DefaultCarId = update.DefaultCarId;
             settings.CostSource = update.CostSource;
+            settings.Language = update.Language;
+            settings.DashboardGaugeMode = update.DashboardGaugeMode;
+            settings.DashboardColorPreset = update.DashboardColorPreset;
+            settings.DashboardMaxScale = update.DashboardMaxScale;
 
             await db.SaveChangesAsync();
             return Results.Ok(settings);
