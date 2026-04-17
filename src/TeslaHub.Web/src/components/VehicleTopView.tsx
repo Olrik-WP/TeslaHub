@@ -147,8 +147,8 @@ export default function VehicleTopView({ vehicle }: Props) {
               {/* Plugged in / charging — cable from body, to the right of the flap */}
               {(vehicle.pluggedIn === true || isCharging) && (
                 <g>
-                  {/* Cable — neon green, wide smooth arc from body to station center */}
-                  <path d="M83 396 C80 432 50 456 28 466" fill="none" stroke="#39ff14" strokeWidth="3" strokeLinecap="round" />
+                  {/* Cable — neon green, wide sweeping arc from body to station */}
+                  <path d="M83 396 C50 400 15 435 28 466" fill="none" stroke="#39ff14" strokeWidth="3" strokeLinecap="round" />
                   {/* Charging station (borne) — blue, centered on cable end */}
                   <rect x="19" y="466" width="18" height="12" rx="3" fill="#3b82f6" />
                   <rect x="24" y="461" width="8" height="5" rx="1.5" fill="#3b82f6" />
