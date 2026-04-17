@@ -4,6 +4,7 @@ import type { MapRef } from 'react-map-gl/maplibre';
 import type { LngLatBoundsLike } from 'maplibre-gl';
 import { useTranslation } from 'react-i18next';
 import { useMapStyle, setup3D } from '../hooks/useMapStyle';
+import MapStylePicker from './MapStylePicker';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 interface ChargeMarker {
@@ -115,85 +116,88 @@ export default function LeafletMap({ routePoints, chargeMarkers }: LeafletMapPro
   }, [routePoints]);
 
   return (
-    <Map
-      ref={mapRef}
-      initialViewState={{
-        longitude: fallback[1],
-        latitude: fallback[0],
-        zoom: 13,
-        pitch,
-        bearing,
-      }}
-      mapStyle={styleUrl}
-      attributionControl={false}
-      style={{ width: '100%', height: '100%' }}
-      onLoad={handleLoad}
-    >
-      {routeGeoJson && (
-        <Source id="route" type="geojson" data={routeGeoJson}>
-          <Layer
-            id="route-line"
-            type="line"
-            paint={{
-              'line-color': '#e31937',
-              'line-width': 3,
-              'line-opacity': 0.8,
-            }}
-            layout={{ 'line-cap': 'round', 'line-join': 'round' }}
-          />
-        </Source>
-      )}
+    <div className="relative w-full h-full">
+      <Map
+        ref={mapRef}
+        initialViewState={{
+          longitude: fallback[1],
+          latitude: fallback[0],
+          zoom: 13,
+          pitch,
+          bearing,
+        }}
+        mapStyle={styleUrl}
+        attributionControl={false}
+        style={{ width: '100%', height: '100%' }}
+        onLoad={handleLoad}
+      >
+        {routeGeoJson && (
+          <Source id="route" type="geojson" data={routeGeoJson}>
+            <Layer
+              id="route-line"
+              type="line"
+              paint={{
+                'line-color': '#e31937',
+                'line-width': 3,
+                'line-opacity': 0.8,
+              }}
+              layout={{ 'line-cap': 'round', 'line-join': 'round' }}
+            />
+          </Source>
+        )}
 
-      {routePoints.length > 0 && (
-        <Marker
-          longitude={routePoints[routePoints.length - 1][1]}
-          latitude={routePoints[routePoints.length - 1][0]}
-          anchor="center"
-        >
-          <div style={DOT('#e31937', 16)} title={t('map.lastPosition')} />
-        </Marker>
-      )}
-
-      {routePoints.length > 1 && (
-        <Marker
-          longitude={routePoints[0][1]}
-          latitude={routePoints[0][0]}
-          anchor="center"
-        >
-          <div style={DOT('#22c55e', 12)} title={t('map.start')} />
-        </Marker>
-      )}
-
-      {chargeMarkers.map((c) => {
-        if (c.latitude == null || c.longitude == null) return null;
-        return (
+        {routePoints.length > 0 && (
           <Marker
-            key={c.id}
-            longitude={c.longitude}
-            latitude={c.latitude}
+            longitude={routePoints[routePoints.length - 1][1]}
+            latitude={routePoints[routePoints.length - 1][0]}
             anchor="center"
-            onClick={(e) => { e.originalEvent.stopPropagation(); setPopupInfo(c); }}
           >
-            <div style={DOT(c.fastChargerPresent ? '#f59e0b' : '#3b82f6', 12)} />
+            <div style={DOT('#e31937', 16)} title={t('map.lastPosition')} />
           </Marker>
-        );
-      })}
+        )}
 
-      {popupInfo && popupInfo.latitude != null && popupInfo.longitude != null && (
-        <Popup
-          longitude={popupInfo.longitude}
-          latitude={popupInfo.latitude}
-          anchor="bottom"
-          onClose={() => setPopupInfo(null)}
-          closeOnClick={false}
-          className="text-black"
-        >
-          <div className="text-xs">
-            <div>{popupInfo.chargeEnergyAdded?.toFixed(1)} kWh</div>
-            <div>{popupInfo.address?.split(',')[0]}</div>
-          </div>
-        </Popup>
-      )}
-    </Map>
+        {routePoints.length > 1 && (
+          <Marker
+            longitude={routePoints[0][1]}
+            latitude={routePoints[0][0]}
+            anchor="center"
+          >
+            <div style={DOT('#22c55e', 12)} title={t('map.start')} />
+          </Marker>
+        )}
+
+        {chargeMarkers.map((c) => {
+          if (c.latitude == null || c.longitude == null) return null;
+          return (
+            <Marker
+              key={c.id}
+              longitude={c.longitude}
+              latitude={c.latitude}
+              anchor="center"
+              onClick={(e) => { e.originalEvent.stopPropagation(); setPopupInfo(c); }}
+            >
+              <div style={DOT(c.fastChargerPresent ? '#f59e0b' : '#3b82f6', 12)} />
+            </Marker>
+          );
+        })}
+
+        {popupInfo && popupInfo.latitude != null && popupInfo.longitude != null && (
+          <Popup
+            longitude={popupInfo.longitude}
+            latitude={popupInfo.latitude}
+            anchor="bottom"
+            onClose={() => setPopupInfo(null)}
+            closeOnClick={false}
+            className="text-black"
+          >
+            <div className="text-xs">
+              <div>{popupInfo.chargeEnergyAdded?.toFixed(1)} kWh</div>
+              <div>{popupInfo.address?.split(',')[0]}</div>
+            </div>
+          </Popup>
+        )}
+      </Map>
+      <MapStylePicker />
+    </div>
   );
 }

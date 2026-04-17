@@ -1,14 +1,44 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { StyleSpecification } from 'maplibre-gl';
 import { getSettings } from '../api/queries';
+import type { GlobalSettings } from '../api/queries';
+import { api } from '../api/client';
 
 export interface MapStyleDef {
   label: string;
   labelKey: string;
-  url: string;
+  url: string | StyleSpecification;
   pitch?: number;
   bearing?: number;
   is3D?: boolean;
 }
+
+const SATELLITE_STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    'esri-satellite': {
+      type: 'raster',
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: '© Esri, Maxar, Earthstar Geographics',
+    },
+    'esri-labels': {
+      type: 'raster',
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+      maxzoom: 19,
+    },
+  },
+  layers: [
+    { id: 'satellite', type: 'raster', source: 'esri-satellite' },
+    { id: 'labels', type: 'raster', source: 'esri-labels' },
+  ],
+};
 
 export const MAP_STYLES: Record<string, MapStyleDef> = {
   positron: {
@@ -26,10 +56,23 @@ export const MAP_STYLES: Record<string, MapStyleDef> = {
     labelKey: 'settings.mapLiberty',
     url: 'https://tiles.openfreemap.org/styles/liberty',
   },
+  satellite: {
+    label: 'Satellite',
+    labelKey: 'settings.mapSatellite',
+    url: SATELLITE_STYLE,
+  },
   liberty3d: {
     label: '3D',
     labelKey: 'settings.map3D',
     url: 'https://tiles.openfreemap.org/styles/liberty',
+    pitch: 60,
+    bearing: -17,
+    is3D: true,
+  },
+  satellite3d: {
+    label: 'Satellite 3D',
+    labelKey: 'settings.mapSatellite3D',
+    url: SATELLITE_STYLE,
     pitch: 60,
     bearing: -17,
     is3D: true,
@@ -61,6 +104,32 @@ export function useMapStyle() {
     is3D: style.is3D ?? false,
     styleKey: key,
   };
+}
+
+export function useSetMapStyle() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (styleKey: string) => {
+      const settings = queryClient.getQueryData<GlobalSettings>(['settings']);
+      if (!settings) return;
+      return api('/costs/settings', {
+        method: 'PUT',
+        body: JSON.stringify({ ...settings, mapStyle: styleKey }),
+      });
+    },
+    onMutate: async (styleKey) => {
+      await queryClient.cancelQueries({ queryKey: ['settings'] });
+      const prev = queryClient.getQueryData<GlobalSettings>(['settings']);
+      if (prev) {
+        queryClient.setQueryData(['settings'], { ...prev, mapStyle: styleKey });
+      }
+      return { prev };
+    },
+    onError: (_err, _key, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['settings'], ctx.prev);
+    },
+  });
 }
 
 export function setup3D(map: maplibregl.Map) {
