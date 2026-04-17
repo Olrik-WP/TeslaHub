@@ -147,11 +147,14 @@ export default function VehicleTopView({ vehicle }: Props) {
               {/* Plugged in / charging — cable from body, to the right of the flap */}
               {(vehicle.pluggedIn === true || isCharging) && (
                 <g>
-                  {/* Cable — neon green, wide sweeping arc from body to station */}
-                  <path d="M83 396 C50 400 15 435 28 466" fill="none" stroke="#39ff14" strokeWidth="3" strokeLinecap="round" />
-                  {/* Charging station (borne) — blue, centered on cable end */}
-                  <rect x="19" y="466" width="18" height="12" rx="3" fill="#3b82f6" />
-                  <rect x="24" y="461" width="8" height="5" rx="1.5" fill="#3b82f6" />
+                  {/* Car-side plug — black connector at body charge port */}
+                  <rect x="80" y="393" width="7" height="5" rx="1.5" fill="#1a1a1a" stroke="#555" strokeWidth="1" />
+                  {/* Cable — neon green, sweeping arc from car plug to station plug */}
+                  <path d="M83 396 C58 402 18 438 28 466" fill="none" stroke="#39ff14" strokeWidth="3" strokeLinecap="round" />
+                  {/* Station-side plug — black connector above station */}
+                  <rect x="25" y="462" width="7" height="5" rx="1.5" fill="#1a1a1a" stroke="#555" strokeWidth="1" />
+                  {/* Charging station (borne) — blue */}
+                  <rect x="19" y="467" width="18" height="12" rx="3" fill="#3b82f6" />
                   {/* Lightning bolt — electric yellow, well to the right of the cable */}
                   <g transform="translate(72, 436)">
                     <path d="M-2 -10 L-6 2 L-1 0 L2 10 L6 -2 L1 0Z" fill={isCharging ? '#facc15' : '#6b7280'} />
