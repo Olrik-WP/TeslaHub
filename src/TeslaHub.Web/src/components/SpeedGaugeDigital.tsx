@@ -116,7 +116,7 @@ export default function SpeedGaugeDigital({ speed, maxSpeed, unit, shiftState, a
           fontSize={16}
           fontWeight={500}
           letterSpacing={4}
-          textTransform="uppercase"
+          style={{ textTransform: 'uppercase' }}
         >
           {unit}
         </text>

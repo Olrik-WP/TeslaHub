@@ -23,7 +23,6 @@ interface DashPrefs {
   gaugeMode: 'analog' | 'digital';
   colorPreset: string;
   maxScale: number;
-  showSettings: boolean;
 }
 
 const COLOR_PRESETS: Record<string, { label: string; accent: string; zones: GaugeColorZone[] }> = {
@@ -88,7 +87,6 @@ const defaultPrefs: DashPrefs = {
   gaugeMode: 'analog',
   colorPreset: 'teslaRed',
   maxScale: 200,
-  showSettings: false,
 };
 
 function cachePrefs(prefs: DashPrefs) {
@@ -105,42 +103,45 @@ export default function Dashboard({ carId }: Props) {
   const settingsSynced = useRef(false);
 
   const [prefs, setPrefsRaw] = useState<DashPrefs>(loadPrefsFromCache);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     if (!settings || settingsSynced.current) return;
     settingsSynced.current = true;
-    setPrefsRaw((prev) => {
-      const next: DashPrefs = {
-        ...prev,
-        gaugeMode: (settings.dashboardGaugeMode as 'analog' | 'digital') || prev.gaugeMode,
-        colorPreset: settings.dashboardColorPreset || prev.colorPreset,
-        maxScale: settings.dashboardMaxScale || prev.maxScale,
-      };
-      cachePrefs(next);
-      return next;
-    });
+    const next: DashPrefs = {
+      ...loadPrefsFromCache(),
+      gaugeMode: (settings.dashboardGaugeMode as 'analog' | 'digital') || 'analog',
+      colorPreset: settings.dashboardColorPreset || 'teslaRed',
+      maxScale: settings.dashboardMaxScale || 200,
+    };
+    cachePrefs(next);
+    setPrefsRaw(next);
   }, [settings]);
 
   const setPrefs = useCallback((updater: (prev: DashPrefs) => DashPrefs) => {
-    setPrefsRaw((prev) => {
-      const next = updater(prev);
-      cachePrefs(next);
+    setPrefsRaw((prev) => updater(prev));
+  }, []);
 
-      if (settings) {
-        const updated = {
-          ...settings,
-          dashboardGaugeMode: next.gaugeMode,
-          dashboardColorPreset: next.colorPreset,
-          dashboardMaxScale: next.maxScale,
-        };
-        api('/costs/settings', { method: 'PUT', body: JSON.stringify(updated) })
-          .then(() => queryClient.invalidateQueries({ queryKey: ['settings'] }))
-          .catch(() => {});
-      }
+  useEffect(() => {
+    cachePrefs(prefs);
 
-      return next;
-    });
-  }, [settings, queryClient]);
+    if (!settings) return;
+    if (
+      prefs.gaugeMode === (settings.dashboardGaugeMode || 'analog') &&
+      prefs.colorPreset === (settings.dashboardColorPreset || 'teslaRed') &&
+      prefs.maxScale === (settings.dashboardMaxScale || 200)
+    ) return;
+
+    const updated = {
+      ...settings,
+      dashboardGaugeMode: prefs.gaugeMode,
+      dashboardColorPreset: prefs.colorPreset,
+      dashboardMaxScale: prefs.maxScale,
+    };
+    api('/costs/settings', { method: 'PUT', body: JSON.stringify(updated) })
+      .then(() => queryClient.invalidateQueries({ queryKey: ['settings'] }))
+      .catch(() => {});
+  }, [prefs.gaugeMode, prefs.colorPreset, prefs.maxScale]);
 
   const preset = COLOR_PRESETS[prefs.colorPreset] ?? COLOR_PRESETS.teslaRed;
 
@@ -201,7 +202,7 @@ export default function Dashboard({ carId }: Props) {
             </div>
           )}
           <button
-            onClick={() => setPrefs((p) => ({ ...p, showSettings: !p.showSettings }))}
+            onClick={() => setShowSettings((v) => !v)}
             className="w-10 h-10 flex items-center justify-center rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] text-[#9ca3af] active:bg-[#2a2a2a]"
           >
             <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -213,7 +214,7 @@ export default function Dashboard({ carId }: Props) {
       </div>
 
       {/* Settings panel */}
-      {prefs.showSettings && (
+      {showSettings && (
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-4">
           <div>
             <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-2">{t('dashboard.colorPreset')}</label>
@@ -250,7 +251,7 @@ export default function Dashboard({ carId }: Props) {
                   }`}
                   style={prefs.maxScale === s ? { backgroundColor: preset.accent + '30', color: preset.accent } : undefined}
                 >
-                  {s} {u.speedUnit}
+                  {Math.round(u.convertSpeed(s) ?? s)} {u.speedUnit}
                 </button>
               ))}
             </div>
