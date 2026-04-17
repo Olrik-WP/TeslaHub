@@ -64,18 +64,32 @@ export default function VehicleTopView({ vehicle }: Props) {
         {/* SVG vehicle top-down view — only when there is visual data to display */}
         {(hasTpms || hasBody || isCharging || hasChargePort) && (
           <div className="flex-shrink-0 flex justify-center">
-            <svg viewBox="0 0 300 440" className="w-[220px] sm:w-[260px]" xmlns="http://www.w3.org/2000/svg">
-              {/* Vehicle body outline */}
+            <svg viewBox="0 0 300 470" className="w-[220px] sm:w-[260px]" xmlns="http://www.w3.org/2000/svg">
+              {/* Vehicle body — Tesla Model 3/Y silhouette */}
               <path
-                d="M150 20 C100 20 80 50 75 80 L65 160 L60 200 L60 300 L65 360 C70 400 100 420 150 420 C200 420 230 400 235 360 L240 300 L240 200 L235 160 L225 80 C220 50 200 20 150 20Z"
-                fill="#1a1a1a" stroke="#3a3a3a" strokeWidth="2"
+                d="M150 18 C118 18 102 30 93 50 L82 78 C78 90 73 115 70 135 L66 175 L63 215 L63 295 L66 340 L70 365 C73 385 80 400 90 410 L100 418 C112 425 130 430 150 430 C170 430 188 425 200 418 L210 410 C220 400 227 385 230 365 L234 340 L237 295 L237 215 L234 175 L230 135 C227 115 222 90 218 78 L207 50 C198 30 182 18 150 18Z"
+                fill="#1e1e1e" stroke="#3a3a3a" strokeWidth="2"
               />
-              {/* Windshield */}
-              <path d="M100 85 L200 85 L210 140 L90 140Z" fill="#222" stroke="#3a3a3a" strokeWidth="1" />
-              {/* Rear window */}
-              <path d="M100 370 L200 370 L210 330 L90 330Z" fill="#222" stroke="#3a3a3a" strokeWidth="1" />
-              {/* Roof */}
-              <rect x="88" y="150" width="124" height="170" rx="8" fill="#1e1e1e" stroke="#333" strokeWidth="1" />
+              {/* Front bumper sculpt */}
+              <path d="M105 38 C120 30 140 26 150 26 C160 26 180 30 195 38" fill="none" stroke="#2a2a2a" strokeWidth="1" />
+              {/* Headlight DRL strips */}
+              <path d="M88 58 C100 48 125 42 150 42 C175 42 200 48 212 58" fill="none" stroke="#555" strokeWidth="2.5" strokeLinecap="round" />
+              {/* Taillight bar */}
+              <path d="M95 414 C115 422 135 426 150 426 C165 426 185 422 205 414" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" opacity="0.6" />
+              {/* Side mirrors */}
+              <ellipse cx="54" cy="118" rx="7" ry="4" fill="#252525" stroke="#3a3a3a" strokeWidth="1" />
+              <ellipse cx="246" cy="118" rx="7" ry="4" fill="#252525" stroke="#3a3a3a" strokeWidth="1" />
+              {/* Glass roof — windshield + roof + rear window as one piece */}
+              <path
+                d="M108 80 L192 80 L206 128 L210 160 L210 320 L206 355 L192 385 L108 385 L94 355 L90 320 L90 160 L94 128Z"
+                fill="#181818" stroke="#333" strokeWidth="1"
+              />
+              {/* Windshield separator */}
+              <line x1="94" y1="128" x2="206" y2="128" stroke="#2a2a2a" strokeWidth="1" />
+              {/* Rear window separator */}
+              <line x1="94" y1="348" x2="206" y2="348" stroke="#2a2a2a" strokeWidth="1" />
+              {/* Roof panel */}
+              <rect x="92" y="138" width="116" height="200" rx="6" fill="#1a1a1a" stroke="#2a2a2a" strokeWidth="0.5" />
 
               {/* Tires — always visible; colored when TPMS data is available */}
               {TIRE_POSITIONS.map((tp) => {
@@ -125,22 +139,22 @@ export default function VehicleTopView({ vehicle }: Props) {
                 </>
               )}
 
-              {/* Charge port flap — rear-left body curve */}
+              {/* Charge port flap — in the rear-left body curve, away from RL tire */}
               {vehicle.chargePortDoorOpen === true && (
-                <path d="M66 360 L48 368" fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
+                <path d="M68 388 L50 396" fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
               )}
 
-              {/* Plugged in / charging — cable + bolt + station */}
+              {/* Plugged in / charging — cable from flap tip + station below + bolt offset */}
               {(vehicle.pluggedIn === true || isCharging) && (
                 <g>
-                  {/* Cable — neon green, curves down past the tire */}
-                  <path d="M48 368 Q36 378 28 395 Q22 408 20 420" fill="none" stroke="#39ff14" strokeWidth="3" strokeLinecap="round" />
-                  {/* Charging station (borne) — blue, below tire */}
-                  <rect x="12" y="420" width="16" height="10" rx="3" fill="#3b82f6" />
-                  <rect x="17" y="416" width="6" height="4" rx="1" fill="#3b82f6" />
-                  {/* Lightning bolt — electric yellow, between flap and station */}
-                  <g transform="translate(32, 398)">
-                    <path d="M-2 -9 L-5 1 L-1 0 L2 9 L5 -1 L1 0Z" fill={isCharging ? '#facc15' : '#6b7280'} />
+                  {/* Cable — neon green, starts from the open flap tip, curves down past tire */}
+                  <path d="M50 396 Q38 410 30 430 Q24 445 22 455" fill="none" stroke="#39ff14" strokeWidth="3" strokeLinecap="round" />
+                  {/* Charging station (borne) — blue, well below tire */}
+                  <rect x="13" y="455" width="18" height="12" rx="3" fill="#3b82f6" />
+                  <rect x="18" y="450" width="8" height="5" rx="1.5" fill="#3b82f6" />
+                  {/* Lightning bolt — electric yellow, offset to the right of the cable */}
+                  <g transform="translate(46, 430)">
+                    <path d="M-2 -10 L-6 2 L-1 0 L2 10 L6 -2 L1 0Z" fill={isCharging ? '#facc15' : '#6b7280'} />
                   </g>
                 </g>
               )}
@@ -215,7 +229,7 @@ export default function VehicleTopView({ vehicle }: Props) {
 
               {/* Pressure unit label — only when actual pressure values exist */}
               {hasTpmsPressure && (
-                <text x="150" y="435" textAnchor="middle" fill="#6b7280" fontSize="10">
+                <text x="150" y="450" textAnchor="middle" fill="#6b7280" fontSize="10">
                   {u.pressureUnit}
                 </text>
               )}
