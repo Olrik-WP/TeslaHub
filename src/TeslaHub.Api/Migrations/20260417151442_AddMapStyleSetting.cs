@@ -23,7 +23,7 @@ namespace TeslaHub.Api.Migrations
                 keyColumn: "Id",
                 keyValue: 1,
                 column: "MapStyle",
-                value: "liberty");
+                value: "liberty3d");
         }
 
         /// <inheritdoc />

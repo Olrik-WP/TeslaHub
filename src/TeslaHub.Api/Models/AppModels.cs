@@ -54,7 +54,7 @@ public class GlobalSettings
     public int DashboardMaxScale { get; set; } = 200;
 
     [MaxLength(20)]
-    public string MapStyle { get; set; } = "liberty";
+    public string MapStyle { get; set; } = "liberty3d";
 }
 
 public class CarConfig

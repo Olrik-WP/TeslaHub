@@ -318,7 +318,7 @@ namespace TeslaHub.Api.Migrations
                             DashboardGaugeMode = "analog",
                             DashboardMaxScale = 200,
                             Language = "en",
-                            MapStyle = "liberty",
+                            MapStyle = "liberty3d",
                             MapTileUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
                             UnitOfLength = "km",
                             UnitOfPressure = "bar",

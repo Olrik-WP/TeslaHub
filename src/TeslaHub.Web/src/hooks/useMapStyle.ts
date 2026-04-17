@@ -94,8 +94,8 @@ export function useMapStyle() {
     staleTime: 5 * 60_000,
   });
 
-  const key = settings?.mapStyle ?? 'liberty';
-  const style = MAP_STYLES[key] ?? MAP_STYLES.liberty;
+  const key = settings?.mapStyle ?? 'liberty3d';
+  const style = MAP_STYLES[key] ?? MAP_STYLES.liberty3d;
 
   return {
     styleUrl: style.url,
@@ -111,8 +111,9 @@ export function useSetMapStyle() {
 
   return useMutation({
     mutationFn: async (styleKey: string) => {
-      const settings = queryClient.getQueryData<GlobalSettings>(['settings']);
-      if (!settings) return;
+      const settings =
+        queryClient.getQueryData<GlobalSettings>(['settings']) ??
+        await queryClient.fetchQuery({ queryKey: ['settings'], queryFn: getSettings });
       return api('/costs/settings', {
         method: 'PUT',
         body: JSON.stringify({ ...settings, mapStyle: styleKey }),
@@ -128,6 +129,9 @@ export function useSetMapStyle() {
     },
     onError: (_err, _key, ctx) => {
       if (ctx?.prev) queryClient.setQueryData(['settings'], ctx.prev);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
     },
   });
 }
