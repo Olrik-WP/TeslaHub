@@ -10,10 +10,10 @@ interface Props {
 }
 
 const TIRE_POSITIONS = [
-  { key: 'fl', labelKey: 'vehicleView.tireFL', x: 72, y: 72 },
-  { key: 'fr', labelKey: 'vehicleView.tireFR', x: 228, y: 72 },
-  { key: 'rl', labelKey: 'vehicleView.tireRL', x: 72, y: 328 },
-  { key: 'rr', labelKey: 'vehicleView.tireRR', x: 228, y: 328 },
+  { key: 'fl', labelKey: 'vehicleView.tireFL', x: 56, y: 100 },
+  { key: 'fr', labelKey: 'vehicleView.tireFR', x: 244, y: 100 },
+  { key: 'rl', labelKey: 'vehicleView.tireRL', x: 56, y: 340 },
+  { key: 'rr', labelKey: 'vehicleView.tireRR', x: 244, y: 340 },
 ] as const;
 
 type TireKey = 'fl' | 'fr' | 'rl' | 'rr';
@@ -127,33 +127,33 @@ export default function VehicleTopView({ vehicle }: Props) {
               {/* Door indicators — per-door if available, otherwise generic */}
               {vehicle.driverFrontDoorOpen != null ? (
                 <>
-                  {vehicle.driverFrontDoorOpen && <line x1="58" y1="165" x2="38" y2="180" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />}
-                  {vehicle.driverRearDoorOpen && <line x1="58" y1="230" x2="38" y2="245" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />}
-                  {vehicle.passengerFrontDoorOpen && <line x1="242" y1="165" x2="262" y2="180" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />}
-                  {vehicle.passengerRearDoorOpen && <line x1="242" y1="230" x2="262" y2="245" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />}
+                  {vehicle.driverFrontDoorOpen && <line x1="60" y1="165" x2="40" y2="180" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />}
+                  {vehicle.driverRearDoorOpen && <line x1="60" y1="250" x2="40" y2="265" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />}
+                  {vehicle.passengerFrontDoorOpen && <line x1="240" y1="165" x2="260" y2="180" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />}
+                  {vehicle.passengerRearDoorOpen && <line x1="240" y1="250" x2="260" y2="265" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />}
                 </>
               ) : vehicle.doorsOpen === true && (
                 <>
-                  <line x1="58" y1="170" x2="40" y2="190" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
-                  <line x1="242" y1="170" x2="260" y2="190" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
+                  <line x1="60" y1="170" x2="40" y2="190" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
+                  <line x1="240" y1="170" x2="260" y2="190" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
                 </>
               )}
 
-              {/* Charge port flap — in the rear-left body curve, away from RL tire */}
+              {/* Charge port flap — opens outward from the rear-left body curve */}
               {vehicle.chargePortDoorOpen === true && (
-                <path d="M68 388 L50 396" fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
+                <path d="M68 392 L50 400" fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" />
               )}
 
-              {/* Plugged in / charging — cable from flap tip + station below + bolt offset */}
+              {/* Plugged in / charging — cable from car body port, station below, bolt offset */}
               {(vehicle.pluggedIn === true || isCharging) && (
                 <g>
-                  {/* Cable — neon green, starts from the open flap tip, curves down past tire */}
-                  <path d="M50 396 Q38 410 30 430 Q24 445 22 455" fill="none" stroke="#39ff14" strokeWidth="3" strokeLinecap="round" />
+                  {/* Cable — neon green, from the body charge port down to the station */}
+                  <path d="M68 392 Q50 415 35 440 Q28 452 22 458" fill="none" stroke="#39ff14" strokeWidth="3" strokeLinecap="round" />
                   {/* Charging station (borne) — blue, well below tire */}
-                  <rect x="13" y="455" width="18" height="12" rx="3" fill="#3b82f6" />
-                  <rect x="18" y="450" width="8" height="5" rx="1.5" fill="#3b82f6" />
-                  {/* Lightning bolt — electric yellow, offset to the right of the cable */}
-                  <g transform="translate(46, 430)">
+                  <rect x="13" y="458" width="18" height="12" rx="3" fill="#3b82f6" />
+                  <rect x="18" y="453" width="8" height="5" rx="1.5" fill="#3b82f6" />
+                  {/* Lightning bolt — electric yellow, offset right of the cable */}
+                  <g transform="translate(52, 432)">
                     <path d="M-2 -10 L-6 2 L-1 0 L2 10 L6 -2 L1 0Z" fill={isCharging ? '#facc15' : '#6b7280'} />
                   </g>
                 </g>
@@ -172,8 +172,8 @@ export default function VehicleTopView({ vehicle }: Props) {
               {/* Windows indicator */}
               {vehicle.windowsOpen === true && (
                 <>
-                  <line x1="56" y1="220" x2="42" y2="220" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" />
-                  <line x1="244" y1="220" x2="258" y2="220" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="60" y1="220" x2="42" y2="220" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="240" y1="220" x2="258" y2="220" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" />
                 </>
               )}
 
