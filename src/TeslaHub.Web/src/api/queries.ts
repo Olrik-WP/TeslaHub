@@ -235,6 +235,7 @@ export interface GlobalSettings {
   dashboardGaugeMode: string;
   dashboardColorPreset: string;
   dashboardMaxScale: number;
+  mapStyle: string;
 }
 
 export interface MonthlyTrend {

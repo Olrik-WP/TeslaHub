@@ -178,6 +178,7 @@ public static class CostsEndpoints
             settings.DashboardGaugeMode = update.DashboardGaugeMode;
             settings.DashboardColorPreset = update.DashboardColorPreset;
             settings.DashboardMaxScale = update.DashboardMaxScale;
+            settings.MapStyle = update.MapStyle;
 
             await db.SaveChangesAsync();
             return Results.Ok(settings);

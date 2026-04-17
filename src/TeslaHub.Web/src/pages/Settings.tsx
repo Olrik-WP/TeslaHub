@@ -6,6 +6,7 @@ import { api, logout } from '../api/client';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES } from '../i18n';
+import { MAP_STYLES } from '../hooks/useMapStyle';
 import type { GlobalSettings, ChargingLocation } from '../api/queries';
 import CustomSelect from '../components/CustomSelect';
 
@@ -286,6 +287,14 @@ export default function Settings({ carId }: Props) {
               setForm({ ...form, language: v });
             }}
             options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
+          />
+        </div>
+        <div>
+          <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.mapStyle')}</label>
+          <CustomSelect
+            value={form.mapStyle ?? 'liberty'}
+            onChange={(v) => setForm({ ...form, mapStyle: v })}
+            options={Object.entries(MAP_STYLES).map(([key, s]) => ({ value: key, label: t(s.labelKey) }))}
           />
         </div>
         <button onClick={() => save.mutate()} className="bg-[#e31937] text-white px-6 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f]">

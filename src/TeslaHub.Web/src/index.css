@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "leaflet/dist/leaflet.css";
 
 :root {
   --color-bg: #0a0a0a;
@@ -41,11 +40,6 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-.leaflet-container {
-  background: var(--color-bg) !important;
-  -webkit-user-select: none;
-}
-
-.dark-map-tiles {
-  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+.maplibregl-map {
+  font-family: inherit;
 }

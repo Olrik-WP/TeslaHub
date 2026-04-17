@@ -35,10 +35,10 @@ const primaryLinks = [
   { to: '/dashboard', labelKey: 'nav.dashboard', icon: 'dashboard' },
   { to: '/charging', labelKey: 'nav.charging', icon: 'charging' },
   { to: '/trips', labelKey: 'nav.trips', icon: 'trips' },
+  { to: '/costs', labelKey: 'nav.costs', icon: 'costs' },
 ];
 
 const drawerLinks = [
-  { to: '/costs', labelKey: 'nav.costs', icon: 'costs' },
   { to: '/map', labelKey: 'nav.map', icon: 'map' },
   { to: '/charging-stats', labelKey: 'nav.dcCurve', icon: 'dcCurve' },
   { to: '/battery', labelKey: 'nav.battery', icon: 'battery' },

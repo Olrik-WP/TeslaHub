@@ -19,11 +19,10 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.95.2",
-    "@types/leaflet": "^1.9.21",
     "i18next": "^25.10.10",
-    "leaflet": "^1.9.4",
+    "maplibre-gl": "^5.23.0",
     "react-i18next": "^16.6.6",
-    "react-leaflet": "^5.0.0",
+    "react-map-gl": "^8.1.1",
     "react-router-dom": "^7.13.2",
     "recharts": "^3.8.0"
   }

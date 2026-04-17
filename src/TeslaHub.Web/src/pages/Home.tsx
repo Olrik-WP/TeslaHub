@@ -1,11 +1,13 @@
 import { useRef, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { MapContainer, TileLayer, CircleMarker, useMap } from 'react-leaflet';
+import { Map, Marker } from 'react-map-gl/maplibre';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { useVehicleStatus } from '../hooks/useVehicle';
 import { useChargingSessions } from '../hooks/useCharging';
 import { useDrives } from '../hooks/useDrives';
 import { useUnits } from '../hooks/useUnits';
+import { useMapStyle } from '../hooks/useMapStyle';
 import BatteryGauge from '../components/BatteryGauge';
 import StatCard from '../components/StatCard';
 import VehicleTopView from '../components/VehicleTopView';
@@ -67,13 +69,14 @@ function useStickyVehicle(vehicle: VehicleStatus | undefined) {
   return result;
 }
 
-function RecenterMap({ lat, lng }: { lat: number; lng: number }) {
-  const map = useMap();
-  useEffect(() => {
-    map.setView([lat, lng]);
-  }, [map, lat, lng]);
-  return null;
-}
+const DOT_STYLE: React.CSSProperties = {
+  width: 16,
+  height: 16,
+  borderRadius: '50%',
+  background: '#e31937',
+  border: '3px solid #fff',
+  boxShadow: '0 0 6px rgba(0,0,0,.4)',
+};
 
 export default function Home({ carId }: Props) {
   const navigate = useNavigate();
@@ -100,6 +103,7 @@ export default function Home({ carId }: Props) {
     staleTime: 5 * 60_000,
   });
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings, staleTime: 5 * 60_000 });
+  const mapStyle = useMapStyle();
   const costSource = settings?.costSource ?? 'teslahub';
   const { data: overrides } = useQuery({
     queryKey: ['costOverrides', carId],
@@ -583,32 +587,19 @@ export default function Home({ carId }: Props) {
               <span className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.position')}</span>
             </div>
             <div className="h-[160px] sm:h-[220px]">
-              <MapContainer
-                center={[vehicle.latitude, vehicle.longitude]}
+              <Map
+                longitude={vehicle.longitude}
+                latitude={vehicle.latitude}
                 zoom={15}
-                className="w-full h-full pointer-events-none"
-                zoomControl={false}
+                mapStyle={mapStyle.styleUrl}
+                interactive={false}
                 attributionControl={false}
-                dragging={false}
-                scrollWheelZoom={false}
-                doubleClickZoom={false}
-                touchZoom={false}
+                style={{ width: '100%', height: '100%' }}
               >
-                <TileLayer
-                  url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  maxZoom={19}
-                  className="dark-map-tiles"
-                />
-                <RecenterMap lat={vehicle.latitude} lng={vehicle.longitude} />
-                <CircleMarker
-                  center={[vehicle.latitude, vehicle.longitude]}
-                  radius={8}
-                  fillColor="#e31937"
-                  fillOpacity={1}
-                  color="#ffffff"
-                  weight={3}
-                />
-              </MapContainer>
+                <Marker longitude={vehicle.longitude} latitude={vehicle.latitude} anchor="center">
+                  <div style={DOT_STYLE} />
+                </Marker>
+              </Map>
             </div>
             <div className="px-3 py-2">
               {address && (

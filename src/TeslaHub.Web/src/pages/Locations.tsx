@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
+import { Map, Source, Layer, Popup } from 'react-map-gl/maplibre';
 import { useTranslation } from 'react-i18next';
-import { getLocationStats, getVisitedLocations, getTopCities, getSettings } from '../api/queries';
+import { getLocationStats, getVisitedLocations, getTopCities } from '../api/queries';
+import { useMapStyle } from '../hooks/useMapStyle';
 import StatCard from '../components/StatCard';
 import { utcDate } from '../utils/date';
+import 'maplibre-gl/dist/maplibre-gl.css';
 
 interface Props {
   carId: number | undefined;
@@ -16,9 +18,13 @@ export default function Locations({ carId }: Props) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('map');
   const [search, setSearch] = useState('');
+  const { styleUrl } = useMapStyle();
 
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings });
-  const mapTile = settings?.mapTileUrl ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  const [popupInfo, setPopupInfo] = useState<{
+    longitude: number; latitude: number;
+    address: string; city?: string | null;
+    visitCount: number; lastVisited: string;
+  } | null>(null);
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['locationStats', carId],
@@ -59,11 +65,32 @@ export default function Locations({ carId }: Props) {
   const mappable = filtered.filter((l) => l.latitude != null && l.longitude != null);
   const maxVisits = Math.max(...(mappable.map((l) => l.visitCount) || [1]), 1);
 
+  const geojson = useMemo(() => ({
+    type: 'FeatureCollection' as const,
+    features: mappable.map((loc) => ({
+      type: 'Feature' as const,
+      properties: {
+        address: loc.address,
+        city: loc.city ?? '',
+        visitCount: loc.visitCount,
+        lastVisited: loc.lastVisited,
+        radius: 4 + (loc.visitCount / maxVisits) * 12,
+      },
+      geometry: {
+        type: 'Point' as const,
+        coordinates: [loc.longitude!, loc.latitude!],
+      },
+    })),
+  }), [mappable, maxVisits]);
+
+  const center = mappable.length > 0
+    ? { longitude: mappable[0].longitude!, latitude: mappable[0].latitude! }
+    : { longitude: 2.3522, latitude: 48.8566 };
+
   return (
     <div className="p-4 space-y-4">
       <h1 className="text-lg sm:text-xl font-bold text-white">{t('locationsPage.title')}</h1>
 
-      {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard label={t('locationsPage.addresses')} value={stats.addressCount} color="#3b82f6" />
@@ -73,7 +100,6 @@ export default function Locations({ carId }: Props) {
         </div>
       )}
 
-      {/* Top cities bar */}
       {topCities && topCities.length > 0 && (
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
           <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-3">{t('locationsPage.topCities')}</div>
@@ -97,7 +123,6 @@ export default function Locations({ carId }: Props) {
         </div>
       )}
 
-      {/* Tabs + search */}
       <div className="flex items-center gap-2 flex-wrap">
         {(['map', 'list'] as const).map((t2) => (
           <button
@@ -118,45 +143,63 @@ export default function Locations({ carId }: Props) {
         />
       </div>
 
-      {/* Map */}
       {tab === 'map' && mappable.length > 0 && (
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl overflow-hidden" style={{ height: 450 }}>
-          <MapContainer
-            center={[mappable[0].latitude!, mappable[0].longitude!]}
-            zoom={6}
-            className="w-full h-full"
-            zoomControl={true}
+          <Map
+            initialViewState={{ ...center, zoom: 6 }}
+            mapStyle={styleUrl}
             attributionControl={false}
+            style={{ width: '100%', height: '100%' }}
+            interactiveLayerIds={['location-circles']}
+            onClick={(e) => {
+              const feat = e.features?.[0];
+              if (feat && feat.geometry.type === 'Point') {
+                const [lng, lat] = feat.geometry.coordinates;
+                setPopupInfo({
+                  longitude: lng, latitude: lat,
+                  address: feat.properties?.address ?? '',
+                  city: feat.properties?.city || null,
+                  visitCount: feat.properties?.visitCount ?? 0,
+                  lastVisited: feat.properties?.lastVisited ?? '',
+                });
+              }
+            }}
           >
-            <TileLayer url={mapTile} maxZoom={19} className="dark-map-tiles" />
-            {mappable.map((loc, i) => {
-              const radius = 4 + (loc.visitCount / maxVisits) * 12;
-              return (
-                <CircleMarker
-                  key={i}
-                  center={[loc.latitude!, loc.longitude!]}
-                  radius={radius}
-                  fillColor="#e31937"
-                  fillOpacity={0.7}
-                  color="#fff"
-                  weight={1}
-                >
-                  <Popup>
-                    <div className="text-xs">
-                      <div className="font-bold">{loc.address}</div>
-                      {loc.city && <div>{loc.city}</div>}
-                      <div>{loc.visitCount} {t('locationsPage.visits')}</div>
-                      <div className="text-gray-500">{utcDate(loc.lastVisited).toLocaleDateString()}</div>
-                    </div>
-                  </Popup>
-                </CircleMarker>
-              );
-            })}
-          </MapContainer>
+            <Source id="locations" type="geojson" data={geojson}>
+              <Layer
+                id="location-circles"
+                type="circle"
+                paint={{
+                  'circle-radius': ['get', 'radius'],
+                  'circle-color': '#e31937',
+                  'circle-opacity': 0.7,
+                  'circle-stroke-color': '#fff',
+                  'circle-stroke-width': 1,
+                }}
+              />
+            </Source>
+
+            {popupInfo && (
+              <Popup
+                longitude={popupInfo.longitude}
+                latitude={popupInfo.latitude}
+                anchor="bottom"
+                onClose={() => setPopupInfo(null)}
+                closeOnClick={false}
+                className="text-black"
+              >
+                <div className="text-xs">
+                  <div className="font-bold">{popupInfo.address}</div>
+                  {popupInfo.city && <div>{popupInfo.city}</div>}
+                  <div>{popupInfo.visitCount} {t('locationsPage.visits')}</div>
+                  <div className="text-gray-500">{utcDate(popupInfo.lastVisited).toLocaleDateString()}</div>
+                </div>
+              </Popup>
+            )}
+          </Map>
         </div>
       )}
 
-      {/* List */}
       {tab === 'list' && (
         <div className="space-y-2">
           {filtered.length === 0 && (
