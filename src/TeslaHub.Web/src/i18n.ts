@@ -2,14 +2,16 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import en from './locales/en.json';
 import fr from './locales/fr.json';
+import de from './locales/de.json';
 
 export const LANGUAGES = [
   { code: 'en', label: 'English' },
   { code: 'fr', label: 'Français' },
+  { code: 'de', label: 'Deutsch' },
 ] as const;
 
 i18n.use(initReactI18next).init({
-  resources: { en: { translation: en }, fr: { translation: fr } },
+  resources: { en: { translation: en }, fr: { translation: fr }, de: { translation: de } },
   lng: localStorage.getItem('teslahub_lang') ?? 'en',
   fallbackLng: 'en',
   interpolation: { escapeValue: false },
