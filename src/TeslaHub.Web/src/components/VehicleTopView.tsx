@@ -76,9 +76,9 @@ export default function VehicleTopView({ vehicle }: Props) {
               <path d="M88 58 C100 48 125 42 150 42 C175 42 200 48 212 58" fill="none" stroke="#555" strokeWidth="2.5" strokeLinecap="round" />
               {/* Taillight bar */}
               <path d="M95 414 C115 422 135 426 150 426 C165 426 185 422 205 414" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" opacity="0.6" />
-              {/* Side mirrors */}
-              <ellipse cx="54" cy="118" rx="7" ry="4" fill="#252525" stroke="#3a3a3a" strokeWidth="1" />
-              <ellipse cx="246" cy="118" rx="7" ry="4" fill="#252525" stroke="#3a3a3a" strokeWidth="1" />
+              {/* Side mirrors — at door level, flush against body */}
+              <ellipse cx="63" cy="132" rx="7" ry="4" fill="#252525" stroke="#3a3a3a" strokeWidth="1" />
+              <ellipse cx="237" cy="132" rx="7" ry="4" fill="#252525" stroke="#3a3a3a" strokeWidth="1" />
               {/* Glass roof — windshield + roof + rear window as one piece */}
               <path
                 d="M108 80 L192 80 L206 128 L210 160 L210 320 L206 355 L192 385 L108 385 L94 355 L90 320 L90 160 L94 128Z"
@@ -147,13 +147,13 @@ export default function VehicleTopView({ vehicle }: Props) {
               {/* Plugged in / charging — cable from body, to the right of the flap */}
               {(vehicle.pluggedIn === true || isCharging) && (
                 <g>
-                  {/* Cable — neon green, from body (right of flap), curves down to station */}
-                  <path d="M83 396 Q65 420 45 445 Q35 455 28 460" fill="none" stroke="#39ff14" strokeWidth="3" strokeLinecap="round" />
+                  {/* Cable — neon green, smooth cubic bezier from body to station */}
+                  <path d="M83 396 C72 418 42 448 28 462" fill="none" stroke="#39ff14" strokeWidth="3" strokeLinecap="round" />
                   {/* Charging station (borne) — blue, well below tire */}
-                  <rect x="19" y="460" width="18" height="12" rx="3" fill="#3b82f6" />
-                  <rect x="24" y="455" width="8" height="5" rx="1.5" fill="#3b82f6" />
-                  {/* Lightning bolt — electric yellow, offset right of the cable */}
-                  <g transform="translate(58, 435)">
+                  <rect x="19" y="462" width="18" height="12" rx="3" fill="#3b82f6" />
+                  <rect x="24" y="457" width="8" height="5" rx="1.5" fill="#3b82f6" />
+                  {/* Lightning bolt — electric yellow, well to the right of the cable */}
+                  <g transform="translate(72, 432)">
                     <path d="M-2 -10 L-6 2 L-1 0 L2 10 L6 -2 L1 0Z" fill={isCharging ? '#facc15' : '#6b7280'} />
                   </g>
                 </g>
