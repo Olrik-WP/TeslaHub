@@ -41,7 +41,7 @@ export default function Login() {
         onSubmit={handleSubmit}
         className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-8 w-full max-w-sm"
       >
-        <h1 className="text-2xl font-bold text-center mb-2">TeslaHub</h1>
+        <h1 className="text-2xl font-bold text-center mb-2">{t('auth.title')}</h1>
         <p className="text-[#9ca3af] text-center text-sm mb-8">
           {t('auth.subtitle')}
         </p>

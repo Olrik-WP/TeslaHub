@@ -47,23 +47,28 @@ export default function Locations({ carId }: Props) {
     staleTime: 5 * 60_000,
   });
 
-  if (statsLoading || locsLoading) {
-    return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>;
-  }
+  const filtered = useMemo(() => {
+    return locations?.filter((l) => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return (
+        l.address.toLowerCase().includes(q) ||
+        l.city?.toLowerCase().includes(q) ||
+        l.state?.toLowerCase().includes(q) ||
+        l.country?.toLowerCase().includes(q)
+      );
+    }) ?? [];
+  }, [locations, search]);
 
-  const filtered = locations?.filter((l) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      l.address.toLowerCase().includes(q) ||
-      l.city?.toLowerCase().includes(q) ||
-      l.state?.toLowerCase().includes(q) ||
-      l.country?.toLowerCase().includes(q)
-    );
-  }) ?? [];
+  const mappable = useMemo(
+    () => filtered.filter((l) => l.latitude != null && l.longitude != null),
+    [filtered]
+  );
 
-  const mappable = filtered.filter((l) => l.latitude != null && l.longitude != null);
-  const maxVisits = Math.max(...(mappable.map((l) => l.visitCount) || [1]), 1);
+  const maxVisits = useMemo(
+    () => mappable.reduce((m, l) => Math.max(m, l.visitCount), 1),
+    [mappable]
+  );
 
   const geojson = useMemo(() => ({
     type: 'FeatureCollection' as const,
@@ -86,6 +91,10 @@ export default function Locations({ carId }: Props) {
   const center = mappable.length > 0
     ? { longitude: mappable[0].longitude!, latitude: mappable[0].latitude! }
     : { longitude: 2.3522, latitude: 48.8566 };
+
+  if (statsLoading || locsLoading) {
+    return <div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>;
+  }
 
   return (
     <div className="p-4 space-y-4">

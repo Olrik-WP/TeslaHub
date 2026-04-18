@@ -8,7 +8,7 @@ public static class ChargingQueries
     public static async Task<IEnumerable<ChargingSessionDto>> GetChargingSessionsAsync(this TeslaMateConnectionFactory db, int carId, int limit = 20, int offset = 0, string? chargeType = null, int? days = null)
     {
         using var conn = db.CreateConnection();
-        return await conn.QueryAsync<ChargingSessionDto>("""
+        return await conn.QueryAsync<ChargingSessionDto>($"""
             WITH data AS (
                 SELECT
                     cp.id,
@@ -24,7 +24,7 @@ public static class ChargingQueries
                     cp.start_rated_range_km,
                     cp.end_rated_range_km,
                     cp.cost,
-                    COALESCE(g.name, CONCAT_WS(', ', COALESCE(a.name, NULLIF(CONCAT_WS(' ', a.road, a.house_number), '')), a.city)) AS address,
+                    {TeslaMateSql.AddressExpression} AS address,
                     a.latitude,
                     a.longitude,
                     cp.geofence_id,
@@ -204,9 +204,9 @@ public static class ChargingQueries
               AND (@End IS NULL OR start_date < @End)
             """, new { CarId = carId, Start = start, End = end });
 
-        var locationRows = await conn.QueryAsync<(string Name, decimal Cost)>("""
+        var locationRows = await conn.QueryAsync<(string Name, decimal Cost)>($"""
             SELECT
-                COALESCE(g.name, CONCAT_WS(', ', COALESCE(a.name, NULLIF(CONCAT_WS(' ', a.road, a.house_number), '')), a.city), 'Other') AS "Name",
+                {TeslaMateSql.AddressExpressionOrOther} AS "Name",
                 SUM(cp.cost) AS "Cost"
             FROM charging_processes cp
             LEFT JOIN geofences g ON cp.geofence_id = g.id
@@ -216,7 +216,7 @@ public static class ChargingQueries
               AND cp.cost > 0
               AND (@Start IS NULL OR cp.start_date >= @Start)
               AND (@End IS NULL OR cp.start_date < @End)
-            GROUP BY COALESCE(g.name, CONCAT_WS(', ', COALESCE(a.name, NULLIF(CONCAT_WS(' ', a.road, a.house_number), '')), a.city), 'Other')
+            GROUP BY {TeslaMateSql.AddressExpressionOrOther}
             ORDER BY "Cost" DESC
             """, new { CarId = carId, Start = start, End = end });
 
@@ -256,12 +256,12 @@ public static class ChargingQueries
         this TeslaMateConnectionFactory db, int carId)
     {
         using var conn = db.CreateConnection();
-        return await conn.QueryAsync<ChargingCurvePointDto>("""
+        return await conn.QueryAsync<ChargingCurvePointDto>($"""
             SELECT
                 c.battery_level AS "SoC",
                 ROUND(AVG(c.charger_power)::numeric, 0) AS "Power",
                 c.charging_process_id AS "ChargingProcessId",
-                COALESCE(g.name, CONCAT_WS(', ', COALESCE(a.name, NULLIF(CONCAT_WS(' ', a.road, a.house_number), '')), a.city))
+                {TeslaMateSql.AddressExpression}
                     || ' ' || TO_CHAR(c.date, 'YYYY-MM-DD') AS "Label"
             FROM charges c
             JOIN charging_processes p ON p.id = c.charging_process_id

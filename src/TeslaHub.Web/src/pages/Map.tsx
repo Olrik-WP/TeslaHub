@@ -4,6 +4,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { getRecentPositions, getPositionsInRange, getChargingSessions, getDrivePositions } from '../api/queries';
 import LeafletMap from '../components/LeafletMap';
+import { STALE_TIME } from '../constants/theme';
 
 interface Props {
   carId: number | undefined;
@@ -71,7 +72,7 @@ export default function MapPage({ carId }: Props) {
       return getRecentPositions(carId, selectedRange.hours!);
     },
     enabled: !!carId && driveId == null && !positionMode,
-    staleTime: 30_000,
+    staleTime: STALE_TIME.live,
     placeholderData: keepPreviousData,
   });
 

@@ -1,5 +1,6 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { getCars, getVehicleStatus } from '../api/queries';
+import { STALE_TIME } from '../constants/theme';
 import { usePageVisible } from './usePageVisible';
 
 export function useCars() {
@@ -18,7 +19,7 @@ export function useVehicleStatus(carId: number | undefined) {
     queryFn: () => getVehicleStatus(carId!),
     enabled: !!carId,
     refetchInterval: visible ? 60_000 : false,
-    staleTime: 30_000,
+    staleTime: STALE_TIME.live,
     placeholderData: keepPreviousData,
     refetchOnReconnect: 'always',
     refetchOnWindowFocus: 'always',

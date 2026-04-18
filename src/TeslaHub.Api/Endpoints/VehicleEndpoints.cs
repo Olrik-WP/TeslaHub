@@ -3,17 +3,12 @@ using System.Text.Json;
 using TeslaHub.Api.Models;
 using TeslaHub.Api.Services;
 using TeslaHub.Api.TeslaMate;
+using TeslaHub.Api.Utilities;
 
 namespace TeslaHub.Api.Endpoints;
 
 public static class VehicleEndpoints
 {
-    private static readonly JsonSerializerOptions _jsonOpts = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
-
     public static void MapVehicleEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/vehicle").RequireAuthorization();
@@ -174,7 +169,7 @@ public static class VehicleEndpoints
             data.LastUpdated,
         };
 
-        var json = JsonSerializer.Serialize(payload, _jsonOpts);
+        var json = JsonSerializer.Serialize(payload, JsonOptions.Live);
         var bytes = Encoding.UTF8.GetBytes($"data: {json}\n\n");
         await ctx.Response.Body.WriteAsync(bytes);
         await ctx.Response.Body.FlushAsync();

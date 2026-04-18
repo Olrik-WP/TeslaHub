@@ -117,7 +117,7 @@ public static class CostsEndpoints
             DateTime? from, DateTime? to,
             CostService costService, TeslaMateConnectionFactory tm) =>
         {
-            var p = period ?? "month";
+            var p = period ?? CostPeriods.Month;
             var y = year ?? DateTime.UtcNow.Year;
             var m = month ?? DateTime.UtcNow.Month;
             var (start, end, _) = CostService.ComputeDateRange(p, y, m, from, to);
@@ -132,12 +132,12 @@ public static class CostsEndpoints
             DateTime? from, DateTime? to,
             TeslaMateConnectionFactory tm, CacheService cache) =>
         {
-            var p = period ?? "month";
+            var p = period ?? CostPeriods.Month;
             var y = year ?? DateTime.UtcNow.Year;
             var m = month ?? DateTime.UtcNow.Month;
             var (start, end, label) = CostService.ComputeDateRange(p, y, m, from, to);
             var dist = await tm.GetTotalDistanceAsync(carId, start, end);
-            var cacheKey = p == "custom"
+            var cacheKey = p == CostPeriods.Custom
                 ? $"tmCostSummary:{carId}:{p}:{from:yyyyMMdd}:{to:yyyyMMdd}"
                 : $"tmCostSummary:{carId}:{p}:{y}:{m}";
             var summary = await cache.GetOrSetHistoricalAsync(

@@ -284,15 +284,19 @@ export const getChargingLocations = (carId?: number) =>
   api<ChargingLocation[]>(`/costs/locations${carId ? `?carId=${carId}` : ''}`);
 export const getCostOverrides = (carId: number) =>
   api<CostOverride[]>(`/costs/overrides/${carId}`);
-export const getCostSummary = (carId: number, period?: string, year?: number, month?: number, from?: string, to?: string) => {
+
+function buildCostSummaryParams(period?: string, year?: number, month?: number, from?: string, to?: string) {
   const params = new URLSearchParams();
   if (period) params.set('period', period);
   if (year) params.set('year', String(year));
   if (month) params.set('month', String(month));
   if (from) params.set('from', from);
   if (to) params.set('to', to);
-  return api<CostSummary>(`/costs/summary/${carId}?${params}`);
-};
+  return params;
+}
+
+export const getCostSummary = (carId: number, period?: string, year?: number, month?: number, from?: string, to?: string) =>
+  api<CostSummary>(`/costs/summary/${carId}?${buildCostSummaryParams(period, year, month, from, to)}`);
 export const getSuggestedPrice = (lat: number, lng: number, carId: number) =>
   api<{ suggestedPrice: number | null }>(`/costs/suggest-price?lat=${lat}&lng=${lng}&carId=${carId}`);
 export const getMatchingLocation = (lat: number, lng: number, carId?: number) =>
@@ -354,15 +358,8 @@ export interface CarImageInfo {
 export const getCarImageInfo = (carId: number) => api<CarImageInfo>(`/vehicle/${carId}/image/info`);
 
 // ─── TeslaMate cost analytics ────────────────────────────────────
-export const getTeslaMateCostSummary = (carId: number, period?: string, year?: number, month?: number, from?: string, to?: string) => {
-  const params = new URLSearchParams();
-  if (period) params.set('period', period);
-  if (year) params.set('year', String(year));
-  if (month) params.set('month', String(month));
-  if (from) params.set('from', from);
-  if (to) params.set('to', to);
-  return api<CostSummary>(`/costs/teslamate-summary/${carId}?${params}`);
-};
+export const getTeslaMateCostSummary = (carId: number, period?: string, year?: number, month?: number, from?: string, to?: string) =>
+  api<CostSummary>(`/costs/teslamate-summary/${carId}?${buildCostSummaryParams(period, year, month, from, to)}`);
 export const getTeslaMateMonthlyTrend = (carId: number) =>
   api<MonthlyTrend[]>(`/costs/teslamate-trend/${carId}`);
 

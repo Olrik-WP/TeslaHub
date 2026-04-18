@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TeslaHub.Api.Data;
 using TeslaHub.Api.Models;
 using TeslaHub.Api.TeslaMate;
+using TeslaHub.Api.Utilities;
 
 namespace TeslaHub.Api.Services;
 
@@ -27,7 +28,7 @@ public class CostService
 
         foreach (var loc in locations)
         {
-            var distance = HaversineMeters(lat.Value, lng.Value, loc.Latitude, loc.Longitude);
+            var distance = GeoDistance.HaversineMeters(lat.Value, lng.Value, loc.Latitude, loc.Longitude);
             if (distance <= loc.RadiusMeters)
                 return loc;
         }
@@ -39,10 +40,10 @@ public class CostService
     {
         return location.PricingType switch
         {
-            "home" => IsOffPeak(location, sessionStart)
+            PricingTypes.Home => IsOffPeak(location, sessionStart)
                 ? location.OffPeakPricePerKwh ?? location.PeakPricePerKwh
                 : location.PeakPricePerKwh,
-            "subscription" => null,
+            PricingTypes.Subscription => null,
             _ => null
         };
     }
@@ -123,8 +124,8 @@ public class CostService
 
         var sessionCost = overrides.Sum(c => c.TotalCost);
         var totalKwh = overrides
-            .Where(c => c.PricePerKwh > 0 && !c.IsFree)
-            .Sum(c => c.PricePerKwh > 0 ? c.TotalCost / c.PricePerKwh.Value : 0);
+            .Where(c => !c.IsFree && c.PricePerKwh is > 0)
+            .Sum(c => c.TotalCost / c.PricePerKwh!.Value);
         var sessionCount = overrides.Count;
         var freeCount = overrides.Count(c => c.IsFree || c.TotalCost == 0);
 
@@ -164,7 +165,7 @@ public class CostService
     {
         var subLocations = await _db.ChargingLocations
             .Where(l => (l.CarId == null || l.CarId == carId)
-                && l.PricingType == "subscription" && l.MonthlySubscription != null)
+                && l.PricingType == PricingTypes.Subscription && l.MonthlySubscription != null)
             .ToListAsync();
 
         if (subLocations.Count == 0)
@@ -201,7 +202,7 @@ public class CostService
     {
         var subLocations = await _db.ChargingLocations
             .Where(l => (l.CarId == null || l.CarId == carId)
-                && l.PricingType == "subscription" && l.MonthlySubscription != null)
+                && l.PricingType == PricingTypes.Subscription && l.MonthlySubscription != null)
             .ToListAsync();
 
         var results = new List<(string Name, decimal Cost)>();
@@ -228,17 +229,17 @@ public class CostService
         var today = DateTime.UtcNow.Date;
         return period switch
         {
-            "day" => (today, today.AddDays(1), today.ToString("yyyy-MM-dd")),
-            "week" => (today.AddDays(-6), today.AddDays(1), "Last 7 days"),
-            "year" => (
+            CostPeriods.Day => (today, today.AddDays(1), today.ToString("yyyy-MM-dd")),
+            CostPeriods.Week => (today.AddDays(-6), today.AddDays(1), "Last 7 days"),
+            CostPeriods.Year => (
                 new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 new DateTime(year + 1, 1, 1, 0, 0, 0, DateTimeKind.Utc),
                 $"{year}"),
-            "custom" when customFrom.HasValue && customTo.HasValue => (
+            CostPeriods.Custom when customFrom.HasValue && customTo.HasValue => (
                 customFrom.Value.Date,
                 customTo.Value.Date.AddDays(1),
                 $"{customFrom.Value:yyyy-MM-dd} → {customTo.Value:yyyy-MM-dd}"),
-            "all" => (null, null, "All time"),
+            CostPeriods.All => (null, null, "All time"),
             _ => (
                 new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc),
                 new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1),
@@ -273,11 +274,11 @@ public class CostService
             })
             .ToDictionary(g => g.Key, g => g.Sum(c => c.TotalCost));
 
-        if (periodType is "month" or "year")
+        if (periodType is CostPeriods.Month or CostPeriods.Year)
         {
             var subLocations = await _db.ChargingLocations
                 .Where(l => (l.CarId == null || l.CarId == carId)
-                    && l.PricingType == "subscription" && l.MonthlySubscription != null)
+                    && l.PricingType == PricingTypes.Subscription && l.MonthlySubscription != null)
                 .ToListAsync();
 
             foreach (var loc in subLocations)
@@ -295,7 +296,7 @@ public class CostService
 
                 foreach (var month in sessionMonths)
                 {
-                    var key = periodType == "year"
+                    var key = periodType == CostPeriods.Year
                         ? month.ToString("yyyy")
                         : month.ToString("yyyy-MM");
 
@@ -312,9 +313,9 @@ public class CostService
     {
         return periodType switch
         {
-            "year" => date.ToString("yyyy"),
-            "day" => date.ToString("yyyy-MM-dd"),
-            "week" => $"W{System.Globalization.ISOWeek.GetWeekOfYear(date):D2} {System.Globalization.ISOWeek.GetYear(date)}",
+            CostPeriods.Year => date.ToString("yyyy"),
+            CostPeriods.Day => date.ToString("yyyy-MM-dd"),
+            CostPeriods.Week => $"W{System.Globalization.ISOWeek.GetWeekOfYear(date):D2} {System.Globalization.ISOWeek.GetYear(date)}",
             _ => date.ToString("yyyy-MM")
         };
     }
@@ -348,13 +349,13 @@ public class CostService
     {
         var locations = await _db.ChargingLocations
             .Where(l => l.CarId == null || l.CarId == carId)
-            .Where(l => l.PricingType == "home" || l.PricingType == "subscription")
+            .Where(l => l.PricingType == PricingTypes.Home || l.PricingType == PricingTypes.Subscription)
             .ToListAsync();
 
         var total = 0;
         foreach (var location in locations)
         {
-            var onlyNew = location.PricingType != "subscription";
+            var onlyNew = location.PricingType != PricingTypes.Subscription;
             total += await ApplyLocationPricingAsync(location, onlyNewSessions: onlyNew, scopeCarId: carId);
         }
 
@@ -399,7 +400,7 @@ public class CostService
                 decimal? pricePerKwh;
                 decimal totalCost;
 
-                if (location.PricingType == "subscription")
+                if (location.PricingType == PricingTypes.Subscription)
                 {
                     totalCost = 0;
                     pricePerKwh = 0;
@@ -455,17 +456,4 @@ public class CostService
 
         return time >= location.OffPeakStart || time < location.OffPeakEnd;
     }
-
-    private static double HaversineMeters(double lat1, double lon1, double lat2, double lon2)
-    {
-        const double R = 6371000;
-        var dLat = ToRad(lat2 - lat1);
-        var dLon = ToRad(lon2 - lon1);
-        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                Math.Cos(ToRad(lat1)) * Math.Cos(ToRad(lat2)) *
-                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-    }
-
-    private static double ToRad(double deg) => deg * Math.PI / 180.0;
 }

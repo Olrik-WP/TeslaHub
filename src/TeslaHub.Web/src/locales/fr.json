@@ -119,7 +119,12 @@
     "saveLocation": "Enregistrer le lieu",
     "savingLocation": "Enregistrement...",
     "cancel": "Annuler",
-    "kmSinceLastCharge": "Km depuis dernière charge"
+    "kmSinceLastCharge": "Km depuis dernière charge",
+    "expand": "Développer",
+    "collapse": "Réduire",
+    "previewTotal": "{{total}} {{currency}} — soit {{perKwh}} {{currency}}/kWh",
+    "previewPerKwh": "Total : {{total}} {{currency}} pour {{kwh}} kWh",
+    "unknown": "Inconnu"
   },
   "chargingStats": {
     "dcChargingCurve": "Courbe de charge DC",
@@ -257,7 +262,9 @@
     "aboutSub": "Auto-hébergé, respect de la vie privée",
     "poweredBy": "Propulsé par TeslaMate — lecture seule, aucune donnée modifiée",
     "radiusLine": "Rayon : {{meters}} m",
-    "newVersionAvailable": "v{{version}} disponible !"
+    "newVersionAvailable": "v{{version}} disponible !",
+    "license": "AGPLv3 — © 2026 TeslaHub",
+    "sourceCode": "Code source"
   },
   "battery": {
     "charging": "Charge"
@@ -457,7 +464,10 @@
     "yes": "Oui",
     "no": "Non",
     "mqttDisconnected": "MQTT non connecté — données carrosserie/sécurité indisponibles",
-    "mqttHint": "Activez MQTT pour voir portes, coffre, verrouillage, Sentinelle et plus — voir docs"
+    "mqttHint": "Activez MQTT pour voir portes, coffre, verrouillage, Sentinelle et plus — voir docs",
+    "mqttLive": "MQTT en direct",
+    "dismiss": "Masquer",
+    "tireOk": "OK"
   },
   "dashboard": {
     "title": "Tableau de bord",

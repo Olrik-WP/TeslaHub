@@ -146,7 +146,7 @@ export default function Home({ carId }: Props) {
     return gasEquiv - monthlyCost.totalCost;
   })();
   const u = useUnits();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [imgError, setImgError] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
   const [showCostInfo, setShowCostInfo] = useState(false);
@@ -199,12 +199,13 @@ export default function Home({ carId }: Props) {
 
   const lat = vehicle?.latitude;
   const lng = vehicle?.longitude;
+  const lang = i18n.language;
   useEffect(() => {
     if (lat == null || lng == null) return;
     const controller = new AbortController();
     fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18`,
-      { signal: controller.signal, headers: { 'Accept-Language': 'fr' } }
+      { signal: controller.signal, headers: { 'Accept-Language': lang } }
     )
       .then(r => r.json())
       .then(d => {
@@ -214,7 +215,7 @@ export default function Home({ carId }: Props) {
       })
       .catch(() => {});
     return () => controller.abort();
-  }, [lat, lng]);
+  }, [lat, lng, lang]);
 
   if (!vehicle) {
     return (

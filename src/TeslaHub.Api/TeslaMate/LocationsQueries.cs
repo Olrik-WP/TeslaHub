@@ -28,7 +28,7 @@ public static class LocationsQueries
     public static async Task<IEnumerable<VisitedLocationDto>> GetVisitedLocationsAsync(this TeslaMateConnectionFactory db, int carId, int limit = 200)
     {
         using var conn = db.CreateConnection();
-        return await conn.QueryAsync<VisitedLocationDto>("""
+        return await conn.QueryAsync<VisitedLocationDto>($"""
             WITH locations AS (
                 SELECT address_id, geofence_id, start_date AS visit_date
                 FROM charging_processes WHERE car_id = @CarId
@@ -37,7 +37,7 @@ public static class LocationsQueries
                 FROM drives WHERE car_id = @CarId
             )
             SELECT
-                COALESCE(g.name, CONCAT_WS(', ', COALESCE(a.name, NULLIF(CONCAT_WS(' ', a.road, a.house_number), '')), a.city)) AS "Address",
+                {TeslaMateSql.AddressExpression} AS "Address",
                 COALESCE(a.city, a.neighbourhood) AS "City",
                 a.state AS "State",
                 a.country AS "Country",

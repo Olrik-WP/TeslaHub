@@ -1,3 +1,4 @@
+using TeslaHub.Api.Models;
 using TeslaHub.Api.Services;
 using TeslaHub.Api.TeslaMate;
 
@@ -11,7 +12,7 @@ public static class StatisticsEndpoints
 
         group.MapGet("/{carId:int}", async (int carId, string? period, TeslaMateConnectionFactory tm, CacheService cache, CostService costService) =>
         {
-            var p = period ?? "month";
+            var p = period ?? CostPeriods.Month;
             var stats = await cache.GetOrSetHistoricalAsync(
                 $"periodicStats:{carId}:{p}",
                 () => tm.GetPeriodicStatsAsync(carId, p));

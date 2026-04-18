@@ -56,7 +56,7 @@ export default function VehicleTopView({ vehicle }: Props) {
         <div className="text-[10px] text-[#6b7280] mb-2 flex items-center gap-1">
           <span className="w-1.5 h-1.5 rounded-full bg-[#6b7280] inline-block" />
           <span className="flex-1">{hasBody ? t('vehicleView.mqttDisconnected') : t('vehicleView.mqttHint')}</span>
-          <button onClick={dismissHint} className="text-[#6b7280] hover:text-[#9ca3af] ml-1 px-1 leading-none" aria-label="Dismiss">✕</button>
+          <button onClick={dismissHint} className="text-[#6b7280] hover:text-[#9ca3af] ml-1 px-1 leading-none" aria-label={t('vehicleView.dismiss')}>✕</button>
         </div>
       )}
 
@@ -247,7 +247,7 @@ export default function VehicleTopView({ vehicle }: Props) {
             <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3">
               <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 {t('vehicleView.security')}
-                {vehicle.mqttConnected && <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] inline-block" title="MQTT live" />}
+                {vehicle.mqttConnected && <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] inline-block" title={t('vehicleView.mqttLive')} />}
               </div>
               <div className="flex flex-wrap gap-2">
                 <StatusPill
@@ -409,7 +409,7 @@ export default function VehicleTopView({ vehicle }: Props) {
                         label={t(tp.labelKey)}
                         active={warn}
                         color={warn ? '#ef4444' : '#22c55e'}
-                        text={warn ? t('vehicleView.lowPressure') : 'OK'}
+                        text={warn ? t('vehicleView.lowPressure') : t('vehicleView.tireOk')}
                       />
                     );
                   })}

@@ -35,11 +35,16 @@ public class CacheService
         _cache.Remove(key);
     }
 
-    public void InvalidateByPrefix(string prefix)
+    /// <summary>
+    /// Drops every entry from the underlying memory cache.
+    /// Use sparingly: there is currently no per-prefix index so we cannot
+    /// target a subset without maintaining a key registry.
+    /// </summary>
+    public void InvalidateAll()
     {
         if (_cache is MemoryCache mc)
         {
-            mc.Compact(0);
+            mc.Compact(1.0);
         }
     }
 

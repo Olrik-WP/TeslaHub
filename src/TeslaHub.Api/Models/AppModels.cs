@@ -99,7 +99,7 @@ public class ChargingLocation
     public int RadiusMeters { get; set; } = 200;
 
     [Required, MaxLength(20)]
-    public string PricingType { get; set; } = "manual";
+    public string PricingType { get; set; } = PricingTypes.Manual;
 
     [Column(TypeName = "decimal(10,4)")]
     public decimal? PeakPricePerKwh { get; set; }
@@ -179,7 +179,7 @@ public record ChargingLocationCreateDto
     public double Latitude { get; init; }
     public double Longitude { get; init; }
     public int RadiusMeters { get; init; } = 200;
-    public string PricingType { get; init; } = "manual";
+    public string PricingType { get; init; } = PricingTypes.Manual;
     public decimal? PeakPricePerKwh { get; init; }
     public decimal? OffPeakPricePerKwh { get; init; }
     public string? OffPeakStart { get; init; }

@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Text;
-using System.Text.Json;
 using MQTTnet;
 using MQTTnet.Packets;
 using MQTTnet.Protocol;
@@ -104,12 +103,6 @@ public class MqttLiveDataService : BackgroundService
         "shift_state", "heading", "elevation", "geofence"
     };
 
-    private static readonly JsonSerializerOptions _jsonOpts = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
-
     public event Action<int, MqttLiveData>? OnLiveDataChanged;
 
     public bool IsConnected => _client?.IsConnected == true;
@@ -196,7 +189,14 @@ public class MqttLiveDataService : BackgroundService
             {
                 if (_client?.IsConnected == true)
                 {
-                    try { await _client.DisconnectAsync(); } catch { }
+                    try
+                    {
+                        await _client.DisconnectAsync();
+                    }
+                    catch (Exception disconnectEx)
+                    {
+                        _logger.LogDebug(disconnectEx, "MQTT clean disconnect failed during reconnect cycle");
+                    }
                 }
                 _client?.Dispose();
                 _client = null;
@@ -305,7 +305,14 @@ public class MqttLiveDataService : BackgroundService
     {
         if (_client?.IsConnected == true)
         {
-            try { await _client.DisconnectAsync(); } catch { }
+            try
+            {
+                await _client.DisconnectAsync();
+            }
+            catch (Exception disconnectEx)
+            {
+                _logger.LogDebug(disconnectEx, "MQTT clean disconnect failed during shutdown");
+            }
         }
         await base.StopAsync(cancellationToken);
     }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts';
@@ -9,6 +9,7 @@ import { getChargingSessions, getChargingSummary, getCostOverrides, getSuggested
 import { api } from '../api/client';
 import type { ChargingSession, CostOverride, ChargingLocation } from '../api/queries';
 import StatCard from '../components/StatCard';
+import { COLORS, LIMITS, STALE_TIME } from '../constants/theme';
 
 interface Props {
   carId: number | undefined;
@@ -37,10 +38,10 @@ export default function Charging({ carId }: Props) {
   const chargeTypeParam = typeFilter === 'all' ? undefined : typeFilter;
 
   const { data: sessions, isLoading } = useQuery({
-    queryKey: ['charging', carId, 500, 0, chargeTypeParam, selectedPeriod.days],
-    queryFn: () => getChargingSessions(carId!, 500, 0, chargeTypeParam, selectedPeriod.days),
+    queryKey: ['charging', carId, LIMITS.chargingSessionsPage, 0, chargeTypeParam, selectedPeriod.days],
+    queryFn: () => getChargingSessions(carId!, LIMITS.chargingSessionsPage, 0, chargeTypeParam, selectedPeriod.days),
     enabled: !!carId,
-    staleTime: 30_000,
+    staleTime: STALE_TIME.live,
   });
 
   const { data: summary } = useQuery({
@@ -147,10 +148,10 @@ export default function Charging({ carId }: Props) {
             <BarChart data={chartData}>
               <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
-              <Tooltip contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8, color: '#fff', fontSize: 12 }} />
+              <Tooltip contentStyle={{ background: COLORS.surfaceMuted, border: `1px solid ${COLORS.border}`, borderRadius: 8, color: '#fff', fontSize: 12 }} />
               <Bar dataKey="kwh" radius={[4, 4, 0, 0]}>
                 {chartData.map((entry, i) => (
-                  <Cell key={i} fill={entry.type === 'DC' ? '#f59e0b' : '#3b82f6'} />
+                  <Cell key={i} fill={entry.type === 'DC' ? COLORS.dc : COLORS.info} />
                 ))}
               </Bar>
             </BarChart>
@@ -197,17 +198,18 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
   const [priceInput, setPriceInput] = useState(costOverride?.totalCost?.toString() ?? '');
   const [showLocationForm, setShowLocationForm] = useState(false);
 
-  useQuery({
+  const { data: suggestedPriceData } = useQuery({
     queryKey: ['suggestPrice', session.latitude, session.longitude, carId],
     queryFn: () => getSuggestedPrice(session.latitude!, session.longitude!, carId!),
     enabled: expanded && !costOverride && session.latitude != null && session.longitude != null && !!carId,
-    onSuccess: (data: { suggestedPrice: number | null }) => {
-      if (data.suggestedPrice != null && !priceInput) {
-        setInputMode('kwh');
-        setPriceInput(data.suggestedPrice.toString());
-      }
-    },
-  } as any);
+  });
+
+  useEffect(() => {
+    if (suggestedPriceData?.suggestedPrice != null && !priceInput) {
+      setInputMode('kwh');
+      setPriceInput(suggestedPriceData.suggestedPrice.toString());
+    }
+  }, [suggestedPriceData, priceInput]);
 
   const kwh = session.chargeEnergyAdded ?? session.chargeEnergyUsed ?? 0;
   const chargeType = session.chargeType ?? (session.fastChargerPresent ? 'DC' : 'AC');
@@ -269,13 +271,21 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
     if (isNaN(value)) return null;
     if (inputMode === 'total') {
       const effectiveKwh = kwh > 0 ? (value / kwh).toFixed(4) : '—';
-      return `${value.toFixed(2)} ${u.currencySymbol} — effective ${effectiveKwh} ${u.currencySymbol}/kWh`;
+      return t('charging.previewTotal', {
+        total: value.toFixed(2),
+        perKwh: effectiveKwh,
+        currency: u.currencySymbol,
+      });
     }
-    return `Total: ${(value * kwh).toFixed(2)} ${u.currencySymbol} for ${kwh.toFixed(1)} kWh`;
+    return t('charging.previewPerKwh', {
+      total: (value * kwh).toFixed(2),
+      kwh: kwh.toFixed(1),
+      currency: u.currencySymbol,
+    });
   })();
 
   const effPct = session.efficiency != null ? Math.round(session.efficiency * 100) : null;
-  const effColor = effPct != null ? (effPct >= 95 ? '#22c55e' : effPct >= 85 ? '#eab308' : '#ef4444') : '#9ca3af';
+  const effColor = effPct != null ? (effPct >= 95 ? COLORS.success : effPct >= 85 ? COLORS.warning : COLORS.danger) : COLORS.textMuted;
 
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
@@ -285,7 +295,7 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
           <span className="text-sm font-medium truncate">
             {utcDate(session.startDate).toLocaleDateString()}
             {' · '}
-            {costOverride?.location?.name ?? session.geofenceName ?? session.address?.split(',')[0] ?? 'Unknown'}
+            {costOverride?.location?.name ?? session.geofenceName ?? session.address?.split(',')[0] ?? t('charging.unknown')}
           </span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -313,7 +323,7 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
             <button
               onClick={() => setExpanded(!expanded)}
               className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] text-[#9ca3af] active:bg-[#2a2a2a] transition-colors flex-shrink-0"
-              aria-label={expanded ? 'Collapse' : 'Expand'}
+              aria-label={expanded ? t('charging.collapse') : t('charging.expand')}
             >
               <span className={`text-sm transition-transform duration-200 inline-block ${expanded ? 'rotate-180' : ''}`}>▼</span>
             </button>
@@ -471,24 +481,24 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
 
   const [existingLocation, setExistingLocation] = useState<ChargingLocation | null>(null);
 
-  useQuery({
+  const { data: matchedLocation } = useQuery({
     queryKey: ['matchLocation', lat, lng, carId],
     queryFn: () => getMatchingLocation(lat, lng, carId),
-    onSuccess: (loc: ChargingLocation | null) => {
-      if (loc) {
-        setExistingLocation(loc);
-        setName(loc.name);
-        setPricingType(loc.pricingType);
-        if (loc.peakPricePerKwh != null) setPeakPrice(loc.peakPricePerKwh.toString());
-        if (loc.offPeakPricePerKwh != null) setOffPeakPrice(loc.offPeakPricePerKwh.toString());
-        if (loc.offPeakStart) setOffPeakStart(loc.offPeakStart);
-        if (loc.offPeakEnd) setOffPeakEnd(loc.offPeakEnd);
-        if (loc.monthlySubscription != null) setMonthlyAmount(loc.monthlySubscription.toString());
-        setRadius(loc.radiusMeters.toString());
-        setAllVehicles(loc.carId == null);
-      }
-    },
-  } as any);
+  });
+
+  useEffect(() => {
+    if (!matchedLocation) return;
+    setExistingLocation(matchedLocation);
+    setName(matchedLocation.name);
+    setPricingType(matchedLocation.pricingType);
+    if (matchedLocation.peakPricePerKwh != null) setPeakPrice(matchedLocation.peakPricePerKwh.toString());
+    if (matchedLocation.offPeakPricePerKwh != null) setOffPeakPrice(matchedLocation.offPeakPricePerKwh.toString());
+    if (matchedLocation.offPeakStart) setOffPeakStart(matchedLocation.offPeakStart);
+    if (matchedLocation.offPeakEnd) setOffPeakEnd(matchedLocation.offPeakEnd);
+    if (matchedLocation.monthlySubscription != null) setMonthlyAmount(matchedLocation.monthlySubscription.toString());
+    setRadius(matchedLocation.radiusMeters.toString());
+    setAllVehicles(matchedLocation.carId == null);
+  }, [matchedLocation]);
 
   const save = useMutation({
     mutationFn: () => {
@@ -516,7 +526,8 @@ function LocationForm({ lat, lng, defaultName, carId, onDone }: {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chargingLocations'] });
       queryClient.invalidateQueries({ queryKey: ['costOverrides'] });
-      queryClient.invalidateQueries({ queryKey: ['chargingSessions'] });
+      queryClient.invalidateQueries({ queryKey: ['charging'] });
+      queryClient.invalidateQueries({ queryKey: ['chargingSummary'] });
       onDone();
     },
   });

@@ -119,7 +119,12 @@
     "saveLocation": "Save location",
     "savingLocation": "Saving...",
     "cancel": "Cancel",
-    "kmSinceLastCharge": "Driven since last charge"
+    "kmSinceLastCharge": "Driven since last charge",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "previewTotal": "{{total}} {{currency}} — effective {{perKwh}} {{currency}}/kWh",
+    "previewPerKwh": "Total: {{total}} {{currency}} for {{kwh}} kWh",
+    "unknown": "Unknown"
   },
   "chargingStats": {
     "dcChargingCurve": "DC Charging Curve",
@@ -257,7 +262,9 @@
     "aboutSub": "Self-hosted, privacy-first",
     "poweredBy": "Powered by TeslaMate — read-only, no data modified",
     "radiusLine": "Radius: {{meters}}m",
-    "newVersionAvailable": "v{{version}} available!"
+    "newVersionAvailable": "v{{version}} available!",
+    "license": "AGPLv3 — © 2026 TeslaHub",
+    "sourceCode": "Source code"
   },
   "battery": {
     "charging": "Charge"
@@ -457,7 +464,10 @@
     "yes": "Yes",
     "no": "No",
     "mqttDisconnected": "MQTT not connected — body/security data unavailable",
-    "mqttHint": "Enable MQTT to see doors, trunk, lock, Sentry Mode and more — see docs"
+    "mqttHint": "Enable MQTT to see doors, trunk, lock, Sentry Mode and more — see docs",
+    "mqttLive": "MQTT live",
+    "dismiss": "Dismiss",
+    "tireOk": "OK"
   },
   "dashboard": {
     "title": "Dashboard",

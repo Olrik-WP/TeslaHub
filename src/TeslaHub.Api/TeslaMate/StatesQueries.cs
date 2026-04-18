@@ -55,15 +55,15 @@ public static class StatesQueries
         this TeslaMateConnectionFactory db, int carId, int days)
     {
         using var conn = db.CreateConnection();
-        return await conn.QueryAsync<TimelineEntryDto>("""
+        return await conn.QueryAsync<TimelineEntryDto>($"""
             SELECT * FROM (
                 SELECT
                     'driving' AS "Action",
                     d.start_date AS "StartDate",
                     d.end_date AS "EndDate",
                     d.duration_min AS "DurationMin",
-                    COALESCE(sg.name, CONCAT_WS(', ', COALESCE(sa.name, NULLIF(CONCAT_WS(' ', sa.road, sa.house_number), '')), sa.city)) AS "StartAddress",
-                    COALESCE(eg.name, CONCAT_WS(', ', COALESCE(ea.name, NULLIF(CONCAT_WS(' ', ea.road, ea.house_number), '')), ea.city)) AS "EndAddress",
+                    {TeslaMateSql.AddressExpressionFor("sg", "sa")} AS "StartAddress",
+                    {TeslaMateSql.AddressExpressionFor("eg", "ea")} AS "EndAddress",
                     sa.latitude AS "StartLat", sa.longitude AS "StartLng",
                     ea.latitude AS "EndLat", ea.longitude AS "EndLng",
                     d.distance AS "DistanceKm",
@@ -83,7 +83,7 @@ public static class StatesQueries
                 SELECT
                     'charging' AS "Action",
                     cp.start_date, cp.end_date, cp.duration_min,
-                    COALESCE(g.name, CONCAT_WS(', ', COALESCE(a.name, NULLIF(CONCAT_WS(' ', a.road, a.house_number), '')), a.city)),
+                    {TeslaMateSql.AddressExpression},
                     NULL,
                     a.latitude, a.longitude,
                     NULL::decimal, NULL::decimal,

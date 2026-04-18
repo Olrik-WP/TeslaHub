@@ -72,7 +72,8 @@ export default function Settings({ carId }: Props) {
   const invalidateLocationCaches = () => {
     queryClient.invalidateQueries({ queryKey: ['chargingLocations'] });
     queryClient.invalidateQueries({ queryKey: ['costOverrides'] });
-    queryClient.invalidateQueries({ queryKey: ['chargingSessions'] });
+    queryClient.invalidateQueries({ queryKey: ['charging'] });
+    queryClient.invalidateQueries({ queryKey: ['chargingSummary'] });
   };
 
   const deleteLocation = useMutation({
@@ -551,14 +552,14 @@ export default function Settings({ carId }: Props) {
           {t('settings.poweredBy')}
         </a>
         <div className="mt-3 pt-3 border-t border-[#2a2a2a] flex items-center justify-between text-xs text-[#6b7280]">
-          <span>AGPLv3 — © 2026 TeslaHub</span>
+          <span>{t('settings.license')}</span>
           <a
             href="https://github.com/Olrik-WP/TeslaHub"
             target="_blank"
             rel="noopener noreferrer"
             className="text-[#3b82f6] hover:underline"
           >
-            Source code
+            {t('settings.sourceCode')}
           </a>
         </div>
         <div className="mt-2 text-xs text-[#4b5563] flex items-center justify-between">

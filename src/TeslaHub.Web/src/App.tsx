@@ -9,6 +9,7 @@ import { getSettings } from './api/queries';
 import BottomNav from './components/BottomNav';
 import CarSelector from './components/CarSelector';
 import ErrorBoundary from './components/ErrorBoundary';
+import { STALE_TIME } from './constants/theme';
 
 const Login = lazy(() => import('./pages/Login'));
 const Home = lazy(() => import('./pages/Home'));
@@ -37,7 +38,7 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: true,
       refetchIntervalInBackground: false,
       gcTime: 10 * 60 * 1000,
-      staleTime: 30_000,
+      staleTime: STALE_TIME.live,
     },
   },
 });
