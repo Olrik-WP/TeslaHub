@@ -585,7 +585,7 @@ export default function Home({ carId }: Props) {
         {lat != null && lng != null && (
           <div
             className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl overflow-hidden cursor-pointer active:bg-[#1a1a1a] transition-colors"
-            onClick={() => navigate(`/map?lat=${lat}&lng=${lng}`)}
+            onClick={() => navigate('/map')}
           >
             <div className="px-3 pt-2 pb-1 flex items-center justify-between">
               <span className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.position')}</span>

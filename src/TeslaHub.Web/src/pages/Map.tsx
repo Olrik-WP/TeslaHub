@@ -59,11 +59,6 @@ export default function MapPage({ carId }: Props) {
   const { t } = useTranslation();
   const driveIdParam = searchParams.get('driveId');
   const driveId = driveIdParam ? parseInt(driveIdParam, 10) : null;
-  const latParam = searchParams.get('lat');
-  const lngParam = searchParams.get('lng');
-  const positionMode = latParam != null && lngParam != null;
-  const posLat = positionMode ? parseFloat(latParam) : null;
-  const posLng = positionMode ? parseFloat(lngParam) : null;
 
   const [rangeKey, setRangeKey] = useState<RangeKey>('48h');
   const [customFromDate, setCustomFromDate] = useState(() =>
@@ -80,8 +75,8 @@ export default function MapPage({ carId }: Props) {
 
   const selectedRange = RANGE_OPTIONS.find((r) => r.key === rangeKey)!;
 
-  // Live tracking is only relevant when no specific drive/position is being inspected.
-  const liveModeAvailable = driveId == null && !positionMode;
+  // Live tracking is only relevant when no specific drive is being inspected.
+  const liveModeAvailable = driveId == null;
   const [followLive, setFollowLive] = useState(true);
 
   // Stop the live stream / drop SSE when not on the dynamic map view.
@@ -132,7 +127,7 @@ export default function MapPage({ carId }: Props) {
   const { data: drivePositions } = useQuery({
     queryKey: ['drivePositions', driveId],
     queryFn: () => getDrivePositions(driveId!),
-    enabled: driveId != null && !positionMode,
+    enabled: driveId != null,
     placeholderData: keepPreviousData,
   });
 
@@ -153,7 +148,7 @@ export default function MapPage({ carId }: Props) {
       }
       return getRecentPositions(carId, selectedRange.hours!);
     },
-    enabled: !!carId && driveId == null && !positionMode,
+    enabled: !!carId && driveId == null,
     staleTime: STALE_TIME.live,
     placeholderData: keepPreviousData,
   });
@@ -161,7 +156,7 @@ export default function MapPage({ carId }: Props) {
   const { data: charges } = useQuery({
     queryKey: ['chargingForMap', carId],
     queryFn: () => getChargingSessions(carId!, 20),
-    enabled: !!carId && driveId == null && !positionMode,
+    enabled: !!carId && driveId == null,
     placeholderData: keepPreviousData,
   });
 
@@ -200,22 +195,9 @@ export default function MapPage({ carId }: Props) {
     setSearchParams({});
   };
 
-  const positionPoint: [number, number][] =
-    posLat != null && posLng != null ? [[posLat, posLng]] : [];
-
   return (
     <div className="flex flex-col h-[calc(100dvh-64px)]">
-      {positionMode ? (
-        <div className="flex items-center gap-2 p-2 bg-[#0a0a0a]">
-          <button
-            onClick={clearParams}
-            className="px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] bg-[#1a1a1a] text-[#9ca3af] active:bg-[#2a2a2a]"
-          >
-            {t('map.back')}
-          </button>
-          <span className="text-sm text-white font-medium">{t('map.currentPosition')}</span>
-        </div>
-      ) : driveId != null ? (
+      {driveId != null ? (
         <div className="flex items-center gap-2 p-2 bg-[#0a0a0a]">
           <button
             onClick={clearParams}
@@ -331,11 +313,11 @@ export default function MapPage({ carId }: Props) {
       {/* Map */}
       <div className="flex-1">
         <MapLibreMap
-          routePoints={positionMode ? positionPoint : routePoints}
-          liveTrail={positionMode || driveId != null ? undefined : liveTrail}
-          chargeMarkers={positionMode ? [] : chargeMarkers}
-          livePosition={positionMode || driveId != null ? null : livePosition}
-          followLive={followLive && liveActive && driveId == null && !positionMode}
+          routePoints={routePoints}
+          liveTrail={driveId != null ? undefined : liveTrail}
+          chargeMarkers={chargeMarkers}
+          livePosition={driveId != null ? null : livePosition}
+          followLive={followLive && liveActive && driveId == null}
           onUserInteract={() => setFollowLive(false)}
         />
       </div>
