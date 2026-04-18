@@ -82,7 +82,16 @@
     "voltageCurrentLabel": "Voltage / Current",
     "estRange": "Est. range",
     "targetSoc": "Target",
-    "timeRemaining": "Remaining"
+    "timeRemaining": "Remaining",
+    "tripInProgress": "Trip in progress",
+    "tripSpeed": "Speed",
+    "tripDistance": "Distance",
+    "tripElapsed": "Elapsed",
+    "tripPower": "Power",
+    "tripStartedAt": "Started: {{time}}",
+    "tripWaitingPosition": "Waiting for position…",
+    "tripWaitingDb": "Trip detected via MQTT — TeslaMate hasn't recorded it yet.",
+    "mqttOffline": "MQTT offline"
   },
   "charging": {
     "7days": "7 days",

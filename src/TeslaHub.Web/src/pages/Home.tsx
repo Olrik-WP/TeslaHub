@@ -154,7 +154,11 @@ export default function Home({ carId }: Props) {
   const [address, setAddress] = useState<string | null>(null);
   const [showCostInfo, setShowCostInfo] = useState(false);
 
-  const lastDrive = drives?.[0];
+  const activeDrive = drives?.find((d) => d.endDate == null) ?? null;
+  const lastCompletedDrive = drives?.find((d) => d.endDate != null) ?? null;
+  const isDrivingLive = live?.state === 'driving' || (live?.shiftState != null && live.shiftState !== 'P');
+  const tripInProgress = isDrivingLive || activeDrive != null;
+  const tripDisplay = tripInProgress ? activeDrive : lastCompletedDrive;
   const lastCharge = charges?.[0];
   const isCharging = lastCharge && !lastCharge.endDate;
   const lastCompletedCharge = charges?.find((s) => s.endDate);
@@ -219,6 +223,13 @@ export default function Home({ carId }: Props) {
       .catch(() => {});
     return () => controller.abort();
   }, [lat, lng, lang]);
+
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!tripInProgress) return;
+    const id = setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, [tripInProgress]);
 
   if (!vehicle) {
     return (
@@ -626,41 +637,128 @@ export default function Home({ carId }: Props) {
           </div>
         )}
 
-        {/* Last trip */}
-        <div
-          className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4 flex flex-col cursor-pointer active:bg-[#1a1a1a] transition-colors overflow-hidden"
-          onClick={() => lastDrive && navigate(`/map?driveId=${lastDrive.id}`)}
-        >
-          <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2">{t('home.latestTrip')}</div>
-          {lastDrive ? (
-            <div className="flex-1 flex flex-col justify-center min-w-0">
-              <div className="text-sm font-medium truncate">
-                {lastDrive.startAddress?.split(',')[0] ?? '?'} → {lastDrive.endAddress?.split(',')[0] ?? '?'}
-              </div>
-              <div className="text-[#9ca3af] text-sm mt-1">
-                {u.fmtDist(lastDrive.distance)} {u.distanceUnit} · {lastDrive.durationMin ?? '?'} min
-                {lastDrive.distance != null && tripCostPerKm != null && tripCostPerKm > 0 && (
-                  <> · <span className="text-[#eab308]">{(lastDrive.distance * tripCostPerKm).toFixed(2)} {u.currencySymbol}</span></>
+        {/* Trip in progress / last completed trip */}
+        {(() => {
+          if (tripInProgress) {
+            const startMs = activeDrive?.startDate ? utcDate(activeDrive.startDate).getTime() : null;
+            const elapsedMin = startMs != null ? Math.max(0, Math.round((nowTick - startMs) / 60_000)) : null;
+            const distanceKm =
+              activeDrive?.startKm != null && (live?.odometer ?? vehicle?.odometer) != null
+                ? Math.max(0, (live?.odometer ?? vehicle!.odometer!) - activeDrive.startKm)
+                : null;
+            const speedKmh = live?.speed ?? null;
+            const powerKw = live?.power ?? null;
+            return (
+              <div className="flex-1 bg-[#141414] border border-[#22c55e]/40 rounded-xl p-3 sm:p-4 flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.tripInProgress')}</div>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#22c55e] uppercase tracking-wider">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
+                    {liveConnected ? t('home.live') : t('home.mqttOffline')}
+                  </span>
+                </div>
+                {activeDrive?.startAddress && (
+                  <div className="text-sm font-medium truncate">
+                    {activeDrive.startAddress.split(',')[0]} →{' '}
+                    <span className="text-[#22c55e]">{address ?? '…'}</span>
+                  </div>
+                )}
+                {!activeDrive && (
+                  <div className="text-sm font-medium truncate">
+                    <span className="text-[#22c55e]">{address ?? t('home.tripWaitingPosition')}</span>
+                  </div>
+                )}
+                <div className="grid grid-cols-3 gap-2 mt-3">
+                  <div>
+                    <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.tripSpeed')}</div>
+                    <div className="text-base font-bold tabular-nums text-[#22c55e]">
+                      {speedKmh != null ? u.fmtSpeed(speedKmh) : '—'}{' '}
+                      <span className="text-[10px] font-normal text-[#9ca3af]">{u.speedUnit}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.tripDistance')}</div>
+                    <div className="text-base font-bold tabular-nums text-white">
+                      {distanceKm != null ? u.fmtDist(distanceKm) : '—'}{' '}
+                      <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.tripElapsed')}</div>
+                    <div className="text-base font-bold tabular-nums text-white">
+                      {elapsedMin != null ? `${elapsedMin}` : '—'}{' '}
+                      <span className="text-[10px] font-normal text-[#9ca3af]">min</span>
+                    </div>
+                  </div>
+                </div>
+                {powerKw != null && (
+                  <div className="mt-2 text-xs text-[#9ca3af]">
+                    {t('home.tripPower')}:{' '}
+                    <span
+                      className="tabular-nums font-medium"
+                      style={{ color: powerKw >= 0 ? '#e31937' : '#22c55e' }}
+                    >
+                      {powerKw > 0 ? '+' : ''}
+                      {powerKw.toFixed(1)} kW
+                    </span>
+                  </div>
+                )}
+                {activeDrive == null && liveConnected && (
+                  <div className="text-[10px] text-[#6b7280] mt-2">{t('home.tripWaitingDb')}</div>
+                )}
+                {activeDrive?.startDate && (
+                  <div className="text-[10px] text-[#6b7280] mt-2">
+                    {t('home.tripStartedAt', {
+                      time: utcDate(activeDrive.startDate).toLocaleString(undefined, {
+                        day: '2-digit',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      }),
+                    })}
+                  </div>
                 )}
               </div>
-              {lastDrive.consumptionKWhPer100Km != null && (
-                <div className="text-[#9ca3af] text-sm">
-                  {u.fmtConsumption(lastDrive.consumptionKWhPer100Km)} {u.consumptionUnit}
+            );
+          }
+
+          return (
+            <div
+              className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4 flex flex-col cursor-pointer active:bg-[#1a1a1a] transition-colors overflow-hidden"
+              onClick={() => tripDisplay && navigate(`/map?driveId=${tripDisplay.id}`)}
+            >
+              <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2">{t('home.latestTrip')}</div>
+              {tripDisplay ? (
+                <div className="flex-1 flex flex-col justify-center min-w-0">
+                  <div className="text-sm font-medium truncate">
+                    {tripDisplay.startAddress?.split(',')[0] ?? '?'} → {tripDisplay.endAddress?.split(',')[0] ?? '?'}
+                  </div>
+                  <div className="text-[#9ca3af] text-sm mt-1">
+                    {u.fmtDist(tripDisplay.distance)} {u.distanceUnit} · {tripDisplay.durationMin ?? '?'} min
+                    {tripDisplay.distance != null && tripCostPerKm != null && tripCostPerKm > 0 && (
+                      <> · <span className="text-[#eab308]">{(tripDisplay.distance * tripCostPerKm).toFixed(2)} {u.currencySymbol}</span></>
+                    )}
+                  </div>
+                  {tripDisplay.consumptionKWhPer100Km != null && (
+                    <div className="text-[#9ca3af] text-sm">
+                      {u.fmtConsumption(tripDisplay.consumptionKWhPer100Km)} {u.consumptionUnit}
+                    </div>
+                  )}
+                  <div className="text-[#6b7280] text-xs mt-2">
+                    {utcDate(tripDisplay.startDate).toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    {tripDisplay.endDate && (
+                      <> → {utcDate(tripDisplay.endDate).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit' })}</>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[#6b7280] text-sm text-center flex-1 flex items-center justify-center">
+                  {t('home.noTrips')}
                 </div>
               )}
-              <div className="text-[#6b7280] text-xs mt-2">
-                {utcDate(lastDrive.startDate).toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                {lastDrive.endDate && (
-                  <> → {utcDate(lastDrive.endDate).toLocaleString(undefined, { hour: '2-digit', minute: '2-digit' })}</>
-                )}
-              </div>
             </div>
-          ) : (
-            <div className="text-[#6b7280] text-sm text-center flex-1 flex items-center justify-center">
-              {t('home.noTrips')}
-            </div>
-          )}
-        </div>
+          );
+        })()}
       </div>
 
     </div>
