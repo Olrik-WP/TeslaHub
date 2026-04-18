@@ -34,7 +34,8 @@
     "statistics": "Statistik",
     "locations": "Orte",
     "trip": "Reise",
-    "database": "Datenbank"
+    "database": "Datenbank",
+    "dashboard": "Dashboard"
   },
   "home": {
     "loadingVehicle": "Fahrzeugdaten werden geladen...",
@@ -64,6 +65,8 @@
     "totalEnergyAdded": "Insgesamt geladene Energie",
     "overallEfficiency": "Gesamteffizienz",
     "position": "Position",
+    "live": "Live",
+    "liveNow": "Live-Position via MQTT",
     "latestTrip": "Letzte Fahrt",
     "noTrips": "Noch keine Fahrten",
     "chargingInProgress": "Ladevorgang läuft",
@@ -74,7 +77,12 @@
     "sinceCharge": "seit Ladung",
     "costPerKm": "Kosten/{{unit}}",
     "costExplain": "Zeigt, wie viel Ihrer kumulierten Ladekosten ({{total}}) Sie bisher verbraucht haben, basierend auf Ihrer tatsächlichen Batterienutzung. Berücksichtigt mehrere letzte Ladevorgänge, wenn der Batteriestand unter den Startwert der neuesten Ladung fällt.",
-    "subscription": "Abonnement"
+    "subscription": "Abonnement",
+    "chargerPower": "Ladeleistung",
+    "voltageCurrentLabel": "Spannung / Strom",
+    "estRange": "Gesch. Reichweite",
+    "targetSoc": "Ziel",
+    "timeRemaining": "Verbleibend"
   },
   "charging": {
     "7days": "7 Tage",
@@ -113,7 +121,12 @@
     "saveLocation": "Ort speichern",
     "savingLocation": "Speichere...",
     "cancel": "Abbrechen",
-    "kmSinceLastCharge": "Seit letzter Ladung gefahren"
+    "kmSinceLastCharge": "Seit letzter Ladung gefahren",
+    "expand": "Aufklappen",
+    "collapse": "Einklappen",
+    "previewTotal": "{{total}} {{currency}} — effektiv {{perKwh}} {{currency}}/kWh",
+    "previewPerKwh": "Gesamt: {{total}} {{currency}} für {{kwh}} kWh",
+    "unknown": "Unbekannt"
   },
   "chargingStats": {
     "dcChargingCurve": "DC-Ladekurve",
@@ -186,13 +199,18 @@
     "30days": "30 Tage",
     "custom": "Benutzerdefiniert",
     "back": "← Zurück",
-    "currentPosition": "Aktuelle Position",
     "trip": "Fahrt",
     "points": "Punkte",
     "noData": "Keine Daten",
     "charges": "Ladungen",
     "lastPosition": "Letzte Position",
-    "start": "Start"
+    "start": "Start",
+    "followLive": "Live folgen",
+    "followingLive": "Folge live",
+    "followShort": "Live",
+    "liveShort": "Live AN",
+    "liveUnavailable": "MQTT nicht verfügbar — Live-Tracking deaktiviert",
+    "livePoints": "live"
   },
   "settings": {
     "title": "Einstellungen",
@@ -202,6 +220,13 @@
     "pressure": "Reifendruckeinheit",
     "costSource": "Kostenquelle",
     "language": "Sprache",
+    "mapStyle": "Kartenstil",
+    "mapPositron": "Positron (hell)",
+    "mapBright": "Bright (bunt)",
+    "mapLiberty": "Liberty (detailliert)",
+    "mapSatellite": "Satellit (Esri)",
+    "map3D": "3D (Gebäude + Gelände)",
+    "mapSatellite3D": "Satellit 3D (Gelände)",
     "km": "Kilometer (km)",
     "mi": "Meilen (mi)",
     "celsius": "Celsius (°C)",
@@ -244,7 +269,9 @@
     "aboutSub": "Self-hosted, Datenschutz zuerst",
     "poweredBy": "Bereitgestellt von TeslaMate — read-only, keine Daten werden verändert",
     "radiusLine": "Radius: {{meters}} m",
-    "newVersionAvailable": "v{{version}} verfügbar!"
+    "newVersionAvailable": "v{{version}} verfügbar!",
+    "license": "AGPLv3 — © 2026 TeslaHub",
+    "sourceCode": "Quellcode"
   },
   "battery": {
     "charging": "Laden"
@@ -405,7 +432,11 @@
     "search": "Adresse, Stadt suchen...",
     "visits": "Besuche",
     "lastVisit": "Letzter Besuch",
-    "noResults": "Keine Orte gefunden"
+    "noResults": "Keine Orte gefunden",
+    "mode_auto": "Auto",
+    "mode_pins": "Pins",
+    "mode_heat": "Heatmap",
+    "heatHint": "Zu Pins wechseln, um Orte anzuklicken"
   },
   "vehicleView": {
     "security": "Sicherheit",
@@ -444,6 +475,26 @@
     "yes": "Ja",
     "no": "Nein",
     "mqttDisconnected": "MQTT nicht verbunden — Karosserie-/Sicherheitsdaten nicht verfügbar",
-    "mqttHint": "Aktivieren Sie MQTT, um Türen, Kofferraum, Verriegelung, Wächtermodus und mehr zu sehen — siehe Doku"
+    "mqttHint": "Aktivieren Sie MQTT, um Türen, Kofferraum, Verriegelung, Wächtermodus und mehr zu sehen — siehe Doku",
+    "mqttLive": "MQTT live",
+    "dismiss": "Schließen",
+    "tireOk": "OK"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "analog": "Analog",
+    "digital": "Digital",
+    "colorPreset": "Farbthema",
+    "maxScale": "Max. Skala",
+    "speed": "Geschwindigkeit",
+    "odometer": "Kilometerstand",
+    "estRange": "Gesch. Reichweite",
+    "power": "Leistung",
+    "regen": "Rekuperation",
+    "consumption": "Leistung",
+    "compass": "Kompass",
+    "elevation": "Höhe",
+    "geofence": "Standort",
+    "shiftState": "Gang"
   }
 }
