@@ -213,6 +213,8 @@ export default function MapLibreMap({
 
   // Live-follow: recenter once per actual MQTT update (NOT on every interpolation
   // frame, otherwise easeTo calls keep cancelling each other and the map lags).
+  // We bake pitch/bearing into the same easeTo so it cannot be overwritten by the
+  // pitch/bearing-only easeTo from the 3D effect (race at mount).
   useEffect(() => {
     if (!followLive || !mapReady || livePosition?.latitude == null || livePosition?.longitude == null) return;
     const map = mapRef.current?.getMap();
@@ -220,9 +222,11 @@ export default function MapLibreMap({
     programmaticMoveRef.current = true;
     map.easeTo({
       center: [livePosition.longitude, livePosition.latitude],
+      pitch,
+      bearing,
       duration: 900,
     });
-  }, [followLive, mapReady, livePosition?.latitude, livePosition?.longitude]);
+  }, [followLive, mapReady, livePosition?.latitude, livePosition?.longitude, pitch, bearing]);
 
   // Detect manual user interaction (drag / wheel zoom / touch) and let the parent
   // disable auto-follow. The internal flag lets us ignore programmatic easeTo events.
@@ -258,12 +262,18 @@ export default function MapLibreMap({
       if (!map.isStyleLoaded()) return;
       if (is3D) {
         setup3D(map);
-        map.easeTo({ pitch, bearing, duration: 1000 });
+        // In follow-mode the live-follow effect already animates pitch/bearing
+        // alongside the camera center — skipping here avoids racing easeTo calls.
+        if (!followLive) {
+          map.easeTo({ pitch, bearing, duration: 1000 });
+        }
       } else {
         if (map.getTerrain()) map.setTerrain(null);
         if (map.getLayer('3d-buildings')) map.removeLayer('3d-buildings');
         if (map.getSource('terrainSource')) map.removeSource('terrainSource');
-        map.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
+        if (!followLive) {
+          map.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
+        }
       }
     };
 
@@ -272,7 +282,7 @@ export default function MapLibreMap({
     return () => {
       map.off('style.load', apply);
     };
-  }, [is3D, pitch, bearing, mapReady]);
+  }, [is3D, pitch, bearing, mapReady, followLive]);
 
   const routeGeoJson = useMemo(() => {
     const all = liveTrail && liveTrail.length > 0 ? [...routePoints, ...liveTrail] : routePoints;
@@ -293,7 +303,10 @@ export default function MapLibreMap({
     if (!map) return;
 
     if (followLive && livePosition?.latitude != null && livePosition?.longitude != null) {
-      map.flyTo({
+      // Use jumpTo (instant) instead of flyTo so the live-follow easeTo that
+      // fires on the same tick can take over cleanly without fighting an
+      // in-progress fly animation.
+      map.jumpTo({
         center: [livePosition.longitude, livePosition.latitude],
         zoom: 15,
       });

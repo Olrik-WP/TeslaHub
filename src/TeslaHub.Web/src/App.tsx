@@ -1,5 +1,5 @@
-import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate } from 'react-router-dom';
+import { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
@@ -87,6 +87,15 @@ function AppLayout() {
   const { data: cars } = useCars();
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings, staleTime: 5 * 60_000 });
   const [selectedCarId, setSelectedCarId] = useState<number | undefined>();
+  const location = useLocation();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Reset the scroll container on every route change so a deep scroll on Home
+  // doesn't end up hiding the header of the next page (e.g. the range selector
+  // on /map when navigating from the bottom of Home).
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [location.pathname]);
 
   useEffect(() => {
     if (settings?.language && settings.language !== i18n.language) {
@@ -125,7 +134,7 @@ function AppLayout() {
           onChange={handleCarChange}
         />
       )}
-      <div className="flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]">
         <ErrorBoundary>
           <Suspense fallback={<div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>}>
             <Routes>
