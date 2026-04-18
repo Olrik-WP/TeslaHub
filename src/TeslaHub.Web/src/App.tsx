@@ -90,11 +90,16 @@ function AppLayout() {
   const location = useLocation();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Reset the scroll container on every route change so a deep scroll on Home
-  // doesn't end up hiding the header of the next page (e.g. the range selector
-  // on /map when navigating from the bottom of Home).
+  // Reset BOTH the inner scroll container AND the window/body scroll on every
+  // route change. The body scroll matters because <body> uses padding-top:
+  // env(safe-area-inset-top) (index.css) plus min-height:100dvh on its child,
+  // which makes the body overflow vertically by the safe-area amount. If we
+  // don't reset window scroll, navigating from a deeply-scrolled page like
+  // Home leaves the body scrolled, which pushes fixed-top headers (e.g. the
+  // range selector on /map) under the iOS translucent status bar.
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0, left: 0 });
+    window.scrollTo({ top: 0, left: 0 });
   }, [location.pathname]);
 
   useEffect(() => {
