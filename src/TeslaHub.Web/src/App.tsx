@@ -124,7 +124,7 @@ function AppLayout() {
           onChange={handleCarChange}
         />
       )}
-      <div className="flex-1 overflow-y-auto pb-20 pb-safe">
+      <div className="flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]">
         <ErrorBoundary>
           <Suspense fallback={<div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>}>
             <Routes>

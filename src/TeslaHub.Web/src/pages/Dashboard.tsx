@@ -168,7 +168,7 @@ export default function Dashboard({ carId }: Props) {
   }
 
   return (
-    <div className="p-4 space-y-3 max-w-2xl mx-auto">
+    <div className="p-3 sm:p-4 space-y-3 max-w-2xl mx-auto">
       {/* Header: toggle + settings */}
       <div className="flex items-center justify-between">
         <div className="flex bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg overflow-hidden">
@@ -260,48 +260,50 @@ export default function Dashboard({ carId }: Props) {
       )}
 
       {/* Main layout */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch">
         {/* Speed gauge */}
-        <div className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl p-2 sm:p-4">
-          {prefs.gaugeMode === 'analog' ? (
-            <SpeedGaugeAnalog
-              speed={convertedSpeed}
-              maxSpeed={convertedMaxScale}
-              unit={u.speedUnit}
-              shiftState={shiftState}
-              colorZones={preset.zones.map((z) => ({
-                from: u.convertSpeed(z.from) ?? z.from,
-                to: u.convertSpeed(z.to) ?? z.to,
-                color: z.color,
-              }))}
-              accentColor={preset.accent}
-            />
-          ) : (
-            <SpeedGaugeDigital
-              speed={convertedSpeed}
-              maxSpeed={convertedMaxScale}
-              unit={u.speedUnit}
-              shiftState={shiftState}
-              accentColor={preset.accent}
-            />
-          )}
+        <div className="flex-1 min-w-0 bg-[#141414] border border-[#2a2a2a] rounded-xl p-2 sm:p-3 flex items-center justify-center">
+          <div className="w-full max-w-[360px] sm:max-w-[400px] mx-auto">
+            {prefs.gaugeMode === 'analog' ? (
+              <SpeedGaugeAnalog
+                speed={convertedSpeed}
+                maxSpeed={convertedMaxScale}
+                unit={u.speedUnit}
+                shiftState={shiftState}
+                colorZones={preset.zones.map((z) => ({
+                  from: u.convertSpeed(z.from) ?? z.from,
+                  to: u.convertSpeed(z.to) ?? z.to,
+                  color: z.color,
+                }))}
+                accentColor={preset.accent}
+              />
+            ) : (
+              <SpeedGaugeDigital
+                speed={convertedSpeed}
+                maxSpeed={convertedMaxScale}
+                unit={u.speedUnit}
+                shiftState={shiftState}
+                accentColor={preset.accent}
+              />
+            )}
+          </div>
         </div>
 
         {/* Compass + info (desktop: side panel) */}
-        <div className="hidden sm:flex flex-col gap-3 w-[200px]">
-          <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 flex-1 flex items-center justify-center">
+        <div className="hidden sm:flex flex-col gap-3 w-[180px] lg:w-[200px] shrink-0">
+          <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 flex items-center justify-center">
             <CompassGauge heading={heading} elevation={elevation} accentColor={preset.accent} />
           </div>
           {geofence && (
-            <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3">
-              <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('dashboard.geofence')}</div>
-              <div className="text-sm font-medium mt-1 truncate">{geofence}</div>
+            <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl px-3 py-2">
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('dashboard.geofence')}</div>
+              <div className="text-sm font-medium mt-0.5 truncate">{geofence}</div>
             </div>
           )}
           {state && (
-            <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3">
-              <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.state')}</div>
-              <div className="text-sm font-medium mt-1">{state}</div>
+            <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl px-3 py-2">
+              <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.state')}</div>
+              <div className="text-sm font-medium mt-0.5 truncate">{state}</div>
             </div>
           )}
         </div>
