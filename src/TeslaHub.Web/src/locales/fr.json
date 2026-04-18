@@ -208,6 +208,8 @@
     "start": "Départ",
     "followLive": "Suivre en direct",
     "followingLive": "Suivi en direct",
+    "followShort": "Live",
+    "liveShort": "Live ON",
     "liveUnavailable": "MQTT indisponible — suivi temps réel désactivé",
     "livePoints": "live"
   },

@@ -204,40 +204,48 @@ export default function Locations({ carId }: Props) {
               <NavigationControl position="top-left" showZoom showCompass />
 
               <Source id="locations" type="geojson" data={geojson}>
-                {/* Heatmap layer (auto = soft overlay, heat = full opacity) */}
+                {/* Heatmap layer (auto = visible overlay that fades only at very high zoom,
+                    heat = full opacity) */}
                 {mapMode !== 'pins' && (
                   <Layer
                     id="location-heat"
                     type="heatmap"
                     paint={{
+                      // Lower the threshold so even a single visit contributes weight at
+                      // tiny maxVisits values. Half-weight at maxVisits / 4 so isolated
+                      // points still glow.
                       'heatmap-weight': [
                         'interpolate', ['linear'], ['get', 'visitCount'],
                         0, 0,
+                        Math.max(maxVisits / 4, 1), 0.5,
                         Math.max(maxVisits, 1), 1,
                       ],
                       'heatmap-intensity': [
                         'interpolate', ['linear'], ['zoom'],
-                        0, 1,
+                        0, 1.2,
                         14, 3,
                       ],
                       'heatmap-color': [
                         'interpolate', ['linear'], ['heatmap-density'],
                         0,    'rgba(59,130,246,0)',
-                        0.15, 'rgba(59,130,246,0.55)',
-                        0.4,  'rgba(34,197,94,0.7)',
-                        0.65, 'rgba(234,179,8,0.8)',
-                        0.85, 'rgba(245,158,11,0.85)',
+                        0.1,  'rgba(59,130,246,0.6)',
+                        0.3,  'rgba(34,197,94,0.75)',
+                        0.55, 'rgba(234,179,8,0.85)',
+                        0.8,  'rgba(245,158,11,0.9)',
                         1,    'rgba(227,25,55,0.95)',
                       ],
+                      // Bigger blobs at low zoom so the user clearly sees a coloured glow
+                      // around dense areas like Paris.
                       'heatmap-radius': [
                         'interpolate', ['linear'], ['zoom'],
-                        0, 4,
-                        14, 35,
+                        0, 15,
+                        6, 25,
+                        14, 45,
                       ],
                       'heatmap-opacity':
                         mapMode === 'auto'
-                          ? ['interpolate', ['linear'], ['zoom'], 0, 0.55, 12, 0.35, 15, 0]
-                          : 0.85,
+                          ? ['interpolate', ['linear'], ['zoom'], 0, 0.85, 13, 0.6, 16, 0]
+                          : 0.9,
                     }}
                   />
                 )}

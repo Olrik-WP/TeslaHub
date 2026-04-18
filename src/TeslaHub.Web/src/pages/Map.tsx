@@ -230,26 +230,31 @@ export default function MapPage({ carId }: Props) {
         </div>
       ) : (
         <>
-          {/* Range selector + live toggle */}
-          <div className="flex gap-1 p-2 bg-[#0a0a0a] flex-wrap items-center">
-            {RANGE_OPTIONS.map((opt) => (
-              <button
-                key={opt.key}
-                onClick={() => setRangeKey(opt.key)}
-                className={`px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors duration-150 ${
-                  rangeKey === opt.key ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
-                }`}
-              >
-                {opt.labelKey.startsWith('map.') ? t(opt.labelKey) : opt.labelKey}
-              </button>
-            ))}
+          {/* Range selector (scrollable on mobile) + always-visible live toggle */}
+          <div className="flex items-stretch gap-2 p-2 bg-[#0a0a0a]">
+            <div
+              className="flex gap-1 flex-1 min-w-0 overflow-x-auto -mx-1 px-1 [&::-webkit-scrollbar]:hidden"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              {RANGE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => setRangeKey(opt.key)}
+                  className={`flex-shrink-0 px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors duration-150 ${
+                    rangeKey === opt.key ? 'bg-[#e31937] text-white' : 'bg-[#1a1a1a] text-[#9ca3af]'
+                  }`}
+                >
+                  {opt.labelKey.startsWith('map.') ? t(opt.labelKey) : opt.labelKey}
+                </button>
+              ))}
+            </div>
 
             {liveSupported && (
               <button
                 onClick={() => setFollowLive((v) => !v)}
                 disabled={!liveActive}
                 title={liveActive ? '' : t('map.liveUnavailable')}
-                className={`ml-auto inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors duration-150 ${
+                className={`flex-shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors duration-150 ${
                   followLive && liveActive
                     ? 'bg-[#22c55e] text-white'
                     : 'bg-[#1a1a1a] text-[#9ca3af]'
@@ -260,7 +265,12 @@ export default function MapPage({ carId }: Props) {
                     liveActive ? 'bg-white animate-pulse' : 'bg-[#6b7280]'
                   }`}
                 />
-                {followLive && liveActive ? t('map.followingLive') : t('map.followLive')}
+                <span className="hidden sm:inline">
+                  {followLive && liveActive ? t('map.followingLive') : t('map.followLive')}
+                </span>
+                <span className="sm:hidden">
+                  {followLive && liveActive ? t('map.liveShort') : t('map.followShort')}
+                </span>
               </button>
             )}
           </div>

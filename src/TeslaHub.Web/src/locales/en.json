@@ -208,6 +208,8 @@
     "start": "Start",
     "followLive": "Follow live",
     "followingLive": "Following live",
+    "followShort": "Live",
+    "liveShort": "Live ON",
     "liveUnavailable": "MQTT not available — live tracking disabled",
     "livePoints": "live"
   },
