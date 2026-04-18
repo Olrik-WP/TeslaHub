@@ -81,7 +81,8 @@ export default function Locations({ carId }: Props) {
         city: loc.city ?? '',
         visitCount: loc.visitCount,
         lastVisited: loc.lastVisited,
-        radius: 4 + (loc.visitCount / maxVisits) * 12,
+        // Minimum 5px so single visits stay visible at low zoom.
+        radius: 5 + (loc.visitCount / maxVisits) * 11,
       },
       geometry: {
         type: 'Point' as const,
@@ -203,12 +204,11 @@ export default function Locations({ carId }: Props) {
               <NavigationControl position="top-left" showZoom showCompass />
 
               <Source id="locations" type="geojson" data={geojson}>
-                {/* Heatmap layer (auto + heat modes) */}
+                {/* Heatmap layer (auto = soft overlay, heat = full opacity) */}
                 {mapMode !== 'pins' && (
                   <Layer
                     id="location-heat"
                     type="heatmap"
-                    maxzoom={mapMode === 'auto' ? 14 : 24}
                     paint={{
                       'heatmap-weight': [
                         'interpolate', ['linear'], ['get', 'visitCount'],
@@ -236,13 +236,13 @@ export default function Locations({ carId }: Props) {
                       ],
                       'heatmap-opacity':
                         mapMode === 'auto'
-                          ? ['interpolate', ['linear'], ['zoom'], 11, 0.9, 14, 0]
+                          ? ['interpolate', ['linear'], ['zoom'], 0, 0.55, 12, 0.35, 15, 0]
                           : 0.85,
                     }}
                   />
                 )}
 
-                {/* Click target circles (pins + auto modes) */}
+                {/* Click target circles — always visible in pins + auto modes */}
                 {mapMode !== 'heat' && (
                   <Layer
                     id="location-circles"
@@ -250,15 +250,9 @@ export default function Locations({ carId }: Props) {
                     paint={{
                       'circle-radius': ['get', 'radius'],
                       'circle-color': '#e31937',
-                      'circle-opacity':
-                        mapMode === 'auto'
-                          ? ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 0.7]
-                          : 0.7,
+                      'circle-opacity': 0.75,
                       'circle-stroke-color': '#fff',
-                      'circle-stroke-width':
-                        mapMode === 'auto'
-                          ? ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 1]
-                          : 1,
+                      'circle-stroke-width': 1,
                     }}
                   />
                 )}

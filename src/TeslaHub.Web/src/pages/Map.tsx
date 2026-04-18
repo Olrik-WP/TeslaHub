@@ -167,16 +167,15 @@ export default function MapPage({ carId }: Props) {
 
   const positions = driveId != null ? drivePositions : rangePositions;
 
-  const baseRoutePoints = useMemo(
+  // Historical points (stable, only changes when range / drive switches).
+  const routePoints = useMemo(
     () => positions?.map((p) => [p.latitude, p.longitude] as [number, number]) ?? [],
     [positions],
   );
 
-  // In live mode, append the in-memory trace to the persisted history.
-  const routePoints = useMemo(() => {
-    if (!liveActive || liveTrace.length === 0) return baseRoutePoints;
-    return [...baseRoutePoints, ...liveTrace];
-  }, [baseRoutePoints, liveTrace, liveActive]);
+  // The live trail is sent as a separate prop so MQTT ticks don't refit bounds
+  // and the camera doesn't snap back to the full historical trip.
+  const liveTrail = liveActive ? liveTrace : undefined;
 
   const chargeMarkers = useMemo(
     () =>
@@ -323,6 +322,7 @@ export default function MapPage({ carId }: Props) {
       <div className="flex-1">
         <MapLibreMap
           routePoints={positionMode ? positionPoint : routePoints}
+          liveTrail={positionMode || driveId != null ? undefined : liveTrail}
           chargeMarkers={positionMode ? [] : chargeMarkers}
           livePosition={positionMode || driveId != null ? null : livePosition}
           followLive={followLive && liveActive && driveId == null && !positionMode}

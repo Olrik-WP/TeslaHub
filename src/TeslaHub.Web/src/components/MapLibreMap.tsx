@@ -25,7 +25,13 @@ export interface LivePosition {
 }
 
 interface MapLibreMapProps {
+  /** Historical route points. Used for the auto-fit bounds on first load and
+   *  whenever the dataset changes (range/drive switch). */
   routePoints: [number, number][];
+  /** Optional live trail accumulated client-side. Drawn as part of the route
+   *  line but never triggers an auto-fit (otherwise every MQTT tick would
+   *  yank the camera back to the full trip). */
+  liveTrail?: [number, number][];
   chargeMarkers: ChargeMarker[];
   livePosition?: LivePosition | null;
   followLive?: boolean;
@@ -151,6 +157,7 @@ function LiveMarker({ heading, connected }: { heading: number | null | undefined
 
 export default function MapLibreMap({
   routePoints,
+  liveTrail,
   chargeMarkers,
   livePosition,
   followLive = false,
@@ -204,23 +211,18 @@ export default function MapLibreMap({
   // we can ignore it when watching for user-initiated interactions.
   const programmaticMoveRef = useRef(false);
 
-  // Live-follow: smoothly recenter on the moving vehicle.
+  // Live-follow: recenter once per actual MQTT update (NOT on every interpolation
+  // frame, otherwise easeTo calls keep cancelling each other and the map lags).
   useEffect(() => {
-    if (!followLive || !mapReady || !animatedLive) return;
+    if (!followLive || !mapReady || livePosition?.latitude == null || livePosition?.longitude == null) return;
     const map = mapRef.current?.getMap();
     if (!map) return;
     programmaticMoveRef.current = true;
-    const targetBearing =
-      livePosition?.heading != null && Number.isFinite(livePosition.heading)
-        ? livePosition.heading
-        : undefined;
     map.easeTo({
-      center: [animatedLive.longitude, animatedLive.latitude],
-      ...(targetBearing != null ? { bearing: targetBearing } : {}),
-      duration: 600,
-      easing: (n) => n,
+      center: [livePosition.longitude, livePosition.latitude],
+      duration: 900,
     });
-  }, [followLive, mapReady, animatedLive?.latitude, animatedLive?.longitude, livePosition?.heading]);
+  }, [followLive, mapReady, livePosition?.latitude, livePosition?.longitude]);
 
   // Detect manual user interaction (drag / wheel zoom / touch) and let the parent
   // disable auto-follow. The internal flag lets us ignore programmatic easeTo events.
@@ -273,16 +275,17 @@ export default function MapLibreMap({
   }, [is3D, pitch, bearing, mapReady]);
 
   const routeGeoJson = useMemo(() => {
-    if (routePoints.length < 2) return null;
+    const all = liveTrail && liveTrail.length > 0 ? [...routePoints, ...liveTrail] : routePoints;
+    if (all.length < 2) return null;
     return {
       type: 'Feature' as const,
       properties: {},
       geometry: {
         type: 'LineString' as const,
-        coordinates: routePoints.map(([lat, lng]) => [lng, lat]),
+        coordinates: all.map(([lat, lng]) => [lng, lat]),
       },
     };
-  }, [routePoints]);
+  }, [routePoints, liveTrail]);
 
   const handleLoad = useCallback(() => {
     setMapReady(true);
