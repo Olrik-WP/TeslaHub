@@ -28,6 +28,14 @@ export interface LiveStreamData {
   locked: boolean | null;
   pluggedIn: boolean | null;
   chargePortDoorOpen: boolean | null;
+  activeRouteDestination: string | null;
+  activeRouteEnergyAtArrival: number | null;
+  activeRouteMilesToArrival: number | null;
+  activeRouteMinutesToArrival: number | null;
+  activeRouteTrafficMinutesDelay: number | null;
+  activeRouteLatitude: number | null;
+  activeRouteLongitude: number | null;
+  activeRouteError: string | null;
   mqttConnected: boolean;
   lastUpdated: string;
 }

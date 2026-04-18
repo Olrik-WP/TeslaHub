@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text;
+using System.Text.Json;
 using MQTTnet;
 using MQTTnet.Packets;
 using MQTTnet.Protocol;
@@ -64,6 +65,17 @@ public class MqttLiveData
     public int? Elevation { get; set; }
     public string? Geofence { get; set; }
 
+    // Active navigation route (parsed from teslamate/cars/{id}/active_route JSON blob).
+    // All fields null when no active route or when the payload is { "error": "..." }.
+    public string? ActiveRouteDestination { get; set; }
+    public double? ActiveRouteEnergyAtArrival { get; set; }
+    public double? ActiveRouteMilesToArrival { get; set; }
+    public double? ActiveRouteMinutesToArrival { get; set; }
+    public double? ActiveRouteTrafficMinutesDelay { get; set; }
+    public double? ActiveRouteLatitude { get; set; }
+    public double? ActiveRouteLongitude { get; set; }
+    public string? ActiveRouteError { get; set; }
+
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 }
 
@@ -100,7 +112,9 @@ public class MqttLiveDataService : BackgroundService
         "charge_limit_soc", "time_to_full_charge",
         "est_battery_range_km",
         // Driving live
-        "shift_state", "heading", "elevation", "geofence"
+        "shift_state", "heading", "elevation", "geofence",
+        // Navigation
+        "active_route"
     };
 
     public event Action<int, MqttLiveData>? OnLiveDataChanged;
@@ -298,7 +312,59 @@ public class MqttLiveDataService : BackgroundService
             case "heading":             if (int.TryParse(value, out var hdg)) data.Heading = hdg; break;
             case "elevation":           if (int.TryParse(value, out var elv)) data.Elevation = elv; break;
             case "geofence":            data.Geofence = value; break;
+            case "active_route":        ApplyActiveRoute(data, value); break;
         }
+    }
+
+    private static void ApplyActiveRoute(MqttLiveData data, string value)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(value);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.String)
+            {
+                data.ActiveRouteError = err.GetString();
+                data.ActiveRouteDestination = null;
+                data.ActiveRouteEnergyAtArrival = null;
+                data.ActiveRouteMilesToArrival = null;
+                data.ActiveRouteMinutesToArrival = null;
+                data.ActiveRouteTrafficMinutesDelay = null;
+                data.ActiveRouteLatitude = null;
+                data.ActiveRouteLongitude = null;
+                return;
+            }
+
+            data.ActiveRouteError = null;
+            data.ActiveRouteDestination = root.TryGetProperty("destination", out var dest) && dest.ValueKind == JsonValueKind.String
+                ? dest.GetString()
+                : null;
+            data.ActiveRouteEnergyAtArrival = TryGetDouble(root, "energy_at_arrival");
+            data.ActiveRouteMilesToArrival = TryGetDouble(root, "miles_to_arrival");
+            data.ActiveRouteMinutesToArrival = TryGetDouble(root, "minutes_to_arrival");
+            data.ActiveRouteTrafficMinutesDelay = TryGetDouble(root, "traffic_minutes_delay");
+            if (root.TryGetProperty("location", out var loc) && loc.ValueKind == JsonValueKind.Object)
+            {
+                data.ActiveRouteLatitude = TryGetDouble(loc, "latitude");
+                data.ActiveRouteLongitude = TryGetDouble(loc, "longitude");
+            }
+        }
+        catch (JsonException)
+        {
+            // Malformed payload — ignore silently to avoid log spam.
+        }
+    }
+
+    private static double? TryGetDouble(JsonElement element, string property)
+    {
+        if (!element.TryGetProperty(property, out var prop)) return null;
+        return prop.ValueKind switch
+        {
+            JsonValueKind.Number => prop.TryGetDouble(out var d) ? d : null,
+            JsonValueKind.String when double.TryParse(prop.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var d) => d,
+            _ => null,
+        };
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

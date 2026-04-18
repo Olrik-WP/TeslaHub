@@ -648,6 +648,20 @@ export default function Home({ carId }: Props) {
                 : null;
             const speedKmh = live?.speed ?? null;
             const powerKw = live?.power ?? null;
+
+            const route = live?.activeRouteDestination ? {
+              destination: live.activeRouteDestination,
+              minutesToArrival: live.activeRouteMinutesToArrival,
+              milesToArrival: live.activeRouteMilesToArrival,
+              energyAtArrival: live.activeRouteEnergyAtArrival,
+              trafficDelay: live.activeRouteTrafficMinutesDelay,
+            } : null;
+            const routeDistanceUserUnit = route?.milesToArrival != null
+              ? (u.distanceUnit === 'mi' ? route.milesToArrival : route.milesToArrival * 1.609344)
+              : null;
+            const etaTime = route?.minutesToArrival != null
+              ? new Date(nowTick + route.minutesToArrival * 60_000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+              : null;
             return (
               <div className="flex-1 bg-[#141414] border border-[#22c55e]/40 rounded-xl p-3 sm:p-4 flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between mb-2">
@@ -701,6 +715,43 @@ export default function Home({ carId }: Props) {
                       {powerKw > 0 ? '+' : ''}
                       {powerKw.toFixed(1)} kW
                     </span>
+                  </div>
+                )}
+
+                {route && (
+                  <div className="mt-3 pt-3 border-t border-[#2a2a2a]">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.tripDestination')}</div>
+                        <div className="text-sm font-medium text-white truncate">→ {route.destination}</div>
+                      </div>
+                      {route.minutesToArrival != null && (
+                        <div className="text-right flex-shrink-0">
+                          <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.tripEta')}</div>
+                          <div className="text-sm font-bold tabular-nums text-[#22c55e]">
+                            {etaTime} <span className="text-[10px] font-normal text-[#9ca3af]">({Math.round(route.minutesToArrival)} min)</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-1 text-xs text-[#9ca3af] flex items-center gap-x-3 gap-y-0.5 flex-wrap">
+                      {routeDistanceUserUnit != null && (
+                        <span className="tabular-nums">{routeDistanceUserUnit.toFixed(routeDistanceUserUnit < 10 ? 1 : 0)} {u.distanceUnit}</span>
+                      )}
+                      {route.energyAtArrival != null && (
+                        <span className="tabular-nums">
+                          <span className="text-[#22c55e]">{Math.round(route.energyAtArrival)}%</span> {t('home.tripAtArrival')}
+                        </span>
+                      )}
+                      {route.trafficDelay != null && route.trafficDelay > 0.5 && (
+                        <span className="tabular-nums text-[#eab308]">+{Math.round(route.trafficDelay)} min {t('home.tripTraffic')}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {!route && live?.activeRouteError && (
+                  <div className="mt-3 pt-3 border-t border-[#2a2a2a] text-[10px] text-[#6b7280]">
+                    {t('home.tripNoRoute')}
                   </div>
                 )}
                 {activeDrive == null && liveConnected && (

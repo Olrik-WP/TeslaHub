@@ -91,7 +91,12 @@
     "tripStartedAt": "Départ : {{time}}",
     "tripWaitingPosition": "En attente de la position…",
     "tripWaitingDb": "Trajet détecté via MQTT — TeslaMate ne l'a pas encore enregistré.",
-    "mqttOffline": "MQTT hors-ligne"
+    "mqttOffline": "MQTT hors-ligne",
+    "tripDestination": "Destination",
+    "tripEta": "Arrivée",
+    "tripAtArrival": "à l'arrivée",
+    "tripTraffic": "trafic",
+    "tripNoRoute": "Aucun itinéraire actif"
   },
   "charging": {
     "7days": "7 jours",
