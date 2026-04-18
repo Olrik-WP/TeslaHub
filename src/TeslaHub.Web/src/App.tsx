@@ -131,7 +131,7 @@ function AppLayout() {
   }, []);
 
   return (
-    <div className="min-h-dvh bg-[#0a0a0a] flex flex-col">
+    <div className="min-h-[calc(100dvh-env(safe-area-inset-top))] bg-[#0a0a0a] flex flex-col">
       {cars && cars.length > 1 && (
         <CarSelector
           cars={cars}
