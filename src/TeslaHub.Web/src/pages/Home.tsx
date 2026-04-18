@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Map, Marker } from 'react-map-gl/maplibre';
@@ -12,6 +12,7 @@ import { useMapStyle } from '../hooks/useMapStyle';
 import BatteryGauge from '../components/BatteryGauge';
 import StatCard from '../components/StatCard';
 import VehicleTopView from '../components/VehicleTopView';
+import GoToCarSheet from '../components/GoToCarSheet';
 import { getStats, getChargingStats, getDriveStats, getSettings, getCostOverrides, getCostSummary, getTeslaMateCostSummary, getCarConfig } from '../api/queries';
 import type { VehicleStatus } from '../api/queries';
 import { useTranslation } from 'react-i18next';
@@ -153,6 +154,15 @@ export default function Home({ carId }: Props) {
   const [imgError, setImgError] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
   const [showCostInfo, setShowCostInfo] = useState(false);
+  const [goToCarOpen, setGoToCarOpen] = useState(false);
+
+  // Hide the "go to my car" feature inside the Tesla in-car browser:
+  // there is no public way to deep-link to native Tesla nav, and the user is
+  // by definition next to (or in) the car already.
+  const isTeslaBrowser = useMemo(
+    () => typeof navigator !== 'undefined' && /Tesla/i.test(navigator.userAgent),
+    [],
+  );
 
   const activeDrive = drives?.find((d) => d.endDate == null) ?? null;
   const lastCompletedDrive = drives?.find((d) => d.endDate != null) ?? null;
@@ -206,6 +216,14 @@ export default function Home({ carId }: Props) {
 
   const lat = live?.latitude ?? vehicle?.latitude;
   const lng = live?.longitude ?? vehicle?.longitude;
+
+  const stateLower = (vehicle?.state ?? '').toLowerCase();
+  const isParkedish =
+    stateLower !== 'driving' &&
+    !isDrivingLive &&
+    vehicle?.isUserPresent !== true;
+  const canShowGoToCar =
+    !isTeslaBrowser && lat != null && lng != null && !!vehicle && isParkedish;
   const lang = i18n.language;
   useEffect(() => {
     if (lat == null || lng == null) return;
@@ -607,7 +625,7 @@ export default function Home({ carId }: Props) {
                 </span>
               )}
             </div>
-            <div className="h-[160px] sm:h-[220px]">
+            <div className="relative h-[160px] sm:h-[220px]">
               <Map
                 longitude={lng}
                 latitude={lat}
@@ -621,6 +639,21 @@ export default function Home({ carId }: Props) {
                   <div style={DOT_STYLE} />
                 </Marker>
               </Map>
+              {canShowGoToCar && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setGoToCarOpen(true);
+                  }}
+                  className="absolute bottom-2 right-2 z-10 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-black/75 hover:bg-black/90 active:bg-black text-white text-xs font-medium shadow-lg backdrop-blur-sm border border-white/10"
+                  aria-label={t('goToCar.button')}
+                >
+                  <span aria-hidden>🚶</span>
+                  <span className="hidden sm:inline">{t('goToCar.button')}</span>
+                  <span className="sm:hidden">{t('goToCar.buttonShort')}</span>
+                </button>
+              )}
             </div>
             <div className="px-3 py-2">
               {address && (
@@ -812,6 +845,16 @@ export default function Home({ carId }: Props) {
         })()}
       </div>
 
+      {vehicle && goToCarOpen && (
+        <GoToCarSheet
+          open={goToCarOpen}
+          onClose={() => setGoToCarOpen(false)}
+          vehicle={vehicle}
+          liveLatitude={live?.latitude}
+          liveLongitude={live?.longitude}
+          address={address}
+        />
+      )}
     </div>
   );
 }
