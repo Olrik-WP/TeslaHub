@@ -25,6 +25,7 @@ Backend:
 - [x] Centralized SQL "address" expression in `TeslaMate/TeslaMateSql.cs`.
 - [x] Simplified redundant `Sum` filter in `CostService.GetSummary`.
 - [x] Centralized SSE `JsonSerializerOptions` in `Utilities/JsonOptions.cs`.
+- [x] Capture MQTT `active_route` blob (destination, ETA, energy at arrival, traffic delay) in `MqttLiveDataService` and propagate via SSE.
 
 Frontend:
 
@@ -32,6 +33,9 @@ Frontend:
 - [x] Nominatim `Accept-Language` now follows `i18n.language`.
 - [x] Translated About / "Source code" footer, Login title, aria-labels (`Collapse`, `Expand`, `Dismiss`), `previewText`, `Unknown`, "MQTT live", tire `OK`.
 - [x] Centralized magic constants in `constants/theme.ts` (colors, `STALE_TIME`, `LIMITS.chargingSessionsPage`).
+- [x] Fixed React error #310 in `pages/Locations.tsx` (`useMemo` after early `return` on loading state).
+- [x] Home "Latest trip" card now switches to a live "Trip in progress" view backed by MQTT (`state`, `shiftState`, `speed`, `power`, `odometer`) with elapsed-time tick, falls back to the last *completed* drive otherwise.
+- [x] Trip-in-progress card now shows active navigation route (destination, ETA, distance, energy at arrival, traffic delay) from MQTT `active_route`.
 
 ---
 
