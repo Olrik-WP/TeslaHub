@@ -196,7 +196,16 @@ export default function MapPage({ carId }: Props) {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-64px)]">
+    // paddingTop = env(safe-area-inset-top) pushes the range selector below the
+    // iOS translucent status bar (apple-mobile-web-app-status-bar-style:
+    // black-translucent in index.html). The outer height stays at 100dvh-64px
+    // (the area between the OS top and the bottom nav); border-box subtracts
+    // the padding from the content area, so the inner content (range selector
+    // + map) fills exactly the visible region without overflowing.
+    <div
+      className="flex flex-col h-[calc(100dvh-64px)]"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
       {driveId != null ? (
         <div className="flex items-center gap-2 p-2 bg-[#0a0a0a]">
           <button
