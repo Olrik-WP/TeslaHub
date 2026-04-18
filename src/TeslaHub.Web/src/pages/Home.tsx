@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Map, Marker } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useVehicleStatus } from '../hooks/useVehicle';
+import { useLiveStream } from '../hooks/useLiveStream';
 import { useChargingSessions } from '../hooks/useCharging';
 import { useDrives } from '../hooks/useDrives';
 import { useUnits } from '../hooks/useUnits';
@@ -81,7 +82,9 @@ const DOT_STYLE: React.CSSProperties = {
 export default function Home({ carId }: Props) {
   const navigate = useNavigate();
   const { data: rawVehicle } = useVehicleStatus(carId);
+  const { data: live, connected: liveConnected } = useLiveStream(carId);
   const vehicle = useStickyVehicle(rawVehicle);
+  const liveActive = liveConnected && live?.latitude != null && live?.longitude != null;
   const { data: charges } = useChargingSessions(carId, 10);
   const { data: drives } = useDrives(carId, 5);
   const { data: stats } = useQuery({
@@ -197,8 +200,8 @@ export default function Home({ carId }: Props) {
     : degradation < 15 ? '#eab308'
     : '#ef4444';
 
-  const lat = vehicle?.latitude;
-  const lng = vehicle?.longitude;
+  const lat = live?.latitude ?? vehicle?.latitude;
+  const lng = live?.longitude ?? vehicle?.longitude;
   const lang = i18n.language;
   useEffect(() => {
     if (lat == null || lng == null) return;
@@ -579,25 +582,31 @@ export default function Home({ carId }: Props) {
 
       {/* Map + Last trip */}
       <div className="flex flex-col sm:flex-row gap-3" style={{ minHeight: 200 }}>
-        {vehicle.latitude != null && vehicle.longitude != null && (
+        {lat != null && lng != null && (
           <div
             className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl overflow-hidden cursor-pointer active:bg-[#1a1a1a] transition-colors"
-            onClick={() => navigate(`/map?lat=${vehicle.latitude}&lng=${vehicle.longitude}`)}
+            onClick={() => navigate(`/map?lat=${lat}&lng=${lng}`)}
           >
-            <div className="px-3 pt-2 pb-1">
+            <div className="px-3 pt-2 pb-1 flex items-center justify-between">
               <span className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.position')}</span>
+              {liveActive && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#22c55e] uppercase tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
+                  {t('home.live')}
+                </span>
+              )}
             </div>
             <div className="h-[160px] sm:h-[220px]">
               <Map
-                longitude={vehicle.longitude}
-                latitude={vehicle.latitude}
+                longitude={lng}
+                latitude={lat}
                 zoom={15}
                 mapStyle={mapStyle.styleUrl}
                 interactive={false}
                 attributionControl={false}
                 style={{ width: '100%', height: '100%' }}
               >
-                <Marker longitude={vehicle.longitude} latitude={vehicle.latitude} anchor="center">
+                <Marker longitude={lng} latitude={lat} anchor="center">
                   <div style={DOT_STYLE} />
                 </Marker>
               </Map>
@@ -606,7 +615,9 @@ export default function Home({ carId }: Props) {
               {address && (
                 <p className="text-sm text-white truncate">{address}</p>
               )}
-              {vehicle.positionDate && (
+              {liveActive ? (
+                <p className="text-xs text-[#22c55e] mt-0.5">{t('home.liveNow')}</p>
+              ) : vehicle.positionDate && (
                 <p className="text-xs text-[#6b7280] mt-0.5">
                   {utcDate(vehicle.positionDate).toLocaleString()}
                 </p>

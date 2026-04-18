@@ -65,6 +65,8 @@
     "totalEnergyAdded": "Total energy added",
     "overallEfficiency": "Overall efficiency",
     "position": "Position",
+    "live": "Live",
+    "liveNow": "Live position via MQTT",
     "latestTrip": "Latest trip",
     "noTrips": "No trips yet",
     "chargingInProgress": "Charging in progress",
@@ -203,7 +205,11 @@
     "noData": "No data",
     "charges": "charges",
     "lastPosition": "Last position",
-    "start": "Start"
+    "start": "Start",
+    "followLive": "Follow live",
+    "followingLive": "Following live",
+    "liveUnavailable": "MQTT not available — live tracking disabled",
+    "livePoints": "live"
   },
   "settings": {
     "title": "Settings",
@@ -425,7 +431,11 @@
     "search": "Search address, city...",
     "visits": "visits",
     "lastVisit": "Last visit",
-    "noResults": "No locations found"
+    "noResults": "No locations found",
+    "mode_auto": "Auto",
+    "mode_pins": "Pins",
+    "mode_heat": "Heat",
+    "heatHint": "Switch to Pins to click locations"
   },
   "vehicleView": {
     "security": "Security",

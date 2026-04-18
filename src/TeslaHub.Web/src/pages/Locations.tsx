@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Map, Source, Layer, Popup } from 'react-map-gl/maplibre';
+import { Map, Source, Layer, Popup, NavigationControl } from 'react-map-gl/maplibre';
 import { useTranslation } from 'react-i18next';
 import { getLocationStats, getVisitedLocations, getTopCities } from '../api/queries';
 import { useMapStyle } from '../hooks/useMapStyle';
@@ -13,10 +13,12 @@ interface Props {
 }
 
 type Tab = 'map' | 'list';
+type MapMode = 'auto' | 'pins' | 'heat';
 
 export default function Locations({ carId }: Props) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('map');
+  const [mapMode, setMapMode] = useState<MapMode>('auto');
   const [search, setSearch] = useState('');
   const { styleUrl } = useMapStyle();
 
@@ -154,58 +156,133 @@ export default function Locations({ carId }: Props) {
 
       {tab === 'map' && mappable.length > 0 && (
         <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl overflow-hidden" style={{ height: 450 }}>
-          <Map
-            initialViewState={{ ...center, zoom: 6 }}
-            mapStyle={styleUrl}
-            attributionControl={false}
-            style={{ width: '100%', height: '100%' }}
-            interactiveLayerIds={['location-circles']}
-            onClick={(e) => {
-              const feat = e.features?.[0];
-              if (feat && feat.geometry.type === 'Point') {
-                const [lng, lat] = feat.geometry.coordinates;
-                setPopupInfo({
-                  longitude: lng, latitude: lat,
-                  address: feat.properties?.address ?? '',
-                  city: feat.properties?.city || null,
-                  visitCount: feat.properties?.visitCount ?? 0,
-                  lastVisited: feat.properties?.lastVisited ?? '',
-                });
-              }
-            }}
-          >
-            <Source id="locations" type="geojson" data={geojson}>
-              <Layer
-                id="location-circles"
-                type="circle"
-                paint={{
-                  'circle-radius': ['get', 'radius'],
-                  'circle-color': '#e31937',
-                  'circle-opacity': 0.7,
-                  'circle-stroke-color': '#fff',
-                  'circle-stroke-width': 1,
-                }}
-              />
-            </Source>
-
-            {popupInfo && (
-              <Popup
-                longitude={popupInfo.longitude}
-                latitude={popupInfo.latitude}
-                anchor="bottom"
-                onClose={() => setPopupInfo(null)}
-                closeOnClick={false}
-                className="text-black"
+          {/* Map mode picker */}
+          <div className="flex gap-1 px-2 py-1.5 border-b border-[#2a2a2a] bg-[#0a0a0a]">
+            {(['auto', 'pins', 'heat'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMapMode(m)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium min-h-[32px] transition-colors ${
+                  mapMode === m
+                    ? 'bg-[#e31937] text-white'
+                    : 'bg-[#1a1a1a] text-[#9ca3af]'
+                }`}
               >
-                <div className="text-xs">
-                  <div className="font-bold">{popupInfo.address}</div>
-                  {popupInfo.city && <div>{popupInfo.city}</div>}
-                  <div>{popupInfo.visitCount} {t('locationsPage.visits')}</div>
-                  <div className="text-gray-500">{utcDate(popupInfo.lastVisited).toLocaleDateString()}</div>
-                </div>
-              </Popup>
+                {t(`locationsPage.mode_${m}`)}
+              </button>
+            ))}
+            {mapMode === 'heat' && (
+              <span className="ml-auto text-[10px] text-[#9ca3af] self-center pr-2">
+                {t('locationsPage.heatHint')}
+              </span>
             )}
-          </Map>
+          </div>
+
+          <div style={{ height: 'calc(100% - 41px)' }}>
+            <Map
+              initialViewState={{ ...center, zoom: 6 }}
+              mapStyle={styleUrl}
+              attributionControl={false}
+              style={{ width: '100%', height: '100%' }}
+              interactiveLayerIds={mapMode === 'heat' ? [] : ['location-circles']}
+              onClick={(e) => {
+                if (mapMode === 'heat') return;
+                const feat = e.features?.[0];
+                if (feat && feat.geometry.type === 'Point') {
+                  const [lng, lat] = feat.geometry.coordinates;
+                  setPopupInfo({
+                    longitude: lng, latitude: lat,
+                    address: feat.properties?.address ?? '',
+                    city: feat.properties?.city || null,
+                    visitCount: feat.properties?.visitCount ?? 0,
+                    lastVisited: feat.properties?.lastVisited ?? '',
+                  });
+                }
+              }}
+            >
+              <NavigationControl position="top-left" showZoom showCompass />
+
+              <Source id="locations" type="geojson" data={geojson}>
+                {/* Heatmap layer (auto + heat modes) */}
+                {mapMode !== 'pins' && (
+                  <Layer
+                    id="location-heat"
+                    type="heatmap"
+                    maxzoom={mapMode === 'auto' ? 14 : 24}
+                    paint={{
+                      'heatmap-weight': [
+                        'interpolate', ['linear'], ['get', 'visitCount'],
+                        0, 0,
+                        Math.max(maxVisits, 1), 1,
+                      ],
+                      'heatmap-intensity': [
+                        'interpolate', ['linear'], ['zoom'],
+                        0, 1,
+                        14, 3,
+                      ],
+                      'heatmap-color': [
+                        'interpolate', ['linear'], ['heatmap-density'],
+                        0,    'rgba(59,130,246,0)',
+                        0.15, 'rgba(59,130,246,0.55)',
+                        0.4,  'rgba(34,197,94,0.7)',
+                        0.65, 'rgba(234,179,8,0.8)',
+                        0.85, 'rgba(245,158,11,0.85)',
+                        1,    'rgba(227,25,55,0.95)',
+                      ],
+                      'heatmap-radius': [
+                        'interpolate', ['linear'], ['zoom'],
+                        0, 4,
+                        14, 35,
+                      ],
+                      'heatmap-opacity':
+                        mapMode === 'auto'
+                          ? ['interpolate', ['linear'], ['zoom'], 11, 0.9, 14, 0]
+                          : 0.85,
+                    }}
+                  />
+                )}
+
+                {/* Click target circles (pins + auto modes) */}
+                {mapMode !== 'heat' && (
+                  <Layer
+                    id="location-circles"
+                    type="circle"
+                    paint={{
+                      'circle-radius': ['get', 'radius'],
+                      'circle-color': '#e31937',
+                      'circle-opacity':
+                        mapMode === 'auto'
+                          ? ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 0.7]
+                          : 0.7,
+                      'circle-stroke-color': '#fff',
+                      'circle-stroke-width':
+                        mapMode === 'auto'
+                          ? ['interpolate', ['linear'], ['zoom'], 11, 0, 13, 1]
+                          : 1,
+                    }}
+                  />
+                )}
+              </Source>
+
+              {popupInfo && (
+                <Popup
+                  longitude={popupInfo.longitude}
+                  latitude={popupInfo.latitude}
+                  anchor="bottom"
+                  onClose={() => setPopupInfo(null)}
+                  closeOnClick={false}
+                  className="text-black"
+                >
+                  <div className="text-xs">
+                    <div className="font-bold">{popupInfo.address}</div>
+                    {popupInfo.city && <div>{popupInfo.city}</div>}
+                    <div>{popupInfo.visitCount} {t('locationsPage.visits')}</div>
+                    <div className="text-gray-500">{utcDate(popupInfo.lastVisited).toLocaleDateString()}</div>
+                  </div>
+                </Popup>
+              )}
+            </Map>
+          </div>
         </div>
       )}
 
