@@ -6,6 +6,12 @@
 		reverse_proxy teslahub-api:8080
 	}
 
+	# Tesla Fleet API requires this path to serve the partner public key.
+	# Forward to the API container which generates and exposes it.
+	handle /.well-known/appspecific/* {
+		reverse_proxy teslahub-api:8080
+	}
+
 	handle {
 		try_files {path} /index.html
 		file_server
