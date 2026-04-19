@@ -69,19 +69,39 @@ log "Pulling latest code..."
 cd "$REPO_DIR"
 git -c core.fileMode=false pull --ff-only
 
-# ── Rebuild and restart only TeslaHub ────────────────────────────
+# ── Detect optional Security Alerts stack ────────────────────────
+# If the user enabled SECURITY_ALERTS_ENABLED=true and declared a
+# fleet-telemetry service in their compose, include it in the rebuild
+# cycle so it stays in sync with TeslaHub.
 cd "$DEPLOY_DIR"
 
+EXTRA_SERVICES=""
+if docker compose config --services 2>/dev/null | grep -qx "fleet-telemetry"; then
+  if grep -qE '^\s*SECURITY_ALERTS_ENABLED\s*=\s*true' "$DEPLOY_DIR/.env" 2>/dev/null; then
+    EXTRA_SERVICES="fleet-telemetry"
+    log "Security Alerts enabled — fleet-telemetry will be rebuilt too."
+  else
+    log "fleet-telemetry service detected but SECURITY_ALERTS_ENABLED is not 'true' — skipping it."
+  fi
+fi
+
+# ── Rebuild and restart TeslaHub (and fleet-telemetry if enabled) ──
+
 log "Stopping TeslaHub services..."
-docker compose stop teslahub-api teslahub-web 2>/dev/null || true
-docker compose rm -f teslahub-api teslahub-web 2>/dev/null || true
+docker compose stop teslahub-api teslahub-web $EXTRA_SERVICES 2>/dev/null || true
+docker compose rm -f teslahub-api teslahub-web $EXTRA_SERVICES 2>/dev/null || true
 
 APP_VERSION=$(cd "$REPO_DIR" && git describe --tags --always 2>/dev/null || echo "dev")
 log "Building TeslaHub API and Web (version: $APP_VERSION)..."
 docker compose build --build-arg APP_VERSION="$APP_VERSION" teslahub-api teslahub-web
 
+if [ -n "$EXTRA_SERVICES" ]; then
+  log "Building fleet-telemetry from source..."
+  docker compose build $EXTRA_SERVICES
+fi
+
 log "Starting TeslaHub services..."
-docker compose up -d teslahub-api teslahub-web
+docker compose up -d teslahub-api teslahub-web $EXTRA_SERVICES
 
 # ── Wait for API health ──────────────────────────────────────────
 log "Waiting for API health check..."
@@ -119,7 +139,7 @@ log "Docker disk usage after: ${DISK_AFTER:-unknown}"
 if $LOGS; then
   log "Showing TeslaHub logs (Ctrl+C to exit)..."
   cd "$DEPLOY_DIR"
-  docker compose logs -f teslahub-api teslahub-web --tail 30
+  docker compose logs -f teslahub-api teslahub-web $EXTRA_SERVICES --tail 30
 fi
 
 log "Dev update complete!"

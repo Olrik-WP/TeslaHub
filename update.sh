@@ -61,15 +61,36 @@ log "Deploy: $DEPLOY_DIR"
 DISK_BEFORE=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1)
 log "Docker disk usage before: ${DISK_BEFORE:-unknown}"
 
-# ── Pull latest images ───────────────────────────────────────────
+# ── Detect optional Security Alerts stack ────────────────────────
+# fleet-telemetry is built locally from Tesla's source (no public
+# image). If the user has it declared and Security Alerts is enabled,
+# include it in the rebuild cycle so the latest Tesla code is used.
 cd "$DEPLOY_DIR"
 
+EXTRA_BUILD=""
+if docker compose config --services 2>/dev/null | grep -qx "fleet-telemetry"; then
+  if grep -qE '^\s*SECURITY_ALERTS_ENABLED\s*=\s*true' "$DEPLOY_DIR/.env" 2>/dev/null; then
+    EXTRA_BUILD="fleet-telemetry"
+    log "Security Alerts enabled — fleet-telemetry will be rebuilt from local source."
+    if [ -d "$DEPLOY_DIR/fleet-telemetry-src/.git" ]; then
+      log "Pulling latest Tesla fleet-telemetry source..."
+      git -C "$DEPLOY_DIR/fleet-telemetry-src" pull --ff-only || warn "fleet-telemetry-src git pull failed — continuing with current sources."
+    fi
+  fi
+fi
+
+# ── Pull latest images ───────────────────────────────────────────
 log "Pulling latest TeslaHub images..."
 docker compose pull teslahub-init teslahub-api teslahub-web
 
+if [ -n "$EXTRA_BUILD" ]; then
+  log "Building fleet-telemetry from source..."
+  docker compose build $EXTRA_BUILD
+fi
+
 # ── Restart only TeslaHub ────────────────────────────────────────
 log "Restarting TeslaHub services..."
-docker compose up -d teslahub-init teslahub-api teslahub-web
+docker compose up -d teslahub-init teslahub-api teslahub-web $EXTRA_BUILD
 
 # ── Wait for API health ──────────────────────────────────────────
 log "Waiting for API health check..."
@@ -107,7 +128,7 @@ log "Docker disk usage after: ${DISK_AFTER:-unknown}"
 if $LOGS; then
   log "Showing TeslaHub logs (Ctrl+C to exit)..."
   cd "$DEPLOY_DIR"
-  docker compose logs -f teslahub-api teslahub-web --tail 30
+  docker compose logs -f teslahub-api teslahub-web $EXTRA_BUILD --tail 30
 fi
 
 log "Update complete!"
