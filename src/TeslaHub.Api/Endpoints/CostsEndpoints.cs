@@ -179,6 +179,7 @@ public static class CostsEndpoints
             settings.DashboardColorPreset = update.DashboardColorPreset;
             settings.DashboardMaxScale = update.DashboardMaxScale;
             settings.MapStyle = update.MapStyle;
+            settings.SecurityAlertsTeaserDismissed = update.SecurityAlertsTeaserDismissed;
 
             await db.SaveChangesAsync();
             return Results.Ok(settings);

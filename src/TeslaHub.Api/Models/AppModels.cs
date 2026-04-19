@@ -55,6 +55,14 @@ public class GlobalSettings
 
     [MaxLength(20)]
     public string MapStyle { get; set; } = "liberty3d";
+
+    /// <summary>
+    /// Whether the user has dismissed the Home page banner that
+    /// promotes the optional Security Alerts feature. Persisted in DB
+    /// (rather than browser localStorage) so the dismissal follows the
+    /// user across browsers and devices.
+    /// </summary>
+    public bool SecurityAlertsTeaserDismissed { get; set; }
 }
 
 public class CarConfig

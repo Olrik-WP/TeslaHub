@@ -1,10 +1,9 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
-
-const DISMISS_KEY = 'teslahub_security_teaser_dismissed';
+import { getSettings } from '../api/queries';
+import type { GlobalSettings } from '../api/queries';
 
 type TeslaOAuthStatus = {
   configured: boolean;
@@ -14,12 +13,15 @@ type TeslaOAuthStatus = {
 /**
  * Reminds the user that Security Alerts exist when they have not been
  * configured yet. Shown on the Home page above the dashboard. Dismissible
- * (state persisted in localStorage). Hidden once the feature is connected.
+ * — the dismissed state is persisted in the existing GlobalSettings table
+ * (PUT /costs/settings) so the choice follows the user across browsers
+ * and devices, just like the other UI preferences (language, theme...).
+ * Hidden once the Tesla account is connected.
  */
 export default function SecurityAlertsTeaser() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISS_KEY) === '1');
+  const queryClient = useQueryClient();
 
   const { data: status } = useQuery<TeslaOAuthStatus>({
     queryKey: ['teslaOAuthStatus'],
@@ -28,7 +30,25 @@ export default function SecurityAlertsTeaser() {
     retry: false,
   });
 
-  if (dismissed || !status || status.connected) return null;
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: getSettings,
+    staleTime: 5 * 60_000,
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: () => {
+      if (!settings) return Promise.reject(new Error('Settings not loaded yet.'));
+      const updated: GlobalSettings = { ...settings, securityAlertsTeaserDismissed: true };
+      return api<GlobalSettings>('/costs/settings', { method: 'PUT', body: JSON.stringify(updated) });
+    },
+    onSuccess: (next) => {
+      queryClient.setQueryData(['settings'], next);
+    },
+  });
+
+  if (!status || status.connected) return null;
+  if (!settings || settings.securityAlertsTeaserDismissed) return null;
 
   return (
     <div className="bg-[#141414] border border-[#3d2a1a] rounded-xl p-3 sm:p-4 mx-4 mt-3 mb-1 flex items-start gap-3">
@@ -46,11 +66,9 @@ export default function SecurityAlertsTeaser() {
             {t('securityAlerts.homeTeaser.cta')}
           </button>
           <button
-            className="bg-transparent border border-[#2a2a2a] text-[#9ca3af] px-3 py-1.5 rounded-lg text-xs font-medium active:bg-[#1a1a1a]"
-            onClick={() => {
-              localStorage.setItem(DISMISS_KEY, '1');
-              setDismissed(true);
-            }}
+            className="bg-transparent border border-[#2a2a2a] text-[#9ca3af] px-3 py-1.5 rounded-lg text-xs font-medium active:bg-[#1a1a1a] disabled:opacity-50"
+            disabled={dismissMutation.isPending}
+            onClick={() => dismissMutation.mutate()}
           >
             {t('securityAlerts.homeTeaser.dismiss')}
           </button>

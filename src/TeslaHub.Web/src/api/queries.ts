@@ -236,6 +236,7 @@ export interface GlobalSettings {
   dashboardColorPreset: string;
   dashboardMaxScale: number;
   mapStyle: string;
+  securityAlertsTeaserDismissed: boolean;
 }
 
 export interface MonthlyTrend {

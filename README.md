@@ -242,9 +242,15 @@ When MQTT is not connected, TeslaHub shows a subtle indicator and hides the body
 
 ## Security Alerts (optional)
 
-> **Status:** PR 1 of 4 — Tesla OAuth foundation only. Full real-time Sentry alerts arrive in subsequent releases.
+TeslaHub can optionally connect to your Tesla account via the official **Tesla Fleet API** to deliver real-time security features that go beyond what TeslaMate can capture — most importantly the `SentryModeStateAware` event raised when Sentry detects activity around the vehicle, and break-in detection. Alerts are pushed to Telegram in seconds.
 
-TeslaHub can optionally connect to your Tesla account via the official **Tesla Fleet API** to enable real-time security features that go beyond what TeslaMate can capture (most importantly the `SentryModeStateAware` event raised when Sentry detects activity around the vehicle).
+### What you get
+
+- 🚨 Instant Telegram notification when Tesla Sentry detects activity (`SentryModeStateAware` / `Panic`).
+- 🔓 Break-in detection (vehicle locked but a door / trunk / frunk opens).
+- 👥 Per-recipient routing: multiple Telegram chats can be configured, each subscribed to specific vehicles, with Sentry and break-in toggles per (recipient, vehicle) pair.
+- 📜 Last 500 alerts kept in PostgreSQL with delivery status.
+- 🛠 Full setup wizard inside TeslaHub Settings — copy-paste for every Tesla developer app field, QR code for vehicle pairing, "Send test" button for Telegram.
 
 ### Philosophy: 100% self-hosted, zero third party
 
@@ -252,20 +258,11 @@ TeslaHub never relies on a shared backend. Each TeslaHub installation registers 
 
 > **Credit:** the architecture is heavily inspired by the excellent open-source project [SentryGuard](https://github.com/abarghoud/SentryGuard) by Anas Barghoud (AGPL-3.0). TeslaHub re-implements the same concepts in C#/.NET so they fit naturally into the existing TeslaHub stack — and crucially, does so **without any shared infrastructure**.
 
-### Roadmap
+### What you need
 
-| PR | Scope | Status |
-|---|---|---|
-| **1** | Tesla Fleet API OAuth foundation, encrypted token storage, automatic refresh, "Connect Tesla account" UI | ✅ This release |
-| **2** | Public-key generation, `.well-known` endpoint, vehicle pairing wizard with QR code | ✅ This release |
-| **3** | `fleet-telemetry` + NATS Docker stack, Caddy snippets for the telemetry sub-domain | ✅ This release |
-| **4** | Real-time Sentry / Break-in detection, recipient × vehicle notification matrix, Telegram bot delivery | ✅ This release |
-
-### What you need (eventually)
-
-- A public domain name (TeslaHub orange / proxied subdomain + a DNS-only telemetry subdomain — see PR 3 docs)
-- A free Tesla developer app at [developer.tesla.com](https://developer.tesla.com)
-- A personal Telegram bot (created in 30 seconds via [@BotFather](https://t.me/BotFather))
+- A public domain name (TeslaHub web on a proxied subdomain + a DNS-only telemetry subdomain — see [Telemetry stack](#telemetry-stack-self-hosted-fleet-telemetry-server) below).
+- A free Tesla developer app at [developer.tesla.com](https://developer.tesla.com).
+- A personal Telegram bot (created in 30 seconds via [@BotFather](https://t.me/BotFather)).
 
 Everything stays on **your** server. No third-party cloud, no shared client_id, no relayed messages.
 
@@ -296,8 +293,11 @@ TESLA_REDIRECT_URI=https://teslahub.yourdomain.com/api/tesla-oauth/callback
 # NA/AP: https://fleet-api.prd.na.vn.cloud.tesla.com
 TESLA_AUDIENCE=https://fleet-api.prd.eu.vn.cloud.tesla.com
 
-# Reserved for upcoming PRs — leave false for now
-SECURITY_ALERTS_ENABLED=false
+# Master switch — set to true to start the telemetry consumer.
+# The full feature also requires the Telegram + telemetry stack
+# variables documented further down. Default false keeps everything
+# off, including for users who do not want this feature.
+SECURITY_ALERTS_ENABLED=true
 ```
 
 ### Step 3 — Wire them into your `teslahub-api` service
@@ -345,7 +345,7 @@ teslahub.yourdomain.com {
 }
 ```
 
-### Receiving real-time telemetry (Fleet Telemetry stack)
+### Telemetry stack (self-hosted Fleet Telemetry server)
 
 This is where the actual Sentry events start flowing into your TeslaHub. **Two extra services** are added on demand via a Docker Compose `profile`, so they only run when you opt in.
 
@@ -485,18 +485,6 @@ The full alert history (last 500) is visible in the *Recent alerts* panel of Set
 - The API container reconnects to NATS automatically with a 10-second back-off if the broker is unavailable.
 - Telegram failures are recorded in the alert event row (`failureReason`) so you can diagnose via the *Recent alerts* panel.
 - Tesla OAuth tokens are refreshed proactively every 30 minutes; failures are surfaced in Settings.
-
-### Telegram bot (preview — used in PR 4)
-
-To save you a step when PR 4 lands, here is how to create your personal Telegram bot ahead of time:
-
-1. Open Telegram and start a chat with [@BotFather](https://t.me/BotFather).
-2. Send `/newbot`. Pick a display name (e.g. *My TeslaHub Alerts*) and a username ending in `bot` (e.g. `myteslahub_alerts_bot`).
-3. BotFather replies with an HTTP API token like `123456789:ABCdef...`. Keep it safe — this is your bot's password.
-4. Open your new bot in Telegram and send `/start` so the bot can later reply to you.
-5. To find your numeric chat ID, send any message to [@userinfobot](https://t.me/userinfobot); it replies with your `id`.
-
-Store both values somewhere safe. PR 4 will let you paste them into a per-recipient form in TeslaHub Settings, with a "send test message" button to confirm everything works.
 
 ### Security model
 
