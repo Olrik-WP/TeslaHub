@@ -13,6 +13,7 @@ import BatteryGauge from '../components/BatteryGauge';
 import StatCard from '../components/StatCard';
 import VehicleTopView from '../components/VehicleTopView';
 import GoToCarSheet from '../components/GoToCarSheet';
+import SecurityAlertsTeaser from '../components/SecurityAlertsTeaser';
 import { getStats, getChargingStats, getDriveStats, getSettings, getCostOverrides, getCostSummary, getTeslaMateCostSummary, getCarConfig } from '../api/queries';
 import type { VehicleStatus } from '../api/queries';
 import { useTranslation } from 'react-i18next';
@@ -259,6 +260,10 @@ export default function Home({ carId }: Props) {
 
   return (
     <div className="p-4 space-y-4">
+      <div className="-mx-4">
+        <SecurityAlertsTeaser />
+      </div>
+
       {/* Hero: Vehicle image with drive stats */}
       <div className="bg-[#141414] rounded-xl overflow-hidden">
         {/* Top row: drive averages */}

@@ -9,7 +9,9 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(process.env.APP_VERSION || pkg.version),
   },
   build: {
-    target: 'es2017',
+    // ES2020 is required by maplibre-gl 5+ (uses BigInt literals).
+    // Supported by Tesla in-car Chromium (>=80), Safari 14+, modern Chrome / Firefox / Edge.
+    target: ['es2020', 'safari14'],
   },
   server: {
     proxy: {

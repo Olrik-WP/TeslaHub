@@ -9,6 +9,7 @@ import { LANGUAGES } from '../i18n';
 import { MAP_STYLES } from '../hooks/useMapStyle';
 import type { GlobalSettings, ChargingLocation } from '../api/queries';
 import CustomSelect from '../components/CustomSelect';
+import SecurityAlertsCard from '../components/SecurityAlertsCard';
 
 interface Props {
   carId: number | undefined;
@@ -482,6 +483,9 @@ export default function Settings({ carId }: Props) {
           )}
         </div>
       </div>
+
+      {/* Security Alerts (optional Tesla Fleet API integration) */}
+      <SecurityAlertsCard />
 
       {/* Change password */}
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-3">

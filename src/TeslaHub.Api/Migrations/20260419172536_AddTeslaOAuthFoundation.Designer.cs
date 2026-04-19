@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TeslaHub.Api.Data;
@@ -11,9 +12,11 @@ using TeslaHub.Api.Data;
 namespace TeslaHub.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260419172536_AddTeslaOAuthFoundation")]
+    partial class AddTeslaOAuthFoundation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -323,127 +326,6 @@ namespace TeslaHub.Api.Migrations
                         });
                 });
 
-            modelBuilder.Entity("TeslaHub.Api.Models.NotificationRecipient", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ChannelTarget")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("ChannelType")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Language")
-                        .IsRequired()
-                        .HasMaxLength(5)
-                        .HasColumnType("character varying(5)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("NotificationRecipients");
-                });
-
-            modelBuilder.Entity("TeslaHub.Api.Models.RecipientVehicleSubscription", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("BreakInAlerts")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("RecipientId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("SentryAlerts")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("TeslaVehicleId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TeslaVehicleId");
-
-                    b.HasIndex("RecipientId", "TeslaVehicleId")
-                        .IsUnique();
-
-                    b.ToTable("RecipientVehicleSubscriptions");
-                });
-
-            modelBuilder.Entity("TeslaHub.Api.Models.SecurityAlertEvent", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("AlertType")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<string>("Detail")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime>("DetectedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FailureReason")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<int>("RecipientsFailed")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("RecipientsNotified")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("VehicleDisplayName")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Vin")
-                        .IsRequired()
-                        .HasMaxLength(17)
-                        .HasColumnType("character varying(17)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DetectedAt");
-
-                    b.ToTable("SecurityAlertEvents");
-                });
-
             modelBuilder.Entity("TeslaHub.Api.Models.TeslaAccount", b =>
                 {
                     b.Property<int>("Id")
@@ -510,45 +392,6 @@ namespace TeslaHub.Api.Migrations
                     b.ToTable("TeslaAccounts");
                 });
 
-            modelBuilder.Entity("TeslaHub.Api.Models.TeslaKeyPair", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Domain")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string>("EncryptedPrivateKeyPem")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("PartnerRegistered")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("PartnerRegisteredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PartnerRegistrationError")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<string>("PublicKeyPem")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("TeslaKeyPairs");
-                });
-
             modelBuilder.Entity("TeslaHub.Api.Models.TeslaVehicle", b =>
                 {
                     b.Property<int>("Id")
@@ -603,25 +446,6 @@ namespace TeslaHub.Api.Migrations
                         .HasForeignKey("LocationId");
 
                     b.Navigation("Location");
-                });
-
-            modelBuilder.Entity("TeslaHub.Api.Models.RecipientVehicleSubscription", b =>
-                {
-                    b.HasOne("TeslaHub.Api.Models.NotificationRecipient", "Recipient")
-                        .WithMany()
-                        .HasForeignKey("RecipientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("TeslaHub.Api.Models.TeslaVehicle", "TeslaVehicle")
-                        .WithMany()
-                        .HasForeignKey("TeslaVehicleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Recipient");
-
-                    b.Navigation("TeslaVehicle");
                 });
 
             modelBuilder.Entity("TeslaHub.Api.Models.TeslaVehicle", b =>

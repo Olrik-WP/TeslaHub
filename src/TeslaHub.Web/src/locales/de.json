@@ -554,5 +554,169 @@
     "elevation": "Höhe",
     "geofence": "Standort",
     "shiftState": "Gang"
+  },
+  "securityAlerts": {
+    "title": "Sicherheitswarnungen",
+    "subtitle": "Optionale Echtzeit-Benachrichtigungen für Tesla Sentry & Einbruchsversuche.",
+    "selfHostNote": "Mit Ihrer eigenen Tesla-Developer-App betrieben — vollständig selbstgehostet.",
+    "creditPrefix": "Inspiriert von",
+    "creditSuffix": "(AGPL-3.0). TeslaHub bleibt vollständig selbstgehostet: keine Daten verlassen Ihren Server.",
+    "statusConnected": "verbunden",
+    "statusNotConnected": "nicht verbunden",
+    "statusNotConfigured": "nicht konfiguriert",
+    "loading": "Wird geladen…",
+    "feedback": {
+      "connected": "Tesla-Konto erfolgreich verbunden.",
+      "missingParams": "Tesla hat eine unvollständige Antwort gesendet. Bitte erneut versuchen.",
+      "authError": "Tesla-Authentifizierung fehlgeschlagen.",
+      "loginError": "Tesla-Anmeldung konnte nicht gestartet werden.",
+      "refreshed": "Tesla-Tokens aktualisiert.",
+      "refreshFailed": "Aktualisierung fehlgeschlagen.",
+      "disconnected": "Tesla-Konto getrennt.",
+      "disconnectFailed": "Trennung fehlgeschlagen."
+    },
+    "notConfigured": {
+      "intro": "Um Echtzeit-Sentry-Benachrichtigungen zu aktivieren, registrieren Sie eine Tesla-Developer-App und konfigurieren Sie diese Umgebungsvariablen auf dieser TeslaHub-Instanz:",
+      "redirectHint": "muss enden mit",
+      "guideLink": "Vollständige Anleitung öffnen",
+      "guideHint": "in der TeslaHub-README für die Schritt-für-Schritt-Anleitung."
+    },
+    "notConnected": {
+      "intro": "Melden Sie sich mit dem Tesla-Konto an, das die zu überwachenden Fahrzeuge besitzt. Tokens werden im Ruhezustand mit AES-GCM verschlüsselt und verlassen Ihre TeslaHub-Instanz nie.",
+      "connect": "Tesla-Konto verbinden",
+      "redirecting": "Weiterleitung…"
+    },
+    "connectedPanel": {
+      "account": "Konto",
+      "vehicles": "Fahrzeuge",
+      "vehiclesHint": "nach Pairing entdeckt",
+      "accessToken": "Access-Token",
+      "lastRefresh": "Letzte Aktualisierung",
+      "expiresIn": "läuft ab in {{value}}",
+      "expired": "abgelaufen",
+      "minutes": "{{count}} min",
+      "hours": "{{count}} Std",
+      "days": "{{count}} T",
+      "failedAttempts": "{{count}} fehlgeschlagene Versuche",
+      "lastError": "Letzter Fehler: {{detail}}",
+      "scopes": "Gewährte Scopes",
+      "refresh": "Tokens jetzt aktualisieren",
+      "refreshing": "Aktualisierung…",
+      "disconnect": "Trennen",
+      "disconnecting": "Trennung läuft…",
+      "confirmDisconnect": "Tesla-Konto trennen? Sie müssen sich erneut anmelden, um Benachrichtigungen zu erhalten."
+    },
+    "developerApp": {
+      "title": "0. Tesla-Developer-App erstellen",
+      "intro": "Zuerst benötigen Sie eine Tesla-Fleet-API client_id und client_secret. Sie identifizieren diese TeslaHub-Instanz gegenüber Tesla. Der Vorgang ist kostenlos und dauert etwa fünf Minuten.",
+      "step1": "Öffnen Sie <link>developer.tesla.com</link>, klicken Sie auf <b>Sign in</b> und nutzen Sie Ihre bestehenden Tesla-Konto-Anmeldedaten.",
+      "step2": "Im linken Menü zu <b>Apps</b>, dann <b>Create New App</b> klicken.",
+      "step3": "Füllen Sie das Formular mit den unten stehenden Werten aus — verwenden Sie die Kopier-Buttons, um Tippfehler zu vermeiden.",
+      "appNameLabel": "App-Name",
+      "appNameValue": "TeslaHub Self-Hosted",
+      "descriptionLabel": "Beschreibung",
+      "descriptionValue": "Personal companion dashboard for TeslaMate",
+      "originLabel": "Allowed Origin URL",
+      "redirectLabel": "Allowed Redirect URI",
+      "scopesLabel": "Erforderliche Scopes",
+      "scopesValue": "openid, offline_access, vehicle_device_data, vehicle_cmds",
+      "step4": "Klicken Sie auf <b>Submit</b>. Tesla liefert eine Client ID und ein Client Secret — bewahren Sie sie sicher auf, das Secret wird nicht erneut angezeigt.",
+      "step5": "Fügen Sie diese drei Variablen zu Ihrer TeslaHub-<code>.env</code>-Datei hinzu:",
+      "envHint": "Dann starten Sie die API neu: <code>docker compose up -d teslahub-api</code>. Diese Seite anschließend aktualisieren.",
+      "copy": "Kopieren",
+      "copied": "Kopiert!"
+    },
+    "wizard": {
+      "title": "Fahrzeug-Pairing-Assistent",
+      "intro": "Sobald Ihr Tesla-Konto verbunden ist, folgen Sie diesen Schritten, um diese TeslaHub-Instanz zum Empfang von Telemetrie zu autorisieren.",
+      "step1": {
+        "title": "1. Öffentlichen Schlüssel für Ihre Domain generieren",
+        "intro": "TeslaHub erstellt ein EC-P-256-Schlüsselpaar und stellt den öffentlichen Schlüssel an einer festen Well-Known-URL bereit. Der private Schlüssel wird im Ruhezustand mit AES-GCM verschlüsselt und verlässt die Datenbank nie.",
+        "domainLabel": "Öffentliche Domain",
+        "domainPlaceholder": "teslahub.ihredomain.de",
+        "domainHint": "Verwenden Sie den Host, unter dem TeslaHub im öffentlichen Internet erreichbar ist (kein http://-Präfix, kein Pfad).",
+        "generate": "Öffentlichen Schlüssel generieren",
+        "regenerate": "Neu generieren (setzt Pairing zurück!)",
+        "generating": "Wird generiert…",
+        "publicKeyUrl": "URL des öffentlichen Schlüssels",
+        "publicKeyTestHint": "Öffnen Sie diese URL in einem neuen Tab — sie muss Ihren öffentlichen Schlüssel im PEM-Format zurückgeben. Wenn das fehlschlägt, prüfen Sie Ihren DNS-Eintrag, Ihren Reverse Proxy (Caddy/Nginx), und dass der Pfad /.well-known/appspecific/com.tesla.3p.public-key.pem den TeslaHub-API-Container erreicht.",
+        "publicKeyTestLink": "Schlüssel-Endpoint testen"
+      },
+      "step2": {
+        "title": "2. Domain bei Tesla registrieren",
+        "intro": "Teilt Tesla mit, dass Ihre Domain eine Partner-Anwendung hostet. Tesla holt den öffentlichen Schlüssel von Ihrem .well-known-Endpoint ab.",
+        "register": "Partner-Domain registrieren",
+        "registering": "Registrierung…",
+        "reregister": "Erneut registrieren"
+      },
+      "step3": {
+        "title": "3. Jedes Fahrzeug mit TeslaHub koppeln",
+        "sync": "Fahrzeuge mit Tesla synchronisieren",
+        "syncing": "Synchronisierung…",
+        "qrIntro": "Scannen Sie diesen QR-Code mit Ihrem iPhone (oder öffnen Sie den Link unten im Browser Ihres Telefons):",
+        "qrHint": "Die Tesla-Mobile-App fordert Sie auf, den virtuellen Schlüssel von TeslaHub für das ausgewählte Fahrzeug zu genehmigen. Wiederholen Sie dies für jedes Auto. Nach Genehmigung klicken Sie auf Genehmigt neben dem Fahrzeug.",
+        "noVehicles": "Noch keine Fahrzeuge synchronisiert. Klicken Sie oben auf Fahrzeuge synchronisieren.",
+        "paired": "gekoppelt",
+        "notPaired": "nicht gekoppelt",
+        "approve": "Genehmigt",
+        "unmark": "Markierung entfernen"
+      },
+      "step4": {
+        "title": "4. Tesla bitten, Telemetrie zu streamen",
+        "intro": "Sobald Ihr fleet-telemetry-Container läuft und unter telemetry.ihredomain.de erreichbar ist (siehe README), klicken Sie unten. TeslaHub ruft /fleet_telemetry_config_create für jedes gekoppelte Fahrzeug auf.",
+        "configure": "Telemetrie für alle gekoppelten Fahrzeuge konfigurieren",
+        "configuring": "Konfiguration…",
+        "needPaired": "Koppeln Sie zuerst mindestens ein Fahrzeug in Schritt 3.",
+        "configured": "konfiguriert"
+      },
+      "feedback": {
+        "keyGenerated": "Öffentlicher Schlüssel generiert.",
+        "keyError": "Schlüsselgenerierung fehlgeschlagen.",
+        "registered": "Domain bei Tesla als Partner registriert.",
+        "registerError": "Partner-Registrierung fehlgeschlagen.",
+        "synced": "{{count}} Fahrzeug(e) synchronisiert.",
+        "syncError": "Fahrzeug-Synchronisierung fehlgeschlagen.",
+        "telemetryConfigured": "Telemetrie bei Tesla konfiguriert. Streaming startet, wenn das Fahrzeug aktiv ist.",
+        "telemetryError": "Telemetrie-Konfiguration fehlgeschlagen."
+      },
+      "common": {
+        "todo": "offen",
+        "done": "erledigt"
+      }
+    },
+    "recipients": {
+      "title": "Benachrichtigungs-Empfänger",
+      "intro": "Fügen Sie einen Eintrag pro Person hinzu, die Telegram-Benachrichtigungen erhalten soll. Jeder Empfänger kann unabhängig ein oder mehrere Fahrzeuge abonnieren. Sentry- und Einbruchs-Benachrichtigungen sind pro (Empfänger, Fahrzeug) umschaltbar.",
+      "addTitle": "Empfänger hinzufügen",
+      "namePlaceholder": "Name (z. B. Anna)",
+      "chatIdPlaceholder": "Telegram-Chat-ID",
+      "chatIdHelp": "Telegram-Chat-ID finden: senden Sie eine Nachricht an <link>@userinfobot</link>; er antwortet mit Ihrer numerischen id. Stellen Sie sicher, dass Sie zuerst einen Chat mit Ihrem TeslaHub-Bot gestartet haben (siehe README), damit er Ihnen schreiben kann.",
+      "addButton": "Empfänger hinzufügen",
+      "adding": "Hinzufügen…",
+      "telegramTarget": "Telegram-Chat",
+      "sendTest": "Test senden",
+      "remove": "Entfernen",
+      "confirmRemove": "Empfänger {{name}} löschen?",
+      "matrixVehicle": "Fahrzeug",
+      "matrixSentry": "Sentry",
+      "matrixBreakIn": "Einbruch",
+      "needPairedVehicle": "Koppeln Sie mindestens ein Fahrzeug, um Abonnements zuzuweisen.",
+      "feedback": {
+        "added": "Empfänger hinzugefügt.",
+        "testSent": "Test-Nachricht gesendet."
+      }
+    },
+    "history": {
+      "title": "Letzte Benachrichtigungen",
+      "empty": "Noch keine Benachrichtigungen empfangen.",
+      "notified": "{{count}} benachrichtigt",
+      "failed": "{{count}} fehlgeschlagen"
+    },
+    "homeTeaser": {
+      "title": "Echtzeit-Sentry-Benachrichtigungen verfügbar",
+      "body": "TeslaHub kann Ihnen sofortige Telegram-Benachrichtigungen senden, wenn Tesla Sentry Aktivität rund um Ihr Auto erkennt. Die Funktion ist vollständig selbstgehostet — kein Drittanbieter erforderlich.",
+      "cta": "In Einstellungen → Sicherheitswarnungen einrichten",
+      "dismiss": "Ausblenden"
+    }
   }
 }

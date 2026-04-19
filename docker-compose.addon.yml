@@ -47,6 +47,18 @@ services:
       - MQTT_USER=${MQTT_USER:-}
       - MQTT_PASSWORD=${MQTT_PASSWORD:-}
       - MQTT_NAMESPACE=${MQTT_NAMESPACE:-}
+      # Optional — Security Alerts (Tesla Fleet API). Leave empty to disable.
+      # See README.md → "Security Alerts (optional)" for the full setup guide.
+      - TESLA_CLIENT_ID=${TESLA_CLIENT_ID:-}
+      - TESLA_CLIENT_SECRET=${TESLA_CLIENT_SECRET:-}
+      - TESLA_REDIRECT_URI=${TESLA_REDIRECT_URI:-}
+      - TESLA_AUDIENCE=${TESLA_AUDIENCE:-}
+      - SECURITY_ALERTS_ENABLED=${SECURITY_ALERTS_ENABLED:-false}
+      - TELEMETRY_DOMAIN=${TELEMETRY_DOMAIN:-}
+      - TELEMETRY_PORT=${TELEMETRY_PORT:-8443}
+      - TELEMETRY_CA_PATH=${TELEMETRY_CA_PATH:-/etc/teslahub/server-ca.crt}
+      - NATS_URL=${NATS_URL:-nats://nats:4222}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TZ=${TZ:-Europe/Paris}
     ports:
       - "127.0.0.1:4001:8080"
