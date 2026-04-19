@@ -134,11 +134,20 @@ public sealed class TeslaPairingService
             throw new InvalidOperationException("TELEMETRY_DOMAIN env var is not set.");
 
         var port = int.TryParse(config["TELEMETRY_PORT"], out var p) ? p : 8443;
-        var caPath = config["TELEMETRY_CA_PATH"] ?? "/etc/teslahub/server-ca.crt";
-        var ca = File.Exists(caPath) ? await File.ReadAllTextAsync(caPath, cancellationToken) : string.Empty;
-        if (string.IsNullOrWhiteSpace(ca))
+
+        // Tesla expects the CA chain that signed our telemetry TLS server
+        // certificate. Caddy already stores the cert + intermediate chain
+        // it obtained from Let's Encrypt at:
+        //   /certs/<domain>/<domain>.crt   (mounted read-only from the
+        //   Caddy data directory; see docker-compose.*.yml).
+        var caPath = config["TELEMETRY_CA_PATH"] ?? $"/certs/{hostname}/{hostname}.crt";
+        if (!File.Exists(caPath))
             throw new InvalidOperationException(
-                $"Server CA file not found or empty at {caPath}. Place the Tesla server CA there before configuring telemetry.");
+                $"Telemetry TLS certificate not found at {caPath}. " +
+                $"Make sure {hostname} is set up in Caddy and the cert directory is mounted into teslahub-api.");
+        var ca = await File.ReadAllTextAsync(caPath, cancellationToken);
+        if (string.IsNullOrWhiteSpace(ca))
+            throw new InvalidOperationException($"Telemetry TLS certificate at {caPath} is empty.");
 
         var ids = vehicleIds.ToHashSet();
         var vehicles = await _db.Set<TeslaVehicle>()

@@ -56,12 +56,20 @@ services:
       - SECURITY_ALERTS_ENABLED=${SECURITY_ALERTS_ENABLED:-false}
       - TELEMETRY_DOMAIN=${TELEMETRY_DOMAIN:-}
       - TELEMETRY_PORT=${TELEMETRY_PORT:-8443}
-      - TELEMETRY_CA_PATH=${TELEMETRY_CA_PATH:-/etc/teslahub/server-ca.crt}
-      - NATS_URL=${NATS_URL:-nats://nats:4222}
+      - TELEMETRY_MQTT_HOST=${TELEMETRY_MQTT_HOST:-mosquitto}
+      - TELEMETRY_MQTT_PORT=${TELEMETRY_MQTT_PORT:-1883}
+      - TELEMETRY_MQTT_USER=${TELEMETRY_MQTT_USER:-}
+      - TELEMETRY_MQTT_PASSWORD=${TELEMETRY_MQTT_PASSWORD:-}
+      - TELEMETRY_MQTT_TOPIC_BASE=${TELEMETRY_MQTT_TOPIC_BASE:-telemetry}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TZ=${TZ:-Europe/Paris}
     ports:
       - "127.0.0.1:4001:8080"
+    volumes:
+      # Mount the Caddy certs read-only so the API can read the
+      # TLS chain to send to Tesla when configuring telemetry.
+      # Optional — only needed when Security Alerts is enabled.
+      - ${CADDY_CERTS_PATH:-/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory}:/certs:ro
     depends_on:
       - database
       - teslahub-init
