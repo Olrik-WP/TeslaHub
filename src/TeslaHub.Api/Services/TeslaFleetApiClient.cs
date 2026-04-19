@@ -199,4 +199,5 @@ public record TelemetryConfigRequest(
     string CaCertificate,
     Dictionary<string, TelemetryField> Fields);
 
-public record TelemetryField(int IntervalSeconds);
+public record TelemetryField(
+    [property: System.Text.Json.Serialization.JsonPropertyName("interval_seconds")] int IntervalSeconds);
