@@ -21,15 +21,18 @@ public sealed class TeslaFleetApiClient
     private readonly IHttpClientFactory _httpFactory;
     private readonly TeslaOAuthService _oauth;
     private readonly ILogger<TeslaFleetApiClient> _logger;
+    private readonly string? _proxyBaseUrl;
 
     public TeslaFleetApiClient(
         IHttpClientFactory httpFactory,
         TeslaOAuthService oauth,
+        IConfiguration configuration,
         ILogger<TeslaFleetApiClient> logger)
     {
         _httpFactory = httpFactory;
         _oauth = oauth;
         _logger = logger;
+        _proxyBaseUrl = configuration["TESLA_COMMAND_PROXY_URL"];
     }
 
     public async Task<PartnerRegistrationResult> RegisterPartnerDomainAsync(
@@ -82,32 +85,43 @@ public sealed class TeslaFleetApiClient
             },
         };
 
-        // Endpoint name: /api/1/vehicles/fleet_telemetry_config (no _create suffix).
-        // Tesla also expects the call to be signed by the partner private key —
-        // in production this is done by routing through the vehicle-command-proxy.
-        // For our self-hosted setup we hit the endpoint directly first; if Tesla
-        // returns 412 Precondition Failed the user will need to add the proxy
-        // (see README "Telemetry stack" troubleshooting section).
-        var http = new HttpRequestMessage(HttpMethod.Post,
-            $"{refreshed.Audience.TrimEnd('/')}/api/1/vehicles/fleet_telemetry_config")
+        // Tesla requires fleet_telemetry_config to be sent through the
+        // vehicle-command HTTP proxy so the request is signed by the
+        // partner private key. The TESLA_COMMAND_PROXY_URL env var points
+        // to the local proxy container (e.g. https://tesla-http-proxy:443).
+        // The proxy preserves the user's bearer token and just adds the
+        // signature on top, then forwards to fleet-api.
+        var endpointBase = string.IsNullOrWhiteSpace(_proxyBaseUrl)
+            ? refreshed.Audience.TrimEnd('/')
+            : _proxyBaseUrl.TrimEnd('/');
+
+        var url = $"{endpointBase}/api/1/vehicles/fleet_telemetry_config";
+
+        var http = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = JsonContent.Create(payload),
         };
         http.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var client = _httpFactory.CreateClient("tesla");
+        // The proxy uses a self-signed TLS cert by default — accept it for
+        // the proxy hostname only. Direct Tesla calls keep strict TLS.
+        var clientName = string.IsNullOrWhiteSpace(_proxyBaseUrl) ? "tesla" : "tesla-proxy";
+        var client = _httpFactory.CreateClient(clientName);
+
         using var response = await client.SendAsync(http, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Tesla fleet_telemetry_config_create returned {StatusCode}: {Body}",
+            _logger.LogWarning("Tesla fleet_telemetry_config returned {StatusCode}: {Body}",
                 response.StatusCode, Truncate(body, 500));
-            return new TelemetryConfigResult(false, $"{(int)response.StatusCode}: {Truncate(body, 300)}");
+            return new TelemetryConfigResult(false,
+                $"{(int)response.StatusCode}: {Truncate(body, 300)}");
         }
 
         return new TelemetryConfigResult(true, null);
     }
+
 
     public async Task<List<TeslaVehicle>> ListVehiclesAsync(
         TeslaAccount account,

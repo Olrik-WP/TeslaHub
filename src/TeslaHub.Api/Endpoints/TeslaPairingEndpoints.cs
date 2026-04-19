@@ -116,6 +116,30 @@ public static class TeslaPairingEndpoints
                 return Results.BadRequest(new { error = ex.Message });
             }
         });
+
+        group.MapPost("/export-private-key", async (
+            TeslaKeyService keys,
+            IConfiguration config,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var path = config["TESLA_PRIVATE_KEY_EXPORT_PATH"] ?? "/key-vault/private.pem";
+                var written = await keys.ExportPrivateKeyAsync(path, ct);
+                return Results.Ok(new { exported = true, path = written });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Results.Problem(
+                    title: "Cannot write key file",
+                    detail: $"{ex.Message}. Make sure the /key-vault volume is mounted and writable by the API container.",
+                    statusCode: 500);
+            }
+        });
     }
 
     public sealed record VehiclePairedRequest(bool Paired);

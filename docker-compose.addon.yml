@@ -62,14 +62,19 @@ services:
       - TELEMETRY_MQTT_PASSWORD=${TELEMETRY_MQTT_PASSWORD:-}
       - TELEMETRY_MQTT_TOPIC_BASE=${TELEMETRY_MQTT_TOPIC_BASE:-telemetry}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      # URL of the local tesla-http-proxy used to sign Fleet API write
+      # calls. Leave empty when Security Alerts is disabled.
+      - TESLA_COMMAND_PROXY_URL=${TESLA_COMMAND_PROXY_URL:-}
       - TZ=${TZ:-Europe/Paris}
     ports:
       - "127.0.0.1:4001:8080"
     volumes:
-      # Mount the Caddy certs read-only so the API can read the
-      # TLS chain to send to Tesla when configuring telemetry.
-      # Optional — only needed when Security Alerts is enabled.
+      # Read-only mount of the Caddy cert directory so the API can send
+      # the TLS chain to Tesla when configuring telemetry.
       - ${CADDY_CERTS_PATH:-/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory}:/certs:ro
+      # Read-write mount of the shared key vault so the API can export
+      # the partner private key to disk for tesla-http-proxy to read.
+      - key-vault:/key-vault
     depends_on:
       - database
       - teslahub-init
@@ -85,3 +90,9 @@ services:
       - teslahub-api
     networks:
       - default
+
+# Shared volume between teslahub-api and tesla-http-proxy to exchange
+# the partner private key + the proxy's local TLS cert. Only used when
+# the Security Alerts feature is enabled (see docker-compose.security-alerts.yml).
+volumes:
+  key-vault:

@@ -36,6 +36,17 @@ builder.Services.AddSingleton<MqttLiveDataService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttLiveDataService>());
 builder.Services.AddHttpClient("tesla", c => c.DefaultRequestHeaders.UserAgent.ParseAdd("TeslaHub/1.0"));
 
+// The "tesla-proxy" HttpClient is used to talk to the local
+// vehicle-command-proxy container, which presents a self-signed TLS
+// certificate. We skip cert validation only on this client (and only
+// for the proxy hostname configured via TESLA_COMMAND_PROXY_URL) —
+// direct calls to Tesla's public Fleet API still use strict TLS.
+builder.Services.AddHttpClient("tesla-proxy", c => c.DefaultRequestHeaders.UserAgent.ParseAdd("TeslaHub/1.0"))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
+    });
+
 // Tesla Fleet API integration (optional Security Alerts feature)
 builder.Services.AddSingleton<TeslaTokenEncryptionService>();
 builder.Services.AddScoped<TeslaOAuthService>();

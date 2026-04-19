@@ -58,6 +58,42 @@ public sealed class TeslaKeyService
     public string DecryptPrivateKeyPem(TeslaKeyPair keypair) =>
         _encryption.Decrypt(keypair.EncryptedPrivateKeyPem);
 
+    /// <summary>
+    /// Exports the partner private key (decrypted) to disk so that the
+    /// tesla-http-proxy sidecar container can read it and sign requests
+    /// for the Tesla Fleet API. The destination path is the same volume
+    /// mounted into both teslahub-api and tesla-http-proxy
+    /// (default: /key-vault/private.pem). File mode is 0600.
+    /// </summary>
+    public async Task<string> ExportPrivateKeyAsync(string targetPath, CancellationToken cancellationToken = default)
+    {
+        var keypair = await GetCurrentAsync(cancellationToken)
+            ?? throw new InvalidOperationException("No keypair generated yet.");
+
+        var pem = DecryptPrivateKeyPem(keypair);
+
+        var dir = Path.GetDirectoryName(targetPath);
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+            Directory.CreateDirectory(dir);
+
+        await File.WriteAllTextAsync(targetPath, pem, cancellationToken);
+
+        if (!OperatingSystem.IsWindows())
+        {
+            try
+            {
+                File.SetUnixFileMode(targetPath,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.OtherRead);
+            }
+            catch
+            {
+                // best-effort — if we can't set perms, the proxy may need a chmod
+            }
+        }
+
+        return targetPath;
+    }
+
     public static string PublicKeyUrl(string domain)
     {
         var clean = NormalizeDomain(domain);
