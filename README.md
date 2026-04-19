@@ -347,59 +347,103 @@ teslahub.yourdomain.com {
 
 ### Telemetry stack (self-hosted Fleet Telemetry server)
 
-This is where the actual Sentry events start flowing into your TeslaHub. **Two extra services** are added on demand via a Docker Compose `profile`, so they only run when you opt in.
+This is where the actual Sentry events start flowing into your TeslaHub. **One extra service** is added on demand via a Docker Compose `profile`, so it only runs when you opt in. Tesla's `fleet-telemetry` server publishes vehicle signals to your **existing Mosquitto MQTT broker** (the one already running for TeslaMate) — no extra broker needed.
 
 #### What you need
 
 - A **separate sub-domain** dedicated to telemetry, e.g. `telemetry.yourdomain.com`.
-- That sub-domain must be **DNS-only** on Cloudflare (gray cloud — *not* the orange proxy). The reason is Tesla connects to your server with **mutual TLS**: the vehicle presents a certificate signed by Tesla. The Cloudflare proxy does not forward client certificates on free / Pro plans, so TLS termination must happen on your origin.
-- An **inbound port forward** from your router/box to the host (default `8443`).
-- The Tesla **server CA** file (downloadable from the Tesla Fleet API documentation) placed at `./fleet-telemetry/server-ca.crt`.
+- That sub-domain must be **DNS-only** on Cloudflare (gray cloud — *not* the orange proxy). The reason: Tesla connects to your server with TLS termination on your origin, and the Cloudflare proxy interferes with the long-lived WebSocket connection used by Fleet Telemetry. DNS-only forwards traffic directly.
+- An **inbound port forward** from your router/box to the host on TCP `8443`.
+- The Tesla `fleet-telemetry` source code, cloned locally so Docker can build it (Tesla does not publish a pre-built image).
 
 #### DNS — Cloudflare example
 
 ```
 teslahub.yourdomain.com    A   <your home ip>   🟠 proxied    (web UI + API)
-telemetry.yourdomain.com   A   <your home ip>   ⚪ DNS only   (Tesla mTLS)
+telemetry.yourdomain.com   A   <your home ip>   ⚪ DNS only   (Tesla telemetry)
 ```
 
-> Security note: DNS-only exposes your origin IP for that sub-domain. Realistic risk for a personal install is low, but you can mitigate by limiting source IPs at the firewall to the Tesla cloud ranges if you want to harden it further. The Fleet Telemetry server itself rejects any TLS handshake without a valid Tesla-signed client cert, which is a strong layer-7 filter.
+> Security note: DNS-only exposes your origin IP for that sub-domain. Realistic risk for a personal install is low. The Fleet Telemetry server only accepts properly authenticated vehicle connections (signed at the application layer with the partner public key you registered), so unauthenticated connections are dropped.
 
-#### Caddy snippet
+#### Caddy snippet (provides + renews the TLS cert for `telemetry.*`)
 
-Add a stanza for the telemetry sub-domain. Caddy fetches and renews the cert via Let's Encrypt automatically, and stores it in a volume that the Fleet Telemetry container reads:
+Caddy never serves traffic on this sub-domain — its only job is to **obtain and renew** a Let's Encrypt cert that the `fleet-telemetry` container reads from disk. Add this to your Caddyfile:
 
 ```caddyfile
-teslahub.yourdomain.com {
-    reverse_proxy /.well-known/appspecific/* teslahub-api:8080
-    reverse_proxy /api/*                     teslahub-api:8080
-    reverse_proxy /                          teslahub-web:80
-}
-
-# The telemetry sub-domain only exists so Caddy keeps a cert for it
-# in /data/caddy/certificates/.../telemetry.yourdomain.com/. The actual
-# TLS connection from Tesla terminates at the fleet-telemetry container
-# which mounts the same volume read-only.
 telemetry.yourdomain.com {
-    tls {
-        on_demand
-    }
+    encode gzip zstd
     respond 404
 }
 ```
 
-Reload Caddy: `caddy reload`.
-
-#### Configuration files
+Reload Caddy:
 
 ```bash
-mkdir -p fleet-telemetry
-cp fleet-telemetry/config.json.example fleet-telemetry/config.json
-# Edit fleet-telemetry/config.json: replace ${TELEMETRY_DOMAIN} placeholders
-# with your real telemetry sub-domain.
+sudo caddy reload --config /etc/caddy/Caddyfile
 ```
 
-Place the Tesla server CA at `fleet-telemetry/server-ca.crt`.
+Verify the cert was obtained (~30s):
+
+```bash
+sudo find /var/lib/caddy -name "telemetry.yourdomain.com.crt"
+```
+
+Note the parent path containing `caddy/certificates/...` — you will need it below.
+
+#### Clone Tesla's `fleet-telemetry` source
+
+Tesla does not publish a pre-built Docker image. You build it yourself from their open-source repo:
+
+```bash
+cd ~/teslamate
+git clone https://github.com/teslamotors/fleet-telemetry.git fleet-telemetry-src
+```
+
+This creates `~/teslamate/fleet-telemetry-src/` with the Go code and Dockerfile. Docker Compose will build it on first start.
+
+#### Create the runtime config
+
+```bash
+cd ~/teslamate
+mkdir -p fleet-telemetry
+nano fleet-telemetry/config.json
+```
+
+Paste this and replace `telemetry.yourdomain.com` with your real sub-domain:
+
+```json
+{
+  "host": "0.0.0.0",
+  "port": 443,
+  "log_level": "info",
+  "json_log_enable": true,
+  "namespace": "tesla_telemetry",
+  "tls": {
+    "server_cert": "/certs/telemetry.yourdomain.com/telemetry.yourdomain.com.crt",
+    "server_key": "/certs/telemetry.yourdomain.com/telemetry.yourdomain.com.key"
+  },
+  "rate_limit": {
+    "enabled": true,
+    "message_interval_time": 30,
+    "message_limit": 1000
+  },
+  "records": {
+    "V": ["mqtt"],
+    "alerts": ["mqtt"],
+    "errors": ["logger"]
+  },
+  "mqtt": {
+    "broker": "mosquitto:1883",
+    "client_id": "fleet-telemetry",
+    "topic_base": "telemetry",
+    "qos": 1,
+    "retained": false,
+    "connect_timeout_ms": 30000,
+    "publish_timeout_ms": 2500,
+    "keep_alive_seconds": 30
+  }
+}
+```
 
 #### .env additions
 
@@ -407,33 +451,71 @@ Place the Tesla server CA at `fleet-telemetry/server-ca.crt`.
 # Optional — Security Alerts telemetry stack
 TELEMETRY_DOMAIN=telemetry.yourdomain.com
 TELEMETRY_PORT=8443
-# Path inside the API container where the Tesla CA is mounted (used when
-# calling /api/1/vehicles/fleet_telemetry_config_create on Tesla).
-TELEMETRY_CA_PATH=/etc/teslahub/server-ca.crt
-# Name of the Caddy data volume that holds the Let's Encrypt certs.
-CADDY_DATA_VOLUME=caddy-data
+
+# Where Caddy stored the Let's Encrypt certs (default below works for
+# Caddy installed as a systemd service on Debian/Ubuntu — adjust if
+# your Caddy install differs, e.g. snap).
+CADDY_CERTS_PATH=/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory
+
+# Tell teslahub-api where to find the published telemetry signals
+# (defaults below match Mosquitto running in your TeslaMate compose).
+TELEMETRY_MQTT_HOST=mosquitto
+TELEMETRY_MQTT_PORT=1883
+TELEMETRY_MQTT_TOPIC_BASE=telemetry
+
+# Master switch — flip to true to enable the consumer in teslahub-api.
+SECURITY_ALERTS_ENABLED=true
 ```
 
-Add a read-only mount of the Tesla CA into `teslahub-api`:
+#### Add `fleet-telemetry` to your compose
+
+In your main `docker-compose.yml`, add this service alongside the existing ones:
+
+```yaml
+  fleet-telemetry:
+    build:
+      context: ./fleet-telemetry-src
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8443:443"
+    volumes:
+      - /var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory:/certs:ro
+      - ./fleet-telemetry/config.json:/etc/fleet-telemetry/config.json:ro
+    depends_on:
+      - mosquitto
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+```
+
+Also add the same `/certs` read-only mount to your `teslahub-api` service (the API needs to read the TLS chain when calling Tesla's `fleet_telemetry_config_create`):
 
 ```yaml
   teslahub-api:
+    # ...existing fields...
     volumes:
-      - ./fleet-telemetry/server-ca.crt:/etc/teslahub/server-ca.crt:ro
+      - /var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory:/certs:ro
 ```
 
 #### Start the stack
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.security-alerts.yml \
-    --profile security-alerts up -d nats fleet-telemetry
+cd ~/teslamate
+docker compose up -d --build fleet-telemetry teslahub-api
+docker compose logs -f fleet-telemetry
 ```
 
-The stack stays inactive without `--profile security-alerts` so existing TeslaHub installations are unaffected.
+The first build takes 3–5 minutes (Go compilation + libsodium/libzmq). Subsequent rebuilds are cached.
+
+You should see lines like:
+```
+{"level":"info","msg":"server started","port":443}
+{"level":"info","msg":"connected to MQTT broker"}
+```
 
 #### Tell Tesla to start streaming
 
-Once everything above is up and your vehicles are paired, click **Configure telemetry** in the Settings wizard. TeslaHub calls Tesla's `/api/1/vehicles/fleet_telemetry_config_create` for the selected VINs with your hostname, port and CA. Tesla then opens a persistent mTLS WebSocket from each car to your `fleet-telemetry` container, which forwards events to the `tesla.telemetry.>` subjects on NATS.
+Once everything is up and your vehicles are paired, open Settings → Security Alerts → click **Configure telemetry** in the wizard. TeslaHub calls Tesla's `/api/1/vehicles/fleet_telemetry_config_create` for each paired VIN with your hostname, port, and TLS chain. Tesla then opens a persistent connection from each car (when awake) to your `fleet-telemetry` container, which republishes the signals to MQTT under `telemetry/<VIN>/v/<field>`. The `teslahub-api` container subscribes to those topics and turns Sentry / break-in events into Telegram notifications.
 
 ### Receiving notifications (Telegram)
 
@@ -481,8 +563,8 @@ The full alert history (last 500) is visible in the *Recent alerts* panel of Set
 
 ### Reliability notes
 
-- The NATS stream is configured with **24h retention** (file-backed JetStream) so a TeslaHub restart never loses an alert.
-- The API container reconnects to NATS automatically with a 10-second back-off if the broker is unavailable.
+- The MQTT broker (Mosquitto) is shared with TeslaMate; no extra service to manage.
+- The API container reconnects to MQTT automatically with a 10-second back-off if the broker is unavailable.
 - Telegram failures are recorded in the alert event row (`failureReason`) so you can diagnose via the *Recent alerts* panel.
 - Tesla OAuth tokens are refreshed proactively every 30 minutes; failures are surfaced in Settings.
 

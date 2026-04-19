@@ -1,32 +1,38 @@
+using System.Collections.Concurrent;
 using System.Text;
-using NATS.Client.Core;
-using NATS.Client.JetStream;
-using NATS.Client.JetStream.Models;
+using MQTTnet;
+using MQTTnet.Packets;
+using MQTTnet.Protocol;
 
 namespace TeslaHub.Api.Services;
 
 /// <summary>
-/// Subscribes to the Tesla Fleet Telemetry NATS stream produced by the
-/// 'fleet-telemetry' container, parses each message as a TeslaTelemetryMessage,
-/// and forwards it to SecurityAlertService for alert detection and Telegram
-/// fan-out.
+/// Subscribes to the Tesla Fleet Telemetry MQTT stream produced by the
+/// 'fleet-telemetry' container, accumulates one signal per topic into
+/// per-VIN telemetry messages, and forwards them to SecurityAlertService
+/// for alert detection and Telegram fan-out.
 ///
-/// Pull-based JetStream consumption with a per-instance durable name so the
-/// stream survives TeslaHub restarts without losing messages (24h retention
-/// configured on the stream).
+/// Topic layout published by Tesla Fleet Telemetry (configured via
+/// fleet-telemetry/config.json on the host):
 ///
-/// Stays inactive when SECURITY_ALERTS_ENABLED != "true" so non-opted-in
-/// users never see network traffic to NATS.
+///   {topic_base}/{VIN}/v/{field}              — vehicle signals (one per topic)
+///   {topic_base}/{VIN}/alerts/{name}/current  — current alert state
+///
+/// Field values are JSON-encoded scalars (numbers, booleans, strings).
+/// We coalesce signals of interest (SentryMode, Locked, DoorState) into a
+/// TeslaTelemetryMessage shape so the existing detection pipeline keeps
+/// working unchanged.
+///
+/// Stays inactive when SECURITY_ALERTS_ENABLED != "true".
 /// </summary>
 public sealed class TeslaTelemetryConsumer : BackgroundService
 {
-    private const string StreamName = "TESLA_TELEMETRY";
-    private const string SubjectPattern = "tesla.telemetry.v";
-    private const string ConsumerName = "teslahub-api";
+    private static readonly TimeSpan ReconnectBackoff = TimeSpan.FromSeconds(10);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TeslaTelemetryConsumer> _logger;
+    private readonly ConcurrentDictionary<string, VehicleSignalState> _state = new();
 
     public TeslaTelemetryConsumer(
         IServiceScopeFactory scopeFactory,
@@ -48,14 +54,28 @@ public sealed class TeslaTelemetryConsumer : BackgroundService
             return;
         }
 
-        var natsUrl = _configuration["NATS_URL"] ?? "nats://nats:4222";
-        _logger.LogInformation("Telemetry consumer starting with NATS URL {Url}", natsUrl);
+        var host = _configuration["TELEMETRY_MQTT_HOST"] ?? _configuration["MQTT_HOST"];
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            _logger.LogWarning("TELEMETRY_MQTT_HOST not set — telemetry consumer cannot start.");
+            return;
+        }
+
+        var port = int.TryParse(_configuration["TELEMETRY_MQTT_PORT"], out var p) ? p : 1883;
+        var user = _configuration["TELEMETRY_MQTT_USER"] ?? "";
+        var pass = _configuration["TELEMETRY_MQTT_PASSWORD"] ?? "";
+        var topicBase = _configuration["TELEMETRY_MQTT_TOPIC_BASE"] ?? "telemetry";
+        var topicFilter = $"{topicBase}/+/v/+";
+        var alertsFilter = $"{topicBase}/+/alerts/+/current";
+
+        _logger.LogInformation("Telemetry consumer starting (broker {Host}:{Port}, base topic '{TopicBase}')",
+            host, port, topicBase);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await RunOnceAsync(natsUrl, stoppingToken);
+                await RunOnceAsync(host, port, user, pass, topicBase, topicFilter, alertsFilter, stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -63,74 +83,167 @@ public sealed class TeslaTelemetryConsumer : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Telemetry consumer crashed; reconnecting in 10s.");
-                try { await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken); }
+                _logger.LogError(ex, "Telemetry consumer crashed; reconnecting in {Backoff}.", ReconnectBackoff);
+                try { await Task.Delay(ReconnectBackoff, stoppingToken); }
                 catch (OperationCanceledException) { break; }
             }
         }
     }
 
-    private async Task RunOnceAsync(string natsUrl, CancellationToken cancellationToken)
+    private async Task RunOnceAsync(
+        string host, int port, string user, string pass,
+        string topicBase, string topicFilter, string alertsFilter,
+        CancellationToken cancellationToken)
     {
-        var opts = new NatsOpts { Url = natsUrl, Name = "teslahub-api" };
-        await using var nats = new NatsConnection(opts);
-        var js = new NatsJSContext(nats);
+        var factory = new MqttClientFactory();
+        using var client = factory.CreateMqttClient();
 
-        try
-        {
-            await js.GetStreamAsync(StreamName, cancellationToken: cancellationToken);
-        }
-        catch (NatsJSApiException)
-        {
-            await js.CreateStreamAsync(
-                new StreamConfig(StreamName, new[] { "tesla.telemetry.>" })
-                {
-                    Retention = StreamConfigRetention.Limits,
-                    MaxAge = TimeSpan.FromDays(1),
-                    Storage = StreamConfigStorage.File,
-                },
-                cancellationToken: cancellationToken);
-            _logger.LogInformation("Created NATS JetStream stream {Stream}", StreamName);
-        }
+        var optionsBuilder = new MqttClientOptionsBuilder()
+            .WithTcpServer(host, port)
+            .WithClientId($"teslahub-telemetry-{Environment.MachineName}-{Guid.NewGuid():N}"[..40])
+            .WithCleanSession(true);
 
-        var consumer = await js.CreateOrUpdateConsumerAsync(StreamName, new ConsumerConfig
-        {
-            Name = ConsumerName,
-            DurableName = ConsumerName,
-            FilterSubject = SubjectPattern,
-            DeliverPolicy = ConsumerConfigDeliverPolicy.New,
-            AckPolicy = ConsumerConfigAckPolicy.Explicit,
-            MaxAckPending = 100,
-            AckWait = TimeSpan.FromSeconds(30),
-        }, cancellationToken: cancellationToken);
+        if (!string.IsNullOrEmpty(user))
+            optionsBuilder.WithCredentials(user, pass);
 
-        _logger.LogInformation("Telemetry consumer ready, listening on {Subject}", SubjectPattern);
-
-        await foreach (var msg in consumer.ConsumeAsync<byte[]>(cancellationToken: cancellationToken))
+        client.ApplicationMessageReceivedAsync += async e =>
         {
             try
             {
-                var json = Encoding.UTF8.GetString(msg.Data ?? Array.Empty<byte>());
-                var parsed = TeslaTelemetryMessage.TryParse(json);
-                if (parsed is null)
-                {
-                    _logger.LogWarning("Could not parse telemetry payload: {Snippet}",
-                        json.Length > 200 ? json[..200] + "…" : json);
-                    await msg.AckAsync(cancellationToken: cancellationToken);
-                    continue;
-                }
-
-                using var scope = _scopeFactory.CreateScope();
-                var alerts = scope.ServiceProvider.GetRequiredService<SecurityAlertService>();
-                await alerts.ProcessTelemetryAsync(parsed, cancellationToken);
-
-                await msg.AckAsync(cancellationToken: cancellationToken);
+                await HandleMessageAsync(e.ApplicationMessage, topicBase, cancellationToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to process telemetry message; nak'ing for retry.");
-                await msg.NakAsync(cancellationToken: cancellationToken);
+                _logger.LogError(ex, "Failed to process telemetry message on topic {Topic}", e.ApplicationMessage.Topic);
             }
+        };
+
+        client.DisconnectedAsync += e =>
+        {
+            if (!cancellationToken.IsCancellationRequested)
+                _logger.LogWarning("Telemetry MQTT disconnected: {Reason}", e.Reason);
+            return Task.CompletedTask;
+        };
+
+        await client.ConnectAsync(optionsBuilder.Build(), cancellationToken);
+        _logger.LogInformation("Telemetry MQTT connected — subscribing to '{Topic}' and '{Alerts}'", topicFilter, alertsFilter);
+
+        var subOptions = new MqttClientSubscribeOptionsBuilder()
+            .WithTopicFilter(topicFilter, MqttQualityOfServiceLevel.AtLeastOnce)
+            .WithTopicFilter(alertsFilter, MqttQualityOfServiceLevel.AtLeastOnce)
+            .Build();
+        await client.SubscribeAsync(subOptions, cancellationToken);
+
+        while (client.IsConnected && !cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(5000, cancellationToken);
+        }
+    }
+
+    private async Task HandleMessageAsync(MqttApplicationMessage message, string topicBase, CancellationToken cancellationToken)
+    {
+        var topic = message.Topic;
+        if (!topic.StartsWith(topicBase + "/", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var rest = topic[(topicBase.Length + 1)..].Split('/');
+        if (rest.Length < 3) return;
+
+        var vin = rest[0];
+        var category = rest[1];
+        var raw = message.Payload.IsEmpty ? string.Empty : Encoding.UTF8.GetString(message.Payload);
+
+        if (string.Equals(category, "v", StringComparison.OrdinalIgnoreCase))
+        {
+            var field = rest[2];
+            HandleSignal(vin, field, raw, out var snapshot);
+            if (snapshot is not null)
+                await DispatchAsync(snapshot, cancellationToken);
+            return;
+        }
+
+        if (string.Equals(category, "alerts", StringComparison.OrdinalIgnoreCase) && rest.Length >= 4)
+        {
+            var alertName = rest[2];
+            var leaf = rest[3];
+            if (!string.Equals(leaf, "current", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            await DispatchAsync(new TeslaTelemetryMessage
+            {
+                Vin = vin,
+                CreatedAt = DateTime.UtcNow.ToString("o"),
+                Data = new()
+                {
+                    new TelemetryDatum { Key = alertName, Value = new TelemetryValue { StringValue = raw } },
+                },
+            }, cancellationToken);
+        }
+    }
+
+    private void HandleSignal(string vin, string field, string raw, out TeslaTelemetryMessage? snapshot)
+    {
+        snapshot = null;
+        var state = _state.GetOrAdd(vin, _ => new VehicleSignalState());
+
+        switch (field)
+        {
+            case "SentryMode":
+                state.SentryMode = TrimQuotes(raw);
+                snapshot = state.ToTelemetryMessage(vin);
+                break;
+            case "Locked":
+                state.Locked = ParseBool(raw);
+                snapshot = state.ToTelemetryMessage(vin);
+                break;
+            case "DoorState":
+                state.DoorState = TrimQuotes(raw);
+                snapshot = state.ToTelemetryMessage(vin);
+                break;
+            default:
+                return;
+        }
+    }
+
+    private async Task DispatchAsync(TeslaTelemetryMessage message, CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var alerts = scope.ServiceProvider.GetRequiredService<SecurityAlertService>();
+        await alerts.ProcessTelemetryAsync(message, cancellationToken);
+    }
+
+    private static string TrimQuotes(string raw) =>
+        raw.Length >= 2 && raw[0] == '"' && raw[^1] == '"' ? raw[1..^1] : raw;
+
+    private static bool? ParseBool(string raw) => TrimQuotes(raw).ToLowerInvariant() switch
+    {
+        "true" => true,
+        "false" => false,
+        _ => null,
+    };
+
+    private sealed class VehicleSignalState
+    {
+        public string? SentryMode { get; set; }
+        public bool? Locked { get; set; }
+        public string? DoorState { get; set; }
+
+        public TeslaTelemetryMessage ToTelemetryMessage(string vin)
+        {
+            var data = new List<TelemetryDatum>();
+            if (SentryMode is not null)
+                data.Add(new TelemetryDatum { Key = "SentryMode", Value = new TelemetryValue { StringValue = SentryMode } });
+            if (Locked is bool l)
+                data.Add(new TelemetryDatum { Key = "Locked", Value = new TelemetryValue { BoolValue = l } });
+            if (DoorState is not null)
+                data.Add(new TelemetryDatum { Key = "DoorState", Value = new TelemetryValue { StringValue = DoorState } });
+
+            return new TeslaTelemetryMessage
+            {
+                Vin = vin,
+                CreatedAt = DateTime.UtcNow.ToString("o"),
+                Data = data,
+            };
         }
     }
 }

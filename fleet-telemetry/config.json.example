@@ -1,40 +1,32 @@
 {
-  "_comment": "TeslaHub — Fleet Telemetry server config template. Copy to config.json and edit TLS paths to match your Caddy volume layout.",
+  "_comment": "TeslaHub — Tesla Fleet Telemetry server config. Replace TELEMETRY_DOMAIN with your real telemetry sub-domain (e.g. telemetry.yourdomain.com). The server publishes vehicle signals as MQTT messages on your existing Mosquitto broker (the same one TeslaMate uses), under the topic prefix 'telemetry/<VIN>/v/<field>'. TeslaHub.Api subscribes to these topics to build alerts.",
   "host": "0.0.0.0",
   "port": 443,
   "log_level": "info",
   "json_log_enable": true,
   "namespace": "tesla_telemetry",
-  "metrics_collector": {
-    "type": "noop"
-  },
   "tls": {
-    "server_cert": "/certs/certificates/acme-v02.api.letsencrypt.org-directory/${TELEMETRY_DOMAIN}/${TELEMETRY_DOMAIN}.crt",
-    "server_key":  "/certs/certificates/acme-v02.api.letsencrypt.org-directory/${TELEMETRY_DOMAIN}/${TELEMETRY_DOMAIN}.key",
-    "ca": "/etc/ssl/server-ca.crt"
+    "server_cert": "/certs/TELEMETRY_DOMAIN/TELEMETRY_DOMAIN.crt",
+    "server_key": "/certs/TELEMETRY_DOMAIN/TELEMETRY_DOMAIN.key"
   },
   "rate_limit": {
     "enabled": true,
-    "messages_per_second": 1000,
-    "message_interval_time_seconds": 30
+    "message_interval_time": 30,
+    "message_limit": 1000
   },
   "records": {
-    "alerts": [
-      { "type": "nats", "topic": "tesla.telemetry.alerts" }
-    ],
-    "errors": [
-      { "type": "nats", "topic": "tesla.telemetry.errors" }
-    ],
-    "V": [
-      { "type": "nats", "topic": "tesla.telemetry.v" }
-    ]
+    "V": ["mqtt"],
+    "alerts": ["mqtt"],
+    "errors": ["logger"]
   },
-  "dispatchers": {
-    "nats": {
-      "urls": "nats://nats:4222",
-      "stream_name": "TESLA_TELEMETRY",
-      "stream_subjects": ["tesla.telemetry.>"],
-      "stream_max_age_seconds": 86400
-    }
+  "mqtt": {
+    "broker": "mosquitto:1883",
+    "client_id": "fleet-telemetry",
+    "topic_base": "telemetry",
+    "qos": 1,
+    "retained": false,
+    "connect_timeout_ms": 30000,
+    "publish_timeout_ms": 2500,
+    "keep_alive_seconds": 30
   }
 }
