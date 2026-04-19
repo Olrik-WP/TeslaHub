@@ -269,22 +269,21 @@ TeslaHub never relies on a shared backend. Each TeslaHub installation registers 
 
 Everything stays on **your** server. No third-party cloud, no shared client_id, no relayed messages.
 
-### Enabling the Tesla OAuth foundation (PR 1)
+### Step 1 — Create your Tesla developer app (5 min, free)
 
-This is the only step you need today. The other components are no-ops until later PRs ship.
+> 💡 The same instructions are also displayed inside TeslaHub: open **Settings → Security Alerts** and follow the embedded "0. Create your Tesla developer app" guide. Each value has a one-click copy button.
 
-#### 1. Create your Tesla developer app
-
-1. Go to [developer.tesla.com](https://developer.tesla.com) and sign in with your Tesla account.
-2. Create a new App with these details:
+1. Open [developer.tesla.com](https://developer.tesla.com), click **Sign in** and use your existing Tesla account credentials.
+2. From the left menu, go to **Apps**, then click **Create New App**.
+3. Fill in the form with:
    - **App Name:** `TeslaHub Self-Hosted`
    - **Description:** `Personal companion dashboard for TeslaMate`
    - **Allowed Origin URL:** `https://teslahub.yourdomain.com`
    - **Allowed Redirect URI:** `https://teslahub.yourdomain.com/api/tesla-oauth/callback`
    - **Scopes:** `openid`, `offline_access`, `vehicle_device_data`, `vehicle_cmds`
-3. Submit. You receive a `Client ID` and `Client Secret`. Keep them safe.
+4. Click **Submit**. Tesla returns a `Client ID` and a `Client Secret`. Keep them safe — the secret is shown only once.
 
-#### 2. Add the variables to your `.env`
+### Step 2 — Add the variables to your `.env`
 
 ```env
 # Optional — Security Alerts (Tesla Fleet API)
@@ -301,7 +300,7 @@ TESLA_AUDIENCE=https://fleet-api.prd.eu.vn.cloud.tesla.com
 SECURITY_ALERTS_ENABLED=false
 ```
 
-#### 3. Wire them into your `teslahub-api` service
+### Step 3 — Wire them into your `teslahub-api` service
 
 Add the new variables to the `environment:` block of `teslahub-api` in your `docker-compose.yml`:
 
@@ -318,13 +317,15 @@ Add the new variables to the `environment:` block of `teslahub-api` in your `doc
 
 If you leave the variables empty, the feature simply stays inactive — TeslaHub continues to work as before.
 
-#### 4. Restart and connect
+### Step 4 — Restart and connect
 
 ```bash
 docker compose up -d teslahub-api
 ```
 
 Open TeslaHub → **Settings** → scroll to the **Security Alerts** card → click **Connect Tesla account**. You will be redirected to `auth.tesla.com`, sign in, and return to TeslaHub. Your Tesla tokens are now stored encrypted with AES-GCM in your local `teslahub` PostgreSQL database and refreshed automatically every ~30 minutes.
+
+> Until you complete this step, the Home page shows a small dismissible banner reminding you that Security Alerts can be set up. The banner disappears automatically as soon as your Tesla account is connected.
 
 ### Pairing your vehicles (after Tesla OAuth)
 

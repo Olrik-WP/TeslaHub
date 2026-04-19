@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Trans, useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 
 type Subscription = {
@@ -58,6 +59,7 @@ function formatDateTime(value: string) {
 }
 
 export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicle[] }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [draft, setDraft] = useState({ name: '', channelTarget: '', language: 'en' });
@@ -87,7 +89,7 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
       }),
     onSuccess: () => {
       setDraft({ name: '', channelTarget: '', language: 'en' });
-      setFeedback({ ok: true, text: 'Recipient added.' });
+      setFeedback({ ok: true, text: t('securityAlerts.recipients.feedback.added') });
       queryClient.invalidateQueries({ queryKey: ['securityRecipients'] });
     },
     onError: (err: Error) => setFeedback({ ok: false, text: err.message }),
@@ -100,7 +102,7 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
 
   const testMutation = useMutation({
     mutationFn: (id: number) => api(`/security-alerts/recipients/${id}/test`, { method: 'POST' }),
-    onSuccess: () => setFeedback({ ok: true, text: 'Test message sent.' }),
+    onSuccess: () => setFeedback({ ok: true, text: t('securityAlerts.recipients.feedback.testSent') }),
     onError: (err: Error) => setFeedback({ ok: false, text: err.message }),
   });
 
@@ -130,11 +132,8 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
   return (
     <div className="space-y-4 border-t border-[#2a2a2a] pt-4">
       <div>
-        <div className={sectionTitleClass}>Notification recipients</div>
-        <p className={subTextClass}>
-          Add one entry per person who should receive Telegram alerts. Each recipient can subscribe to one or more
-          vehicles independently. Sentry and break-in alerts can be toggled per (recipient, vehicle) pair.
-        </p>
+        <div className={sectionTitleClass}>{t('securityAlerts.recipients.title')}</div>
+        <p className={subTextClass}>{t('securityAlerts.recipients.intro')}</p>
       </div>
 
       {feedback && (
@@ -149,19 +148,19 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
 
       {/* Add recipient form */}
       <div className={cardClass}>
-        <div className="text-sm text-[#e0e0e0]">Add recipient</div>
+        <div className="text-sm text-[#e0e0e0]">{t('securityAlerts.recipients.addTitle')}</div>
         <div className="grid sm:grid-cols-3 gap-2">
           <input
             className={inputClass}
             value={draft.name}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            placeholder="Name (e.g. Jane)"
+            placeholder={t('securityAlerts.recipients.namePlaceholder')}
           />
           <input
             className={inputClass}
             value={draft.channelTarget}
             onChange={(e) => setDraft({ ...draft, channelTarget: e.target.value })}
-            placeholder="Telegram chat ID"
+            placeholder={t('securityAlerts.recipients.chatIdPlaceholder')}
           />
           <select
             className={inputClass}
@@ -170,22 +169,35 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
           >
             <option value="en">English</option>
             <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
           </select>
         </div>
         <p className={subTextClass}>
-          To find your Telegram chat ID: open Telegram, send any message to{' '}
-          <a className="text-[#e31937] underline" href="https://t.me/userinfobot" target="_blank" rel="noreferrer">
-            @userinfobot
-          </a>
-          ; it replies with your numeric <code className="text-[#e0e0e0]">id</code>. Make sure you have started a chat
-          with your TeslaHub bot first (see README) so it can message you.
+          <Trans
+            i18nKey="securityAlerts.recipients.chatIdHelp"
+            t={t}
+            components={{
+              link: (
+                <a
+                  className="text-[#e31937] underline"
+                  href="https://t.me/userinfobot"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  @userinfobot
+                </a>
+              ),
+            }}
+          />
         </p>
         <button
           className={buttonPrimary}
           disabled={createMutation.isPending || !draft.name.trim() || !draft.channelTarget.trim()}
           onClick={() => createMutation.mutate()}
         >
-          {createMutation.isPending ? 'Adding…' : 'Add recipient'}
+          {createMutation.isPending
+            ? t('securityAlerts.recipients.adding')
+            : t('securityAlerts.recipients.addButton')}
         </button>
       </div>
 
@@ -198,7 +210,8 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
                 <div className="min-w-0">
                   <div className="text-sm text-[#e0e0e0] truncate">{r.name}</div>
                   <div className={`${subTextClass} truncate`}>
-                    Telegram chat <code className="text-[#9ca3af]">{r.channelTarget}</code>
+                    {t('securityAlerts.recipients.telegramTarget')}{' '}
+                    <code className="text-[#9ca3af]">{r.channelTarget}</code>
                   </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
@@ -207,31 +220,33 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
                     disabled={testMutation.isPending}
                     onClick={() => testMutation.mutate(r.id)}
                   >
-                    Send test
+                    {t('securityAlerts.recipients.sendTest')}
                   </button>
                   <button
                     className={buttonSecondary}
                     disabled={deleteMutation.isPending}
                     onClick={() => {
-                      if (window.confirm(`Delete recipient ${r.name}?`)) deleteMutation.mutate(r.id);
+                      if (window.confirm(t('securityAlerts.recipients.confirmRemove', { name: r.name }))) {
+                        deleteMutation.mutate(r.id);
+                      }
                     }}
                   >
-                    Remove
+                    {t('securityAlerts.recipients.remove')}
                   </button>
                 </div>
               </div>
 
               {eligibleVehicles.length === 0 && (
-                <p className={subTextClass}>Pair at least one vehicle to assign subscriptions.</p>
+                <p className={subTextClass}>{t('securityAlerts.recipients.needPairedVehicle')}</p>
               )}
 
               {eligibleVehicles.length > 0 && (
                 <table className="w-full text-xs">
                   <thead className="text-[#6b7280]">
                     <tr>
-                      <th className="text-left font-normal py-1">Vehicle</th>
-                      <th className="text-center font-normal py-1">Sentry</th>
-                      <th className="text-center font-normal py-1">Break-in</th>
+                      <th className="text-left font-normal py-1">{t('securityAlerts.recipients.matrixVehicle')}</th>
+                      <th className="text-center font-normal py-1">{t('securityAlerts.recipients.matrixSentry')}</th>
+                      <th className="text-center font-normal py-1">{t('securityAlerts.recipients.matrixBreakIn')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -296,9 +311,9 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
 
       {/* Recent alert history */}
       <div className={cardClass}>
-        <div className="text-sm text-[#e0e0e0]">Recent alerts</div>
+        <div className="text-sm text-[#e0e0e0]">{t('securityAlerts.history.title')}</div>
         {events.length === 0 ? (
-          <p className={subTextClass}>No alerts received yet.</p>
+          <p className={subTextClass}>{t('securityAlerts.history.empty')}</p>
         ) : (
           <ul className="space-y-1">
             {events.map((e) => (
@@ -317,8 +332,11 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
                     {e.vehicleDisplayName || e.vin} — {e.detail || '—'}
                   </div>
                   <div className={subTextClass}>
-                    {formatDateTime(e.detectedAt)} · {e.recipientsNotified} notified
-                    {e.recipientsFailed > 0 ? `, ${e.recipientsFailed} failed` : ''}
+                    {formatDateTime(e.detectedAt)} ·{' '}
+                    {t('securityAlerts.history.notified', { count: e.recipientsNotified })}
+                    {e.recipientsFailed > 0
+                      ? `, ${t('securityAlerts.history.failed', { count: e.recipientsFailed })}`
+                      : ''}
                   </div>
                 </div>
               </li>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import QRCode from 'qrcode';
 import { api } from '../api/client';
 import SecurityAlertRecipients from './SecurityAlertRecipients';
@@ -52,6 +53,7 @@ function StatusPill({ ok, label }: { ok: boolean; label: string }) {
 }
 
 export default function TeslaPairingWizard() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [domain, setDomain] = useState(defaultDomainGuess());
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
@@ -82,28 +84,28 @@ export default function TeslaPairingWizard() {
     mutationFn: () =>
       api('/tesla-pairing/keypair', { method: 'POST', body: JSON.stringify({ domain }) }),
     onSuccess: () => {
-      setFeedback({ ok: true, text: 'Public key generated.' });
+      setFeedback({ ok: true, text: t('securityAlerts.wizard.feedback.keyGenerated') });
       queryClient.invalidateQueries({ queryKey: ['teslaPairingStatus'] });
     },
-    onError: (err: Error) => setFeedback({ ok: false, text: err.message || 'Key generation failed.' }),
+    onError: (err: Error) => setFeedback({ ok: false, text: err.message || t('securityAlerts.wizard.feedback.keyError') }),
   });
 
   const registerMutation = useMutation({
     mutationFn: () => api('/tesla-pairing/register-partner', { method: 'POST' }),
     onSuccess: () => {
-      setFeedback({ ok: true, text: 'Domain registered with Tesla as a partner.' });
+      setFeedback({ ok: true, text: t('securityAlerts.wizard.feedback.registered') });
       queryClient.invalidateQueries({ queryKey: ['teslaPairingStatus'] });
     },
-    onError: (err: Error) => setFeedback({ ok: false, text: err.message || 'Partner registration failed.' }),
+    onError: (err: Error) => setFeedback({ ok: false, text: err.message || t('securityAlerts.wizard.feedback.registerError') }),
   });
 
   const syncMutation = useMutation({
     mutationFn: () => api<{ count: number }>('/tesla-pairing/sync-vehicles', { method: 'POST' }),
     onSuccess: (data) => {
-      setFeedback({ ok: true, text: `Synced ${data.count} vehicle(s).` });
+      setFeedback({ ok: true, text: t('securityAlerts.wizard.feedback.synced', { count: data.count }) });
       queryClient.invalidateQueries({ queryKey: ['teslaPairingStatus'] });
     },
-    onError: (err: Error) => setFeedback({ ok: false, text: err.message || 'Vehicle sync failed.' }),
+    onError: (err: Error) => setFeedback({ ok: false, text: err.message || t('securityAlerts.wizard.feedback.syncError') }),
   });
 
   const markPairedMutation = useMutation({
@@ -116,30 +118,29 @@ export default function TeslaPairingWizard() {
     mutationFn: (vehicleIds: number[]) =>
       api('/tesla-pairing/configure-telemetry', { method: 'POST', body: JSON.stringify({ vehicleIds }) }),
     onSuccess: () => {
-      setFeedback({ ok: true, text: 'Telemetry configured with Tesla. Streaming will start when the vehicle is awake.' });
+      setFeedback({ ok: true, text: t('securityAlerts.wizard.feedback.telemetryConfigured') });
       queryClient.invalidateQueries({ queryKey: ['teslaPairingStatus'] });
     },
-    onError: (err: Error) => setFeedback({ ok: false, text: err.message || 'Telemetry configuration failed.' }),
+    onError: (err: Error) => setFeedback({ ok: false, text: err.message || t('securityAlerts.wizard.feedback.telemetryError') }),
   });
 
   const publicKeyTestUrl = useMemo(() => status?.publicKeyUrl ?? null, [status?.publicKeyUrl]);
 
   if (isLoading) {
-    return <p className={subTextClass}>Loading pairing wizard…</p>;
+    return <p className={subTextClass}>{t('securityAlerts.loading')}</p>;
   }
 
   const keyGenerated = status?.keyGenerated ?? false;
   const partnerRegistered = status?.partnerRegistered ?? false;
   const vehicles = status?.vehicles ?? [];
+  const labelDone = t('securityAlerts.wizard.common.done');
+  const labelTodo = t('securityAlerts.wizard.common.todo');
 
   return (
     <div className="space-y-4">
       <div className="border-t border-[#2a2a2a] pt-4 space-y-1">
-        <div className={sectionTitleClass}>Vehicle pairing wizard</div>
-        <p className={subTextClass}>
-          Once your Tesla account is connected, follow these steps to authorize this TeslaHub instance to receive
-          telemetry from your vehicles.
-        </p>
+        <div className={sectionTitleClass}>{t('securityAlerts.wizard.title')}</div>
+        <p className={subTextClass}>{t('securityAlerts.wizard.intro')}</p>
       </div>
 
       {feedback && (
@@ -155,24 +156,19 @@ export default function TeslaPairingWizard() {
       {/* Step 1 — keypair generation */}
       <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3 space-y-3">
         <div className="flex items-center justify-between">
-          <div className="text-sm text-[#e0e0e0]">1. Generate the public key for your domain</div>
-          <StatusPill ok={keyGenerated} label={keyGenerated ? 'done' : 'todo'} />
+          <div className="text-sm text-[#e0e0e0]">{t('securityAlerts.wizard.step1.title')}</div>
+          <StatusPill ok={keyGenerated} label={keyGenerated ? labelDone : labelTodo} />
         </div>
-        <p className={subTextClass}>
-          TeslaHub creates an EC P-256 keypair and exposes the public key at a fixed well-known URL on your domain.
-          The private key is encrypted at rest with AES-GCM and never leaves the database.
-        </p>
+        <p className={subTextClass}>{t('securityAlerts.wizard.step1.intro')}</p>
         <div className="space-y-2">
-          <label className={sectionTitleClass}>Public domain</label>
+          <label className={sectionTitleClass}>{t('securityAlerts.wizard.step1.domainLabel')}</label>
           <input
             className={inputClass}
             value={domain}
             onChange={(e) => setDomain(e.target.value)}
-            placeholder="teslahub.yourdomain.com"
+            placeholder={t('securityAlerts.wizard.step1.domainPlaceholder')}
           />
-          <p className={subTextClass}>
-            Use the host TeslaHub is reachable from on the public internet (no <code>http://</code> prefix, no path).
-          </p>
+          <p className={subTextClass}>{t('securityAlerts.wizard.step1.domainHint')}</p>
         </div>
         <button
           className={buttonPrimary}
@@ -180,24 +176,19 @@ export default function TeslaPairingWizard() {
           onClick={() => generateMutation.mutate()}
         >
           {generateMutation.isPending
-            ? 'Generating…'
+            ? t('securityAlerts.wizard.step1.generating')
             : keyGenerated
-              ? 'Regenerate key (resets pairing!)'
-              : 'Generate public key'}
+              ? t('securityAlerts.wizard.step1.regenerate')
+              : t('securityAlerts.wizard.step1.generate')}
         </button>
 
         {keyGenerated && publicKeyTestUrl && (
           <div className="space-y-1 pt-2">
-            <div className={sectionTitleClass}>Public key URL</div>
+            <div className={sectionTitleClass}>{t('securityAlerts.wizard.step1.publicKeyUrl')}</div>
             <div className={codeBlockClass}>{publicKeyTestUrl}</div>
-            <p className={subTextClass}>
-              Open this URL in a new tab — it must return your public key in PEM format. If it fails, verify your DNS
-              record, your reverse proxy (Caddy/Nginx), and that the path{' '}
-              <code className="text-[#e0e0e0]">/.well-known/appspecific/com.tesla.3p.public-key.pem</code> reaches the
-              TeslaHub API container.
-            </p>
+            <p className={subTextClass}>{t('securityAlerts.wizard.step1.publicKeyTestHint')}</p>
             <a className="text-[#e31937] text-xs underline" href={publicKeyTestUrl} target="_blank" rel="noreferrer">
-              Test the public key endpoint
+              {t('securityAlerts.wizard.step1.publicKeyTestLink')}
             </a>
           </div>
         )}
@@ -206,23 +197,20 @@ export default function TeslaPairingWizard() {
       {/* Step 2 — partner registration */}
       <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3 space-y-3">
         <div className="flex items-center justify-between">
-          <div className="text-sm text-[#e0e0e0]">2. Register your domain with Tesla</div>
-          <StatusPill ok={partnerRegistered} label={partnerRegistered ? 'done' : 'todo'} />
+          <div className="text-sm text-[#e0e0e0]">{t('securityAlerts.wizard.step2.title')}</div>
+          <StatusPill ok={partnerRegistered} label={partnerRegistered ? labelDone : labelTodo} />
         </div>
-        <p className={subTextClass}>
-          Tells Tesla that your domain hosts a partner application. Tesla fetches the public key from your{' '}
-          <code className="text-[#e0e0e0]">.well-known</code> endpoint to confirm.
-        </p>
+        <p className={subTextClass}>{t('securityAlerts.wizard.step2.intro')}</p>
         <button
           className={buttonPrimary}
           disabled={registerMutation.isPending || !keyGenerated}
           onClick={() => registerMutation.mutate()}
         >
           {registerMutation.isPending
-            ? 'Registering…'
+            ? t('securityAlerts.wizard.step2.registering')
             : partnerRegistered
-              ? 'Re-register'
-              : 'Register partner domain'}
+              ? t('securityAlerts.wizard.step2.reregister')
+              : t('securityAlerts.wizard.step2.register')}
         </button>
         {status?.partnerRegistrationError && (
           <div className="text-xs px-3 py-2 rounded bg-[#3d1a1a] text-[#f0a7a7] break-all">
@@ -234,13 +222,13 @@ export default function TeslaPairingWizard() {
       {/* Step 3 — vehicles + pairing QR */}
       <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3 space-y-3">
         <div className="flex items-center justify-between">
-          <div className="text-sm text-[#e0e0e0]">3. Pair each vehicle with TeslaHub</div>
+          <div className="text-sm text-[#e0e0e0]">{t('securityAlerts.wizard.step3.title')}</div>
           <button
             className={buttonSecondary}
             disabled={syncMutation.isPending || !partnerRegistered}
             onClick={() => syncMutation.mutate()}
           >
-            {syncMutation.isPending ? 'Syncing…' : 'Sync vehicles from Tesla'}
+            {syncMutation.isPending ? t('securityAlerts.wizard.step3.syncing') : t('securityAlerts.wizard.step3.sync')}
           </button>
         </div>
 
@@ -254,9 +242,7 @@ export default function TeslaPairingWizard() {
               />
             )}
             <div className="space-y-1">
-              <p className="text-xs text-[#e0e0e0]">
-                Scan this QR code with your iPhone (or open the link below in your phone's browser):
-              </p>
+              <p className="text-xs text-[#e0e0e0]">{t('securityAlerts.wizard.step3.qrIntro')}</p>
               <a
                 className="text-[#e31937] text-xs underline break-all"
                 href={status.pairingUrl}
@@ -265,17 +251,13 @@ export default function TeslaPairingWizard() {
               >
                 {status.pairingUrl}
               </a>
-              <p className={subTextClass}>
-                The Tesla mobile app will prompt you to approve TeslaHub's virtual key for the selected vehicle. Repeat
-                this for every car you want to monitor. Once approved, click <em>I've approved</em> below the matching
-                vehicle.
-              </p>
+              <p className={subTextClass}>{t('securityAlerts.wizard.step3.qrHint')}</p>
             </div>
           </div>
         )}
 
         {vehicles.length === 0 && (
-          <p className={subTextClass}>No vehicles synced yet. Click <em>Sync vehicles from Tesla</em> above.</p>
+          <p className={subTextClass}>{t('securityAlerts.wizard.step3.noVehicles')}</p>
         )}
 
         {vehicles.length > 0 && (
@@ -293,13 +275,16 @@ export default function TeslaPairingWizard() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <StatusPill ok={v.keyPaired} label={v.keyPaired ? 'paired' : 'not paired'} />
+                  <StatusPill
+                    ok={v.keyPaired}
+                    label={v.keyPaired ? t('securityAlerts.wizard.step3.paired') : t('securityAlerts.wizard.step3.notPaired')}
+                  />
                   <button
                     className={buttonSecondary}
                     onClick={() => markPairedMutation.mutate({ id: v.id, paired: !v.keyPaired })}
                     disabled={markPairedMutation.isPending}
                   >
-                    {v.keyPaired ? 'Unmark' : "I've approved"}
+                    {v.keyPaired ? t('securityAlerts.wizard.step3.unmark') : t('securityAlerts.wizard.step3.approve')}
                   </button>
                 </div>
               </li>
@@ -311,17 +296,13 @@ export default function TeslaPairingWizard() {
       {/* Step 4 — telemetry configuration */}
       <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3 space-y-3">
         <div className="flex items-center justify-between">
-          <div className="text-sm text-[#e0e0e0]">4. Tell Tesla to start streaming telemetry</div>
+          <div className="text-sm text-[#e0e0e0]">{t('securityAlerts.wizard.step4.title')}</div>
           <StatusPill
             ok={vehicles.some((v) => v.telemetryConfigured)}
-            label={vehicles.some((v) => v.telemetryConfigured) ? 'configured' : 'todo'}
+            label={vehicles.some((v) => v.telemetryConfigured) ? t('securityAlerts.wizard.step4.configured') : labelTodo}
           />
         </div>
-        <p className={subTextClass}>
-          Once your <code className="text-[#e0e0e0]">fleet-telemetry</code> container is running and reachable on{' '}
-          <code className="text-[#e0e0e0]">telemetry.yourdomain.com</code> (see README), click below. TeslaHub calls
-          Tesla's <code className="text-[#e0e0e0]">/fleet_telemetry_config_create</code> for every paired vehicle.
-        </p>
+        <p className={subTextClass}>{t('securityAlerts.wizard.step4.intro')}</p>
         <button
           className={buttonPrimary}
           disabled={
@@ -332,10 +313,12 @@ export default function TeslaPairingWizard() {
             configureTelemetryMutation.mutate(vehicles.filter((v) => v.keyPaired).map((v) => v.id))
           }
         >
-          {configureTelemetryMutation.isPending ? 'Configuring…' : 'Configure telemetry for all paired vehicles'}
+          {configureTelemetryMutation.isPending
+            ? t('securityAlerts.wizard.step4.configuring')
+            : t('securityAlerts.wizard.step4.configure')}
         </button>
         {vehicles.filter((v) => v.keyPaired).length === 0 && (
-          <p className={subTextClass}>Pair at least one vehicle in step 3 first.</p>
+          <p className={subTextClass}>{t('securityAlerts.wizard.step4.needPaired')}</p>
         )}
       </div>
 
