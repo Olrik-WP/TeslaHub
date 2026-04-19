@@ -345,9 +345,12 @@ teslahub.yourdomain.com {
 }
 ```
 
-### Telemetry stack (self-hosted Fleet Telemetry server)
+### Telemetry stack (self-hosted Fleet Telemetry server + signing proxy)
 
-This is where the actual Sentry events start flowing into your TeslaHub. **One extra service** is added on demand via a Docker Compose `profile`, so it only runs when you opt in. Tesla's `fleet-telemetry` server publishes vehicle signals to your **existing Mosquitto MQTT broker** (the one already running for TeslaMate) — no extra broker needed.
+This is where the actual Sentry events start flowing into your TeslaHub. **Two extra services** are added on demand via a Docker Compose `profile`:
+
+- `fleet-telemetry` — Tesla's official Go server, terminates the TLS WebSocket from each vehicle and re-publishes signals to your **existing Mosquitto MQTT broker** (the one already running for TeslaMate, no extra broker needed).
+- `tesla-http-proxy` — Tesla's official Go HTTP proxy, **mandatory** since firmware 2024.26+ to sign Fleet API write calls (in particular `fleet_telemetry_config`) with your partner private key. Without it, Tesla rejects the call with `400 "must be called through the Vehicle Command HTTP Proxy"`.
 
 #### What you need
 
@@ -390,16 +393,17 @@ sudo find /var/lib/caddy -name "telemetry.yourdomain.com.crt"
 
 Note the parent path containing `caddy/certificates/...` — you will need it below.
 
-#### Clone Tesla's `fleet-telemetry` source
+#### Clone Tesla's source repos (no pre-built images)
 
-Tesla does not publish a pre-built Docker image. You build it yourself from their open-source repo:
+Tesla does not publish pre-built Docker images for either service. You build them yourself from their open-source repos:
 
 ```bash
 cd ~/teslamate
 git clone https://github.com/teslamotors/fleet-telemetry.git fleet-telemetry-src
+git clone https://github.com/teslamotors/vehicle-command.git vehicle-command-src
 ```
 
-This creates `~/teslamate/fleet-telemetry-src/` with the Go code and Dockerfile. Docker Compose will build it on first start.
+This creates `~/teslamate/fleet-telemetry-src/` and `~/teslamate/vehicle-command-src/` with the Go code and Dockerfiles. Docker Compose will build them on first start (~3–5 min each).
 
 #### Create the runtime config
 
@@ -465,11 +469,16 @@ TELEMETRY_MQTT_TOPIC_BASE=telemetry
 
 # Master switch — flip to true to enable the consumer in teslahub-api.
 SECURITY_ALERTS_ENABLED=true
+
+# URL of the local tesla-http-proxy used to sign Fleet API write calls.
+# When the proxy is part of the compose stack (recommended), the
+# default below points to its in-network hostname.
+TESLA_COMMAND_PROXY_URL=https://tesla-http-proxy:4443
 ```
 
-#### Add `fleet-telemetry` to your compose
+#### Add the new services to your compose
 
-In your main `docker-compose.yml`, add this service alongside the existing ones:
+In your main `docker-compose.yml`, add these three services alongside the existing ones (the init container is one-shot and only generates the proxy's local TLS cert on first start):
 
 ```yaml
   fleet-telemetry:
@@ -486,36 +495,98 @@ In your main `docker-compose.yml`, add this service alongside the existing ones:
       - mosquitto
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
+
+  tesla-http-proxy-init:
+    image: alpine:3.20
+    restart: "no"
+    volumes:
+      - key-vault:/key-vault
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        if [ ! -f /key-vault/proxy.crt ]; then
+          apk add --no-cache openssl
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout /key-vault/proxy.key \
+            -out /key-vault/proxy.crt -days 3650 -subj "/CN=tesla-http-proxy"
+          chmod 600 /key-vault/proxy.key
+          chmod 644 /key-vault/proxy.crt
+        fi
+
+  tesla-http-proxy:
+    build:
+      context: ./vehicle-command-src
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      tesla-http-proxy-init:
+        condition: service_completed_successfully
+    environment:
+      - TESLA_HTTP_PROXY_HOST=0.0.0.0
+      - TESLA_HTTP_PROXY_PORT=4443
+      - TESLA_HTTP_PROXY_TLS_CERT=/key-vault/proxy.crt
+      - TESLA_HTTP_PROXY_TLS_KEY=/key-vault/proxy.key
+      - TESLA_KEY_FILE=/key-vault/private.pem
+    volumes:
+      - key-vault:/key-vault
+    expose:
+      - "4443"
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
 ```
 
-Also add the same `/certs` read-only mount to your `teslahub-api` service (the API needs to read the TLS chain when calling Tesla's `fleet_telemetry_config_create`):
+And **add 1 env var + 1 volume** to your existing `teslahub-api` service:
 
 ```yaml
   teslahub-api:
     # ...existing fields...
+    environment:
+      # ...existing env vars...
+      - TESLA_COMMAND_PROXY_URL=${TESLA_COMMAND_PROXY_URL:-}
     volumes:
       - /var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory:/certs:ro
+      - key-vault:/key-vault
+```
+
+And declare the shared volume at the bottom of the file:
+
+```yaml
+volumes:
+  # ...existing volumes...
+  key-vault:
 ```
 
 #### Start the stack
 
 ```bash
 cd ~/teslamate
-docker compose up -d --build fleet-telemetry teslahub-api
+docker compose up -d --build fleet-telemetry tesla-http-proxy teslahub-api
 docker compose logs -f fleet-telemetry
 ```
 
-The first build takes 3–5 minutes (Go compilation + libsodium/libzmq). Subsequent rebuilds are cached.
+The first build takes 5–10 minutes total (Go compilation for both Tesla services + libsodium/libzmq for fleet-telemetry). Subsequent rebuilds are cached.
 
 You should see lines like:
 ```
-{"level":"info","msg":"server started","port":443}
-{"level":"info","msg":"connected to MQTT broker"}
+fleet-telemetry-1   | {"level":"info","msg":"server started","port":443}
+fleet-telemetry-1   | {"level":"info","msg":"connected to MQTT broker"}
+tesla-http-proxy-1  | {"level":"info","msg":"listening","port":4443}
 ```
 
 #### Tell Tesla to start streaming
 
-Once everything is up and your vehicles are paired, open Settings → Security Alerts → click **Configure telemetry** in the wizard. TeslaHub calls Tesla's `/api/1/vehicles/fleet_telemetry_config_create` for each paired VIN with your hostname, port, and TLS chain. Tesla then opens a persistent connection from each car (when awake) to your `fleet-telemetry` container, which republishes the signals to MQTT under `telemetry/<VIN>/v/<field>`. The `teslahub-api` container subscribes to those topics and turns Sentry / break-in events into Telegram notifications.
+Open Settings → Security Alerts → in the wizard step 4:
+
+1. **First click "Export private key for the proxy"**. This writes your partner private key (decrypted) to the shared `key-vault` Docker volume so `tesla-http-proxy` can sign Tesla API requests with it. Do this **once**.
+2. **Then click "Configure telemetry for all paired vehicles"**. TeslaHub sends a signed `POST /api/1/vehicles/fleet_telemetry_config` request through the proxy, which Tesla accepts. Each paired car will then open a persistent connection to your `fleet-telemetry` container as soon as it's awake.
+
+> **Why two clicks?** Tesla mandates the partner-key signature for `fleet_telemetry_config`. The signing happens in `tesla-http-proxy`, which needs the private key on disk. We keep it encrypted in the database by default and only export it on demand to minimize how long it stays in the clear.
+
+After that, the streaming pipeline is :
+```
+Vehicle ─► fleet-telemetry ─► Mosquitto MQTT ─► teslahub-api ─► Telegram
+```
 
 ### Receiving notifications (Telegram)
 

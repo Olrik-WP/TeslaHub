@@ -663,11 +663,15 @@
       },
       "step4": {
         "title": "4. Tell Tesla to start streaming telemetry",
-        "intro": "Once your fleet-telemetry container is running and reachable on telemetry.yourdomain.com (see README), click below. TeslaHub calls Tesla's /fleet_telemetry_config_create for every paired vehicle.",
+        "intro": "Once your fleet-telemetry container is running and reachable on telemetry.yourdomain.com (see README), click below. TeslaHub calls Tesla's /fleet_telemetry_config for every paired vehicle. The call is signed by your tesla-http-proxy sidecar with the partner private key.",
         "configure": "Configure telemetry for all paired vehicles",
         "configuring": "Configuring…",
         "needPaired": "Pair at least one vehicle in step 3 first.",
-        "configured": "configured"
+        "configured": "configured",
+        "exportKeyTitle": "Before configuring: export the partner private key",
+        "exportKeyHint": "Tesla now requires fleet_telemetry_config to be signed by your partner private key. Click below once to write the key (decrypted) to the shared key-vault Docker volume so the tesla-http-proxy container can sign the request.",
+        "exportKey": "Export private key for the proxy",
+        "exporting": "Exporting…"
       },
       "feedback": {
         "keyGenerated": "Public key generated.",
@@ -677,7 +681,9 @@
         "synced": "Synced {{count}} vehicle(s).",
         "syncError": "Vehicle sync failed.",
         "telemetryConfigured": "Telemetry configured with Tesla. Streaming will start when the vehicle is awake.",
-        "telemetryError": "Telemetry configuration failed."
+        "telemetryError": "Telemetry configuration failed.",
+        "keyExported": "Partner private key exported to {{path}}. The tesla-http-proxy container can now sign Tesla API requests.",
+        "keyExportError": "Could not export the partner private key."
       },
       "common": {
         "todo": "todo",

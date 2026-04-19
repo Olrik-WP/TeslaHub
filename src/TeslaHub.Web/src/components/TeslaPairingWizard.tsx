@@ -124,6 +124,18 @@ export default function TeslaPairingWizard() {
     onError: (err: Error) => setFeedback({ ok: false, text: err.message || t('securityAlerts.wizard.feedback.telemetryError') }),
   });
 
+  const exportPrivateKeyMutation = useMutation({
+    mutationFn: () =>
+      api<{ exported: boolean; path: string }>('/tesla-pairing/export-private-key', { method: 'POST' }),
+    onSuccess: (data) =>
+      setFeedback({
+        ok: true,
+        text: t('securityAlerts.wizard.feedback.keyExported', { path: data.path }),
+      }),
+    onError: (err: Error) =>
+      setFeedback({ ok: false, text: err.message || t('securityAlerts.wizard.feedback.keyExportError') }),
+  });
+
   const publicKeyTestUrl = useMemo(() => status?.publicKeyUrl ?? null, [status?.publicKeyUrl]);
 
   if (isLoading) {
@@ -303,6 +315,21 @@ export default function TeslaPairingWizard() {
           />
         </div>
         <p className={subTextClass}>{t('securityAlerts.wizard.step4.intro')}</p>
+
+        <div className="bg-[#141414] border border-[#3d2a1a] rounded p-2 space-y-2">
+          <div className="text-xs text-[#e0e0e0]">{t('securityAlerts.wizard.step4.exportKeyTitle')}</div>
+          <p className={subTextClass}>{t('securityAlerts.wizard.step4.exportKeyHint')}</p>
+          <button
+            className={buttonSecondary}
+            disabled={exportPrivateKeyMutation.isPending}
+            onClick={() => exportPrivateKeyMutation.mutate()}
+          >
+            {exportPrivateKeyMutation.isPending
+              ? t('securityAlerts.wizard.step4.exporting')
+              : t('securityAlerts.wizard.step4.exportKey')}
+          </button>
+        </div>
+
         <button
           className={buttonPrimary}
           disabled={

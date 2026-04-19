@@ -663,11 +663,15 @@
       },
       "step4": {
         "title": "4. Tesla bitten, Telemetrie zu streamen",
-        "intro": "Sobald Ihr fleet-telemetry-Container läuft und unter telemetry.ihredomain.de erreichbar ist (siehe README), klicken Sie unten. TeslaHub ruft /fleet_telemetry_config_create für jedes gekoppelte Fahrzeug auf.",
+        "intro": "Sobald Ihr fleet-telemetry-Container läuft und unter telemetry.ihredomain.de erreichbar ist (siehe README), klicken Sie unten. TeslaHub ruft /fleet_telemetry_config für jedes gekoppelte Fahrzeug auf. Die Anfrage wird von Ihrem tesla-http-proxy-Sidecar mit dem Partner-Private-Key signiert.",
         "configure": "Telemetrie für alle gekoppelten Fahrzeuge konfigurieren",
         "configuring": "Konfiguration…",
         "needPaired": "Koppeln Sie zuerst mindestens ein Fahrzeug in Schritt 3.",
-        "configured": "konfiguriert"
+        "configured": "konfiguriert",
+        "exportKeyTitle": "Vor der Konfiguration: Partner-Private-Key exportieren",
+        "exportKeyHint": "Tesla verlangt, dass fleet_telemetry_config mit Ihrem Partner-Private-Key signiert wird. Klicken Sie einmal unten, um den (entschlüsselten) Key in das gemeinsame Docker-Volume key-vault zu schreiben, damit der tesla-http-proxy-Container die Anfrage signieren kann.",
+        "exportKey": "Private Key für den Proxy exportieren",
+        "exporting": "Export läuft…"
       },
       "feedback": {
         "keyGenerated": "Öffentlicher Schlüssel generiert.",
@@ -677,7 +681,9 @@
         "synced": "{{count}} Fahrzeug(e) synchronisiert.",
         "syncError": "Fahrzeug-Synchronisierung fehlgeschlagen.",
         "telemetryConfigured": "Telemetrie bei Tesla konfiguriert. Streaming startet, wenn das Fahrzeug aktiv ist.",
-        "telemetryError": "Telemetrie-Konfiguration fehlgeschlagen."
+        "telemetryError": "Telemetrie-Konfiguration fehlgeschlagen.",
+        "keyExported": "Partner-Private-Key nach {{path}} exportiert. Der tesla-http-proxy-Container kann jetzt Tesla-API-Anfragen signieren.",
+        "keyExportError": "Partner-Private-Key konnte nicht exportiert werden."
       },
       "common": {
         "todo": "offen",

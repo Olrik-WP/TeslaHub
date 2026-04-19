@@ -1,25 +1,32 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # TeslaHub — Optional Security Alerts stack
 #
-# Spins up Tesla's official Fleet Telemetry server which terminates the
-# TLS WebSocket connection from each vehicle and re-publishes the events
-# as MQTT messages on the existing Mosquitto broker (already running for
-# TeslaMate). TeslaHub.Api subscribes to these MQTT topics and turns
-# Sentry / break-in events into Telegram notifications.
+# Three extra services required for real-time Tesla Sentry / break-in alerts:
 #
-# Why MQTT (and not Kafka / NATS / etc.):
-#   - Tesla Fleet Telemetry only supports kafka / kinesis / pubsub /
-#     logger / zmq / mqtt as record dispatchers (no NATS).
-#   - You already have Mosquitto running for TeslaMate — no extra broker
-#     needed.
+#   - fleet-telemetry        Tesla's official Go server. Terminates the TLS
+#                            WebSocket from each vehicle and re-publishes
+#                            events as MQTT messages on the existing
+#                            Mosquitto broker.
 #
-# Tesla does not publish a pre-built image, so we build from source.
-# Clone https://github.com/teslamotors/fleet-telemetry into
-# ./fleet-telemetry-src first.
+#   - tesla-http-proxy-init  One-shot init container that generates a
+#                            self-signed TLS cert for the local-only proxy
+#                            endpoint on first run.
 #
-# Caddy must be configured to obtain a TLS cert for telemetry.<your-domain>
-# (DNS-only on Cloudflare, see README "Security Alerts" section).
-# The cert volume below is bind-mounted read-only into the container.
+#   - tesla-http-proxy       Tesla's official Go HTTP proxy. Required by
+#                            Tesla to sign Fleet API write calls (most
+#                            notably fleet_telemetry_config) with the
+#                            partner private key. Without it, Tesla rejects
+#                            those calls with 400 "must be called through
+#                            the Vehicle Command HTTP Proxy".
+#
+# Tesla does not publish pre-built images, so we build them locally:
+#   - ./fleet-telemetry-src       (clone of teslamotors/fleet-telemetry)
+#   - ./vehicle-command-src       (clone of teslamotors/vehicle-command)
+#
+# The partner private key needed by tesla-http-proxy lives encrypted in
+# the TeslaHub PostgreSQL database. The user clicks "Export private key
+# for the proxy" in the wizard once, which writes the decrypted key to a
+# Docker volume (key-vault) shared between teslahub-api and the proxy.
 #
 # Usage:
 #   docker compose --profile security-alerts up -d
@@ -33,13 +40,56 @@ services:
     profiles: ["security-alerts"]
     restart: unless-stopped
     ports:
-      # External 8443 forwarded by your router → 443 inside the container.
       - "${TELEMETRY_PORT:-8443}:443"
     volumes:
-      # Caddy stores Let's Encrypt certs here when running as a systemd
-      # service. Adjust the host path to match your install (e.g. for
-      # Caddy in Docker, mount the named caddy_data volume instead).
       - ${CADDY_CERTS_PATH:-/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory}:/certs:ro
       - ./fleet-telemetry/config.json:/etc/fleet-telemetry/config.json:ro
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
+
+  tesla-http-proxy-init:
+    image: alpine:3.20
+    profiles: ["security-alerts"]
+    restart: "no"
+    volumes:
+      - key-vault:/key-vault
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        if [ ! -f /key-vault/proxy.crt ]; then
+          echo "Generating self-signed TLS cert for tesla-http-proxy..."
+          apk add --no-cache openssl
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout /key-vault/proxy.key \
+            -out /key-vault/proxy.crt -days 3650 -subj "/CN=tesla-http-proxy"
+          chmod 600 /key-vault/proxy.key
+          chmod 644 /key-vault/proxy.crt
+        else
+          echo "TLS cert already present, skipping generation."
+        fi
+
+  tesla-http-proxy:
+    build:
+      context: ./vehicle-command-src
+      dockerfile: Dockerfile
+    profiles: ["security-alerts"]
+    restart: unless-stopped
+    depends_on:
+      tesla-http-proxy-init:
+        condition: service_completed_successfully
+    environment:
+      - TESLA_HTTP_PROXY_HOST=0.0.0.0
+      - TESLA_HTTP_PROXY_PORT=4443
+      - TESLA_HTTP_PROXY_TLS_CERT=/key-vault/proxy.crt
+      - TESLA_HTTP_PROXY_TLS_KEY=/key-vault/proxy.key
+      - TESLA_KEY_FILE=/key-vault/private.pem
+    volumes:
+      - key-vault:/key-vault
+    expose:
+      - "4443"
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+volumes:
+  key-vault:

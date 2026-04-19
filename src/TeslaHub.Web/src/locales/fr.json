@@ -663,11 +663,15 @@
       },
       "step4": {
         "title": "4. Demander à Tesla de démarrer le streaming",
-        "intro": "Une fois votre container fleet-telemetry démarré et joignable sur telemetry.votredomaine.com (voir README), cliquez ci-dessous. TeslaHub appelle /fleet_telemetry_config_create de Tesla pour chaque véhicule apparié.",
+        "intro": "Une fois votre container fleet-telemetry démarré et joignable sur telemetry.votredomaine.com (voir README), cliquez ci-dessous. TeslaHub appelle /fleet_telemetry_config de Tesla pour chaque véhicule apparié. La requête est signée par votre sidecar tesla-http-proxy avec la clé privée partner.",
         "configure": "Configurer la télémétrie pour tous les véhicules appariés",
         "configuring": "Configuration…",
         "needPaired": "Appariez au moins un véhicule à l'étape 3 d'abord.",
-        "configured": "configuré"
+        "configured": "configuré",
+        "exportKeyTitle": "Avant de configurer : exporter la clé privée partner",
+        "exportKeyHint": "Tesla exige que fleet_telemetry_config soit signé par votre clé privée partner. Cliquez ci-dessous une fois pour écrire la clé (déchiffrée) dans le volume Docker partagé key-vault, afin que le container tesla-http-proxy puisse signer la requête.",
+        "exportKey": "Exporter la clé privée pour le proxy",
+        "exporting": "Export en cours…"
       },
       "feedback": {
         "keyGenerated": "Clé publique générée.",
@@ -677,7 +681,9 @@
         "synced": "{{count}} véhicule(s) synchronisé(s).",
         "syncError": "La synchronisation des véhicules a échoué.",
         "telemetryConfigured": "Télémétrie configurée auprès de Tesla. Le streaming commencera quand le véhicule sera réveillé.",
-        "telemetryError": "La configuration de télémétrie a échoué."
+        "telemetryError": "La configuration de télémétrie a échoué.",
+        "keyExported": "Clé privée partner exportée vers {{path}}. Le container tesla-http-proxy peut maintenant signer les requêtes Tesla.",
+        "keyExportError": "Impossible d'exporter la clé privée partner."
       },
       "common": {
         "todo": "à faire",
