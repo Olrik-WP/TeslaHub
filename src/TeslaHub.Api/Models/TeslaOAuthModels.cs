@@ -125,3 +125,49 @@ public record TeslaVehicleDto
     public bool TelemetryConfigured { get; init; }
     public bool KeyPaired { get; init; }
 }
+
+/// <summary>
+/// EC P-256 keypair used to register TeslaHub as a Tesla third-party app.
+/// The public key is exposed at /.well-known/appspecific/com.tesla.3p.public-key.pem
+/// and must be paired with each vehicle from the Tesla mobile app before
+/// telemetry can be received.
+/// </summary>
+public class TeslaKeyPair
+{
+    [Key]
+    public int Id { get; set; }
+
+    [Required]
+    public string PublicKeyPem { get; set; } = string.Empty;
+
+    [Required]
+    public string EncryptedPrivateKeyPem { get; set; } = string.Empty;
+
+    [Required, MaxLength(255)]
+    public string Domain { get; set; } = string.Empty;
+
+    public bool PartnerRegistered { get; set; }
+    public DateTime? PartnerRegisteredAt { get; set; }
+
+    [MaxLength(1000)]
+    public string? PartnerRegistrationError { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public record TeslaPairingStatusDto
+{
+    public bool KeyGenerated { get; init; }
+    public string? Domain { get; init; }
+    public string? PublicKeyUrl { get; init; }
+    public bool PartnerRegistered { get; init; }
+    public DateTime? PartnerRegisteredAt { get; init; }
+    public string? PartnerRegistrationError { get; init; }
+    public string? PairingUrl { get; init; }
+    public TeslaVehicleDto[] Vehicles { get; init; } = [];
+}
+
+public record TeslaKeyGenerationRequest
+{
+    public string? Domain { get; init; }
+}

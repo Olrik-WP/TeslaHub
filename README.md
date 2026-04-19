@@ -257,7 +257,7 @@ TeslaHub never relies on a shared backend. Each TeslaHub installation registers 
 | PR | Scope | Status |
 |---|---|---|
 | **1** | Tesla Fleet API OAuth foundation, encrypted token storage, automatic refresh, "Connect Tesla account" UI | ✅ This release |
-| **2** | Public-key generation, `.well-known` endpoint, vehicle pairing wizard with QR code | ⏳ Planned |
+| **2** | Public-key generation, `.well-known` endpoint, vehicle pairing wizard with QR code | ✅ This release |
 | **3** | `fleet-telemetry` + NATS Docker stack, Caddy snippets for the telemetry sub-domain | ⏳ Planned |
 | **4** | Real-time Sentry / Break-in detection, recipient × vehicle notification matrix, Telegram bot delivery | ⏳ Planned |
 
@@ -326,13 +326,30 @@ docker compose up -d teslahub-api
 
 Open TeslaHub → **Settings** → scroll to the **Security Alerts** card → click **Connect Tesla account**. You will be redirected to `auth.tesla.com`, sign in, and return to TeslaHub. Your Tesla tokens are now stored encrypted with AES-GCM in your local `teslahub` PostgreSQL database and refreshed automatically every ~30 minutes.
 
-### What today's PR does NOT do yet
+### Pairing your vehicles (after Tesla OAuth)
 
-- Pairing your vehicle's public key (PR 2)
-- Receiving real-time Sentry / break-in events (PRs 3 & 4)
-- Sending Telegram notifications (PR 4)
+Once your Tesla account is connected, the Settings card unfolds a 3-step wizard:
 
-So today this is essentially "Connect Tesla account" plumbing — useful on its own (foundation for vehicle commands later) and a stepping stone to the full feature.
+1. **Generate the public key for your domain.** TeslaHub creates an EC P-256 keypair, encrypts the private key at rest with AES-GCM, and exposes the public key (PEM, `SubjectPublicKeyInfo`) at `https://<your-domain>/.well-known/appspecific/com.tesla.3p.public-key.pem`. The wizard provides a clickable test link so you can confirm Tesla can fetch it.
+2. **Register your domain with Tesla** as a third-party partner. TeslaHub calls `POST /api/1/partner_accounts` on your behalf using your account's access token. Tesla pulls your public key from the `.well-known` URL above to confirm.
+3. **Pair each vehicle.** TeslaHub generates a QR code pointing to `https://tesla.com/_ak/<your-domain>`. Scan it with your iPhone, the Tesla mobile app opens and asks you to approve TeslaHub's virtual key for the selected vehicle. Repeat for each car. Click *I've approved* in TeslaHub once done.
+
+**Caddy snippet** for the well-known endpoint (already covered if your existing reverse-proxy block sends `/api/*` and the `/.well-known/*` path to `teslahub-api`). Example:
+
+```caddyfile
+teslahub.yourdomain.com {
+    reverse_proxy /.well-known/appspecific/* teslahub-api:8080
+    reverse_proxy /api/*                     teslahub-api:8080
+    reverse_proxy /                          teslahub-web:80
+}
+```
+
+### What today's release does NOT do yet
+
+- Receiving real-time Sentry / break-in events (PR 3 — `fleet-telemetry` + NATS Docker stack, Caddy snippets for the telemetry sub-domain)
+- Sending Telegram notifications (PR 4 — recipient × vehicle matrix, Telegram bot delivery)
+
+So today the pipeline is fully plumbed up to vehicle pairing. Streaming + alerts will land in subsequent commits on this same branch.
 
 ### Telegram bot (preview — used in PR 4)
 

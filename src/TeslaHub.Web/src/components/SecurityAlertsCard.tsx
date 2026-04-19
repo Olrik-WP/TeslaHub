@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
+import TeslaPairingWizard from './TeslaPairingWizard';
 
 type TeslaOAuthStatus = {
   configured: boolean;
@@ -282,19 +283,7 @@ export default function SecurityAlertsCard() {
             </button>
           </div>
 
-          <p className={subTextClass}>
-            Next steps (coming in upcoming releases): public-key pairing with your vehicles, Fleet Telemetry stream, and
-            Telegram notification routing per recipient and per vehicle. See the{' '}
-            <a
-              className={linkClass}
-              href="https://github.com/Olrik-WP/TeslaHub#security-alerts-optional"
-              target="_blank"
-              rel="noreferrer"
-            >
-              roadmap
-            </a>
-            .
-          </p>
+          <TeslaPairingWizard />
         </div>
       )}
     </div>

@@ -36,9 +36,12 @@ builder.Services.AddSingleton<MqttLiveDataService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttLiveDataService>());
 builder.Services.AddHttpClient("tesla", c => c.DefaultRequestHeaders.UserAgent.ParseAdd("TeslaHub/1.0"));
 
-// Tesla Fleet API OAuth foundation (PR1 of the optional Security Alerts feature)
+// Tesla Fleet API integration (optional Security Alerts feature)
 builder.Services.AddSingleton<TeslaTokenEncryptionService>();
 builder.Services.AddScoped<TeslaOAuthService>();
+builder.Services.AddScoped<TeslaKeyService>();
+builder.Services.AddScoped<TeslaFleetApiClient>();
+builder.Services.AddScoped<TeslaPairingService>();
 builder.Services.AddHostedService<TeslaTokenRefreshBackgroundService>();
 
 var jwtSecret = builder.Configuration["TESLAHUB_JWT_SECRET"]
@@ -130,6 +133,7 @@ app.MapDatabaseEndpoints();
 app.MapLocationsEndpoints();
 app.MapTripEndpoints();
 app.MapTeslaOAuthEndpoints();
+app.MapTeslaPairingEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { Status = "OK", Timestamp = DateTime.UtcNow }))
     .AllowAnonymous();

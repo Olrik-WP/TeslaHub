@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<CarImage> CarImages => Set<CarImage>();
     public DbSet<TeslaAccount> TeslaAccounts => Set<TeslaAccount>();
     public DbSet<TeslaVehicle> TeslaVehicles => Set<TeslaVehicle>();
+    public DbSet<TeslaKeyPair> TeslaKeyPairs => Set<TeslaKeyPair>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
