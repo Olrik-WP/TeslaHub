@@ -101,6 +101,11 @@ services:
       - TESLA_REDIRECT_URI=${TESLA_REDIRECT_URI:-}
       - TESLA_AUDIENCE=${TESLA_AUDIENCE:-}
       - SECURITY_ALERTS_ENABLED=${SECURITY_ALERTS_ENABLED:-false}
+      - TELEMETRY_DOMAIN=${TELEMETRY_DOMAIN:-}
+      - TELEMETRY_PORT=${TELEMETRY_PORT:-8443}
+      - TELEMETRY_CA_PATH=${TELEMETRY_CA_PATH:-/etc/teslahub/server-ca.crt}
+      - NATS_URL=${NATS_URL:-nats://nats:4222}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TZ=${TZ:-Europe/Paris}
     ports:
       - "127.0.0.1:4001:8080"

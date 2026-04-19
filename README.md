@@ -259,7 +259,7 @@ TeslaHub never relies on a shared backend. Each TeslaHub installation registers 
 | **1** | Tesla Fleet API OAuth foundation, encrypted token storage, automatic refresh, "Connect Tesla account" UI | ✅ This release |
 | **2** | Public-key generation, `.well-known` endpoint, vehicle pairing wizard with QR code | ✅ This release |
 | **3** | `fleet-telemetry` + NATS Docker stack, Caddy snippets for the telemetry sub-domain | ✅ This release |
-| **4** | Real-time Sentry / Break-in detection, recipient × vehicle notification matrix, Telegram bot delivery | ⏳ Planned |
+| **4** | Real-time Sentry / Break-in detection, recipient × vehicle notification matrix, Telegram bot delivery | ✅ This release |
 
 ### What you need (eventually)
 
@@ -434,11 +434,56 @@ The stack stays inactive without `--profile security-alerts` so existing TeslaHu
 
 Once everything above is up and your vehicles are paired, click **Configure telemetry** in the Settings wizard. TeslaHub calls Tesla's `/api/1/vehicles/fleet_telemetry_config_create` for the selected VINs with your hostname, port and CA. Tesla then opens a persistent mTLS WebSocket from each car to your `fleet-telemetry` container, which forwards events to the `tesla.telemetry.>` subjects on NATS.
 
-### What today's release does NOT do yet
+### Receiving notifications (Telegram)
 
-- Consuming the NATS messages and turning them into actual notifications (PR 4 — recipient × vehicle matrix, Telegram bot delivery).
+The final piece is delivery. TeslaHub speaks directly to `api.telegram.org` — there is no intermediate notification service.
 
-When PR 4 lands, telemetry already flowing on NATS will be picked up immediately — no additional setup needed.
+#### Create your personal Telegram bot
+
+1. Open Telegram and start a chat with [@BotFather](https://t.me/BotFather).
+2. Send `/newbot`, pick a display name (e.g. *My TeslaHub Alerts*) and a username ending in `bot`.
+3. BotFather gives you an HTTP API token like `123456789:ABCdef...`. Treat this as a secret.
+4. Open your new bot in Telegram and send `/start` so the bot can later message you.
+
+#### Add the bot token to your `.env`
+
+```env
+# Optional — Telegram bot for security alerts
+TELEGRAM_BOT_TOKEN=123456789:ABCdef...
+```
+
+Restart the API:
+
+```bash
+docker compose up -d teslahub-api
+```
+
+#### Add recipients
+
+In TeslaHub → **Settings → Security Alerts**, scroll down to *Notification recipients*. For each person who should receive alerts:
+
+1. Find their Telegram chat ID by sending any message to [@userinfobot](https://t.me/userinfobot) on Telegram — it replies with the numeric `id`.
+2. Add a recipient (Name + chat ID + language).
+3. Click **Send test** — they should receive a Telegram message instantly.
+4. In the *Sentry* / *Break-in* matrix below the recipient, tick the vehicles each person should be notified about.
+
+You can have multiple recipients per vehicle, or scope each person to specific cars (e.g. spouse only receives alerts for their own car).
+
+### What gets detected
+
+| Alert | Trigger | Source |
+|---|---|---|
+| **Sentry alert** | `SentryModeStateAware` or `SentryModeStatePanic` published by the vehicle | Fleet Telemetry `V` records, field `SentryMode` |
+| **Break-in** | `Locked = true` while `DoorState` reports an open door | Fleet Telemetry `V` records, fields `Locked` + `DoorState` |
+
+The full alert history (last 500) is visible in the *Recent alerts* panel of Settings, with delivery status (notified / failed) for each event.
+
+### Reliability notes
+
+- The NATS stream is configured with **24h retention** (file-backed JetStream) so a TeslaHub restart never loses an alert.
+- The API container reconnects to NATS automatically with a 10-second back-off if the broker is unavailable.
+- Telegram failures are recorded in the alert event row (`failureReason`) so you can diagnose via the *Recent alerts* panel.
+- Tesla OAuth tokens are refreshed proactively every 30 minutes; failures are surfaced in Settings.
 
 ### Telegram bot (preview — used in PR 4)
 

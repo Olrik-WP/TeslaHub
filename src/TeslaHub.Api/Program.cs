@@ -42,7 +42,10 @@ builder.Services.AddScoped<TeslaOAuthService>();
 builder.Services.AddScoped<TeslaKeyService>();
 builder.Services.AddScoped<TeslaFleetApiClient>();
 builder.Services.AddScoped<TeslaPairingService>();
+builder.Services.AddSingleton<TelegramNotificationService>();
+builder.Services.AddScoped<SecurityAlertService>();
 builder.Services.AddHostedService<TeslaTokenRefreshBackgroundService>();
+builder.Services.AddHostedService<TeslaTelemetryConsumer>();
 
 var jwtSecret = builder.Configuration["TESLAHUB_JWT_SECRET"]
     ?? Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
@@ -134,6 +137,7 @@ app.MapLocationsEndpoints();
 app.MapTripEndpoints();
 app.MapTeslaOAuthEndpoints();
 app.MapTeslaPairingEndpoints();
+app.MapSecurityAlertsEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { Status = "OK", Timestamp = DateTime.UtcNow }))
     .AllowAnonymous();

@@ -15,8 +15,11 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="MQTTnet" Version="5.1.0.1559" />
+    <PackageReference Include="NATS.Client.Core" Version="2.5.4" />
+    <PackageReference Include="NATS.Client.JetStream" Version="2.5.4" />
     <PackageReference Include="Npgsql" Version="9.0.3" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+    <PackageReference Include="Telegram.Bot" Version="22.1.1" />
   </ItemGroup>
 
 </Project>

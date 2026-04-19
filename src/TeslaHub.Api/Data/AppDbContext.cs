@@ -16,6 +16,9 @@ public class AppDbContext : DbContext
     public DbSet<TeslaAccount> TeslaAccounts => Set<TeslaAccount>();
     public DbSet<TeslaVehicle> TeslaVehicles => Set<TeslaVehicle>();
     public DbSet<TeslaKeyPair> TeslaKeyPairs => Set<TeslaKeyPair>();
+    public DbSet<NotificationRecipient> NotificationRecipients => Set<NotificationRecipient>();
+    public DbSet<RecipientVehicleSubscription> RecipientVehicleSubscriptions => Set<RecipientVehicleSubscription>();
+    public DbSet<SecurityAlertEvent> SecurityAlertEvents => Set<SecurityAlertEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -48,6 +51,25 @@ public class AppDbContext : DbContext
             .WithMany()
             .HasForeignKey(v => v.TeslaAccountId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<RecipientVehicleSubscription>()
+            .HasIndex(s => new { s.RecipientId, s.TeslaVehicleId })
+            .IsUnique();
+
+        modelBuilder.Entity<RecipientVehicleSubscription>()
+            .HasOne(s => s.Recipient)
+            .WithMany()
+            .HasForeignKey(s => s.RecipientId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<RecipientVehicleSubscription>()
+            .HasOne(s => s.TeslaVehicle)
+            .WithMany()
+            .HasForeignKey(s => s.TeslaVehicleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SecurityAlertEvent>()
+            .HasIndex(e => e.DetectedAt);
 
         modelBuilder.Entity<GlobalSettings>().HasData(new GlobalSettings
         {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { api } from '../api/client';
+import SecurityAlertRecipients from './SecurityAlertRecipients';
 
 type TeslaVehicle = {
   id: number;
@@ -338,10 +339,7 @@ export default function TeslaPairingWizard() {
         )}
       </div>
 
-      <p className={subTextClass}>
-        The Telegram notification matrix (which alerts go to whom) lands in the next release. Telemetry already flowing
-        on NATS will be picked up immediately when it ships — no additional setup needed.
-      </p>
+      <SecurityAlertRecipients vehicles={vehicles} />
 
       <canvas ref={qrCanvasRef} hidden />
     </div>
