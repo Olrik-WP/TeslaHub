@@ -13,6 +13,8 @@ public class AppDbContext : DbContext
     public DbSet<ChargingLocation> ChargingLocations => Set<ChargingLocation>();
     public DbSet<ChargingCostOverride> ChargingCostOverrides => Set<ChargingCostOverride>();
     public DbSet<CarImage> CarImages => Set<CarImage>();
+    public DbSet<TeslaAccount> TeslaAccounts => Set<TeslaAccount>();
+    public DbSet<TeslaVehicle> TeslaVehicles => Set<TeslaVehicle>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,6 +33,20 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<CarImage>()
             .HasIndex(c => c.CarId)
             .IsUnique();
+
+        modelBuilder.Entity<TeslaAccount>()
+            .HasIndex(t => t.TeslaUserId)
+            .IsUnique();
+
+        modelBuilder.Entity<TeslaVehicle>()
+            .HasIndex(v => new { v.TeslaAccountId, v.Vin })
+            .IsUnique();
+
+        modelBuilder.Entity<TeslaVehicle>()
+            .HasOne(v => v.TeslaAccount)
+            .WithMany()
+            .HasForeignKey(v => v.TeslaAccountId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<GlobalSettings>().HasData(new GlobalSettings
         {

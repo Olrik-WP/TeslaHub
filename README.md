@@ -30,6 +30,7 @@ TeslaHub reads your existing TeslaMate data (read-only) and provides a touch-fir
 - Cost analytics by location, month, and period
 - Multi-car support
 - Internationalization (English / French)
+- **Optional** real-time Sentry / break-in alerts via Tesla Fleet Telemetry — see [Security Alerts](#security-alerts-optional)
 
 TeslaMate remains your telemetry source. TeslaHub is the UX layer.
 
@@ -236,6 +237,126 @@ Only the following **live features** require MQTT:
 | Preconditioning | `teslamate/cars/$id/is_preconditioning` |
 
 When MQTT is not connected, TeslaHub shows a subtle indicator and hides the body/security panel.
+
+---
+
+## Security Alerts (optional)
+
+> **Status:** PR 1 of 4 — Tesla OAuth foundation only. Full real-time Sentry alerts arrive in subsequent releases.
+
+TeslaHub can optionally connect to your Tesla account via the official **Tesla Fleet API** to enable real-time security features that go beyond what TeslaMate can capture (most importantly the `SentryModeStateAware` event raised when Sentry detects activity around the vehicle).
+
+### Philosophy: 100% self-hosted, zero third party
+
+TeslaHub never relies on a shared backend. Each TeslaHub installation registers its **own** Tesla developer app and runs its **own** Tesla Fleet Telemetry server. Your Tesla tokens, vehicle data, and alerts never leave your machine.
+
+> **Credit:** the architecture is heavily inspired by the excellent open-source project [SentryGuard](https://github.com/abarghoud/SentryGuard) by Anas Barghoud (AGPL-3.0). TeslaHub re-implements the same concepts in C#/.NET so they fit naturally into the existing TeslaHub stack — and crucially, does so **without any shared infrastructure**.
+
+### Roadmap
+
+| PR | Scope | Status |
+|---|---|---|
+| **1** | Tesla Fleet API OAuth foundation, encrypted token storage, automatic refresh, "Connect Tesla account" UI | ✅ This release |
+| **2** | Public-key generation, `.well-known` endpoint, vehicle pairing wizard with QR code | ⏳ Planned |
+| **3** | `fleet-telemetry` + NATS Docker stack, Caddy snippets for the telemetry sub-domain | ⏳ Planned |
+| **4** | Real-time Sentry / Break-in detection, recipient × vehicle notification matrix, Telegram bot delivery | ⏳ Planned |
+
+### What you need (eventually)
+
+- A public domain name (TeslaHub orange / proxied subdomain + a DNS-only telemetry subdomain — see PR 3 docs)
+- A free Tesla developer app at [developer.tesla.com](https://developer.tesla.com)
+- A personal Telegram bot (created in 30 seconds via [@BotFather](https://t.me/BotFather))
+
+Everything stays on **your** server. No third-party cloud, no shared client_id, no relayed messages.
+
+### Enabling the Tesla OAuth foundation (PR 1)
+
+This is the only step you need today. The other components are no-ops until later PRs ship.
+
+#### 1. Create your Tesla developer app
+
+1. Go to [developer.tesla.com](https://developer.tesla.com) and sign in with your Tesla account.
+2. Create a new App with these details:
+   - **App Name:** `TeslaHub Self-Hosted`
+   - **Description:** `Personal companion dashboard for TeslaMate`
+   - **Allowed Origin URL:** `https://teslahub.yourdomain.com`
+   - **Allowed Redirect URI:** `https://teslahub.yourdomain.com/api/tesla-oauth/callback`
+   - **Scopes:** `openid`, `offline_access`, `vehicle_device_data`, `vehicle_cmds`
+3. Submit. You receive a `Client ID` and `Client Secret`. Keep them safe.
+
+#### 2. Add the variables to your `.env`
+
+```env
+# Optional — Security Alerts (Tesla Fleet API)
+TESLA_CLIENT_ID=your_tesla_client_id
+TESLA_CLIENT_SECRET=your_tesla_client_secret
+TESLA_REDIRECT_URI=https://teslahub.yourdomain.com/api/tesla-oauth/callback
+
+# Region — pick the audience matching your Tesla account region
+# EU:    https://fleet-api.prd.eu.vn.cloud.tesla.com   (default)
+# NA/AP: https://fleet-api.prd.na.vn.cloud.tesla.com
+TESLA_AUDIENCE=https://fleet-api.prd.eu.vn.cloud.tesla.com
+
+# Reserved for upcoming PRs — leave false for now
+SECURITY_ALERTS_ENABLED=false
+```
+
+#### 3. Wire them into your `teslahub-api` service
+
+Add the new variables to the `environment:` block of `teslahub-api` in your `docker-compose.yml`:
+
+```yaml
+  teslahub-api:
+    environment:
+      # ... existing variables ...
+      - TESLA_CLIENT_ID=${TESLA_CLIENT_ID:-}
+      - TESLA_CLIENT_SECRET=${TESLA_CLIENT_SECRET:-}
+      - TESLA_REDIRECT_URI=${TESLA_REDIRECT_URI:-}
+      - TESLA_AUDIENCE=${TESLA_AUDIENCE:-}
+      - SECURITY_ALERTS_ENABLED=${SECURITY_ALERTS_ENABLED:-false}
+```
+
+If you leave the variables empty, the feature simply stays inactive — TeslaHub continues to work as before.
+
+#### 4. Restart and connect
+
+```bash
+docker compose up -d teslahub-api
+```
+
+Open TeslaHub → **Settings** → scroll to the **Security Alerts** card → click **Connect Tesla account**. You will be redirected to `auth.tesla.com`, sign in, and return to TeslaHub. Your Tesla tokens are now stored encrypted with AES-GCM in your local `teslahub` PostgreSQL database and refreshed automatically every ~30 minutes.
+
+### What today's PR does NOT do yet
+
+- Pairing your vehicle's public key (PR 2)
+- Receiving real-time Sentry / break-in events (PRs 3 & 4)
+- Sending Telegram notifications (PR 4)
+
+So today this is essentially "Connect Tesla account" plumbing — useful on its own (foundation for vehicle commands later) and a stepping stone to the full feature.
+
+### Telegram bot (preview — used in PR 4)
+
+To save you a step when PR 4 lands, here is how to create your personal Telegram bot ahead of time:
+
+1. Open Telegram and start a chat with [@BotFather](https://t.me/BotFather).
+2. Send `/newbot`. Pick a display name (e.g. *My TeslaHub Alerts*) and a username ending in `bot` (e.g. `myteslahub_alerts_bot`).
+3. BotFather replies with an HTTP API token like `123456789:ABCdef...`. Keep it safe — this is your bot's password.
+4. Open your new bot in Telegram and send `/start` so the bot can later reply to you.
+5. To find your numeric chat ID, send any message to [@userinfobot](https://t.me/userinfobot); it replies with your `id`.
+
+Store both values somewhere safe. PR 4 will let you paste them into a per-recipient form in TeslaHub Settings, with a "send test message" button to confirm everything works.
+
+### Security model
+
+- **Tokens at rest:** AES-GCM (256-bit), key derived from `TESLAHUB_JWT_SECRET` via SHA-256.
+- **OAuth state:** signed JWT with HS256, 10-minute expiry, audience-checked.
+- **Token refresh:** automatic background refresh every 30 minutes, 60-minute proactive horizon.
+- **Disconnect:** removes tokens and associated vehicles from the database immediately.
+- **Network:** TeslaHub talks directly to `auth.tesla.com` and `fleet-auth.prd.vn.cloud.tesla.com` — no intermediate service.
+
+### Why is the feature "optional"?
+
+Because it requires a public domain name and a Tesla developer app, which is more setup than most TeslaHub users want. The feature is opt-in: the new environment variables default to empty, the Settings card shows clear instructions, and the rest of TeslaHub continues to work exactly as before for users who don't enable it.
 
 ---
 

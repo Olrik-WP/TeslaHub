@@ -55,6 +55,12 @@ services:
       - TESLAHUB_JWT_SECRET=${TESLAHUB_JWT_SECRET:-dev_jwt_secret_not_for_production_use}
       - MAP_TILE_URL=${MAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
       - TESLAHUB_ALLOWED_IPS=${TESLAHUB_ALLOWED_IPS:-}
+      # Optional — Security Alerts (Tesla Fleet API). Leave empty to disable.
+      - TESLA_CLIENT_ID=${TESLA_CLIENT_ID:-}
+      - TESLA_CLIENT_SECRET=${TESLA_CLIENT_SECRET:-}
+      - TESLA_REDIRECT_URI=${TESLA_REDIRECT_URI:-}
+      - TESLA_AUDIENCE=${TESLA_AUDIENCE:-}
+      - SECURITY_ALERTS_ENABLED=${SECURITY_ALERTS_ENABLED:-false}
       - TZ=${TZ:-Europe/Paris}
     ports:
       - "127.0.0.1:4001:8080"
