@@ -63,10 +63,16 @@ services:
           apk add --no-cache openssl
           openssl req -x509 -newkey rsa:2048 -nodes -keyout /key-vault/proxy.key \
             -out /key-vault/proxy.crt -days 3650 -subj "/CN=tesla-http-proxy"
-          chmod 600 /key-vault/proxy.key
-          chmod 644 /key-vault/proxy.crt
         else
           echo "TLS cert already present, skipping generation."
+        fi
+        # Ensure tesla-http-proxy (uid 65532, distroless nonroot) can read
+        # both files. The cert is public; the key is local-only on a
+        # closed Docker network, so world-readable is acceptable here.
+        chmod 644 /key-vault/proxy.crt /key-vault/proxy.key
+        # Same for the partner private key once it's exported by the API.
+        if [ -f /key-vault/private.pem ]; then
+          chmod 644 /key-vault/private.pem
         fi
 
   tesla-http-proxy:

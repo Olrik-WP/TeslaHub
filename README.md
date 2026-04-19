@@ -510,9 +510,9 @@ In your main `docker-compose.yml`, add these three services alongside the existi
           apk add --no-cache openssl
           openssl req -x509 -newkey rsa:2048 -nodes -keyout /key-vault/proxy.key \
             -out /key-vault/proxy.crt -days 3650 -subj "/CN=tesla-http-proxy"
-          chmod 600 /key-vault/proxy.key
-          chmod 644 /key-vault/proxy.crt
         fi
+        chmod 644 /key-vault/proxy.crt /key-vault/proxy.key
+        if [ -f /key-vault/private.pem ]; then chmod 644 /key-vault/private.pem; fi
 
   tesla-http-proxy:
     build:
