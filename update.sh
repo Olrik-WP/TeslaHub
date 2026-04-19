@@ -62,20 +62,32 @@ DISK_BEFORE=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1)
 log "Docker disk usage before: ${DISK_BEFORE:-unknown}"
 
 # ── Detect optional Security Alerts stack ────────────────────────
-# fleet-telemetry is built locally from Tesla's source (no public
-# image). If the user has it declared and Security Alerts is enabled,
-# include it in the rebuild cycle so the latest Tesla code is used.
+# fleet-telemetry and tesla-http-proxy are built locally from Tesla's
+# source (no public Docker images). If the user has them declared and
+# Security Alerts is enabled, include them in the rebuild cycle so the
+# latest Tesla code is used.
 cd "$DEPLOY_DIR"
 
 EXTRA_BUILD=""
-if docker compose config --services 2>/dev/null | grep -qx "fleet-telemetry"; then
-  if grep -qE '^\s*SECURITY_ALERTS_ENABLED\s*=\s*true' "$DEPLOY_DIR/.env" 2>/dev/null; then
-    EXTRA_BUILD="fleet-telemetry"
-    log "Security Alerts enabled — fleet-telemetry will be rebuilt from local source."
-    if [ -d "$DEPLOY_DIR/fleet-telemetry-src/.git" ]; then
-      log "Pulling latest Tesla fleet-telemetry source..."
-      git -C "$DEPLOY_DIR/fleet-telemetry-src" pull --ff-only || warn "fleet-telemetry-src git pull failed — continuing with current sources."
+EXTRA_SERVICES=""
+if grep -qE '^\s*SECURITY_ALERTS_ENABLED\s*=\s*true' "$DEPLOY_DIR/.env" 2>/dev/null; then
+  AVAILABLE_SERVICES=$(docker compose config --services 2>/dev/null)
+  for svc in fleet-telemetry tesla-http-proxy-init tesla-http-proxy; do
+    if echo "$AVAILABLE_SERVICES" | grep -qx "$svc"; then
+      EXTRA_SERVICES="$EXTRA_SERVICES $svc"
+      if [ "$svc" != "tesla-http-proxy-init" ]; then
+        EXTRA_BUILD="$EXTRA_BUILD $svc"
+      fi
     fi
+  done
+  if [ -n "$EXTRA_BUILD" ]; then
+    log "Security Alerts enabled — rebuilding from local source:$EXTRA_BUILD"
+    for src in fleet-telemetry-src vehicle-command-src; do
+      if [ -d "$DEPLOY_DIR/$src/.git" ]; then
+        log "Pulling latest Tesla source: $src"
+        git -C "$DEPLOY_DIR/$src" pull --ff-only || warn "$src git pull failed — continuing with current sources."
+      fi
+    done
   fi
 fi
 
@@ -84,13 +96,13 @@ log "Pulling latest TeslaHub images..."
 docker compose pull teslahub-init teslahub-api teslahub-web
 
 if [ -n "$EXTRA_BUILD" ]; then
-  log "Building fleet-telemetry from source..."
+  log "Building Security Alerts services from source:$EXTRA_BUILD"
   docker compose build $EXTRA_BUILD
 fi
 
 # ── Restart only TeslaHub ────────────────────────────────────────
 log "Restarting TeslaHub services..."
-docker compose up -d teslahub-init teslahub-api teslahub-web $EXTRA_BUILD
+docker compose up -d teslahub-init teslahub-api teslahub-web $EXTRA_SERVICES
 
 # ── Wait for API health ──────────────────────────────────────────
 log "Waiting for API health check..."
@@ -128,7 +140,7 @@ log "Docker disk usage after: ${DISK_AFTER:-unknown}"
 if $LOGS; then
   log "Showing TeslaHub logs (Ctrl+C to exit)..."
   cd "$DEPLOY_DIR"
-  docker compose logs -f teslahub-api teslahub-web $EXTRA_BUILD --tail 30
+  docker compose logs -f teslahub-api teslahub-web $EXTRA_SERVICES --tail 30
 fi
 
 log "Update complete!"

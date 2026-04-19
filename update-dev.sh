@@ -70,22 +70,35 @@ cd "$REPO_DIR"
 git -c core.fileMode=false pull --ff-only
 
 # ── Detect optional Security Alerts stack ────────────────────────
-# If the user enabled SECURITY_ALERTS_ENABLED=true and declared a
-# fleet-telemetry service in their compose, include it in the rebuild
-# cycle so it stays in sync with TeslaHub.
+# If SECURITY_ALERTS_ENABLED=true and the user declared the optional
+# Security Alerts services in their compose, include them in the
+# rebuild cycle so they stay in sync with TeslaHub.
+#
+# The two Tesla services (fleet-telemetry, tesla-http-proxy) are built
+# from local source clones, so update-dev rebuilds them every time
+# their source has been pulled. The init container (alpine-based) is
+# ephemeral and just regenerates the proxy TLS cert on first start.
 cd "$DEPLOY_DIR"
 
 EXTRA_SERVICES=""
-if docker compose config --services 2>/dev/null | grep -qx "fleet-telemetry"; then
-  if grep -qE '^\s*SECURITY_ALERTS_ENABLED\s*=\s*true' "$DEPLOY_DIR/.env" 2>/dev/null; then
-    EXTRA_SERVICES="fleet-telemetry"
-    log "Security Alerts enabled — fleet-telemetry will be rebuilt too."
-  else
-    log "fleet-telemetry service detected but SECURITY_ALERTS_ENABLED is not 'true' — skipping it."
+EXTRA_BUILD_SERVICES=""
+if grep -qE '^\s*SECURITY_ALERTS_ENABLED\s*=\s*true' "$DEPLOY_DIR/.env" 2>/dev/null; then
+  AVAILABLE_SERVICES=$(docker compose config --services 2>/dev/null)
+  for svc in fleet-telemetry tesla-http-proxy-init tesla-http-proxy; do
+    if echo "$AVAILABLE_SERVICES" | grep -qx "$svc"; then
+      EXTRA_SERVICES="$EXTRA_SERVICES $svc"
+      # Init container is just alpine — no rebuild needed.
+      if [ "$svc" != "tesla-http-proxy-init" ]; then
+        EXTRA_BUILD_SERVICES="$EXTRA_BUILD_SERVICES $svc"
+      fi
+    fi
+  done
+  if [ -n "$EXTRA_SERVICES" ]; then
+    log "Security Alerts enabled — also recycling:$EXTRA_SERVICES"
   fi
 fi
 
-# ── Rebuild and restart TeslaHub (and fleet-telemetry if enabled) ──
+# ── Rebuild and restart TeslaHub (and Security Alerts services if enabled) ──
 
 log "Stopping TeslaHub services..."
 docker compose stop teslahub-api teslahub-web $EXTRA_SERVICES 2>/dev/null || true
@@ -95,9 +108,9 @@ APP_VERSION=$(cd "$REPO_DIR" && git describe --tags --always 2>/dev/null || echo
 log "Building TeslaHub API and Web (version: $APP_VERSION)..."
 docker compose build --build-arg APP_VERSION="$APP_VERSION" teslahub-api teslahub-web
 
-if [ -n "$EXTRA_SERVICES" ]; then
-  log "Building fleet-telemetry from source..."
-  docker compose build $EXTRA_SERVICES
+if [ -n "$EXTRA_BUILD_SERVICES" ]; then
+  log "Building Security Alerts services from source:$EXTRA_BUILD_SERVICES"
+  docker compose build $EXTRA_BUILD_SERVICES
 fi
 
 log "Starting TeslaHub services..."
