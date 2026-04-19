@@ -111,6 +111,16 @@ export default function TeslaPairingWizard() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teslaPairingStatus'] }),
   });
 
+  const configureTelemetryMutation = useMutation({
+    mutationFn: (vehicleIds: number[]) =>
+      api('/tesla-pairing/configure-telemetry', { method: 'POST', body: JSON.stringify({ vehicleIds }) }),
+    onSuccess: () => {
+      setFeedback({ ok: true, text: 'Telemetry configured with Tesla. Streaming will start when the vehicle is awake.' });
+      queryClient.invalidateQueries({ queryKey: ['teslaPairingStatus'] });
+    },
+    onError: (err: Error) => setFeedback({ ok: false, text: err.message || 'Telemetry configuration failed.' }),
+  });
+
   const publicKeyTestUrl = useMemo(() => status?.publicKeyUrl ?? null, [status?.publicKeyUrl]);
 
   if (isLoading) {
@@ -297,9 +307,40 @@ export default function TeslaPairingWizard() {
         )}
       </div>
 
+      {/* Step 4 — telemetry configuration */}
+      <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-[#e0e0e0]">4. Tell Tesla to start streaming telemetry</div>
+          <StatusPill
+            ok={vehicles.some((v) => v.telemetryConfigured)}
+            label={vehicles.some((v) => v.telemetryConfigured) ? 'configured' : 'todo'}
+          />
+        </div>
+        <p className={subTextClass}>
+          Once your <code className="text-[#e0e0e0]">fleet-telemetry</code> container is running and reachable on{' '}
+          <code className="text-[#e0e0e0]">telemetry.yourdomain.com</code> (see README), click below. TeslaHub calls
+          Tesla's <code className="text-[#e0e0e0]">/fleet_telemetry_config_create</code> for every paired vehicle.
+        </p>
+        <button
+          className={buttonPrimary}
+          disabled={
+            configureTelemetryMutation.isPending ||
+            vehicles.filter((v) => v.keyPaired).length === 0
+          }
+          onClick={() =>
+            configureTelemetryMutation.mutate(vehicles.filter((v) => v.keyPaired).map((v) => v.id))
+          }
+        >
+          {configureTelemetryMutation.isPending ? 'Configuring…' : 'Configure telemetry for all paired vehicles'}
+        </button>
+        {vehicles.filter((v) => v.keyPaired).length === 0 && (
+          <p className={subTextClass}>Pair at least one vehicle in step 3 first.</p>
+        )}
+      </div>
+
       <p className={subTextClass}>
-        Telemetry streaming and the Telegram notification matrix will be configured in upcoming releases. Pairing today
-        prepares everything so the next steps are a one-click setup.
+        The Telegram notification matrix (which alerts go to whom) lands in the next release. Telemetry already flowing
+        on NATS will be picked up immediately when it ships — no additional setup needed.
       </p>
 
       <canvas ref={qrCanvasRef} hidden />

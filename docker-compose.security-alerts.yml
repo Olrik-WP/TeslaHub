@@ -1,0 +1,79 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# TeslaHub — Optional Security Alerts stack
+#
+# Spins up the two extra services required for real-time Tesla Sentry /
+# break-in alerts:
+#
+#   - fleet-telemetry   Tesla's official Go server that terminates the
+#                       mTLS WebSocket connection from each vehicle and
+#                       publishes telemetry messages to a queue.
+#   - nats              Lightweight message broker that buffers telemetry
+#                       events between fleet-telemetry and teslahub-api.
+#
+# Usage:
+#   1. Make sure your .env contains TELEMETRY_DOMAIN (e.g. telemetry.yourdomain.com)
+#      and that this sub-domain points to your machine in DNS-only (gray)
+#      mode (see README.md → "Security Alerts (optional)").
+#   2. Generate a TLS certificate for TELEMETRY_DOMAIN (Caddy can do it
+#      automatically — see the README for the snippet).
+#   3. Place the Tesla CA file at  ./fleet-telemetry/server-ca.crt
+#   4. Start the stack:
+#        docker compose --profile security-alerts up -d
+#
+# Without `--profile security-alerts` these containers are NOT started,
+# and a default `docker compose up` keeps the existing TeslaHub stack
+# unchanged.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  nats:
+    image: nats:2.10-alpine
+    profiles: ["security-alerts"]
+    restart: always
+    command:
+      - "-js"
+      - "-sd"
+      - "/data"
+    volumes:
+      - nats-data:/data
+    expose:
+      - "4222"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "4222"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  fleet-telemetry:
+    image: tesla/fleet-telemetry:latest
+    profiles: ["security-alerts"]
+    restart: always
+    depends_on:
+      nats:
+        condition: service_healthy
+    ports:
+      # Exposed on TELEMETRY_PORT (default 8443). Forward this port from
+      # your router/box to the host. Tesla connects here directly via mTLS,
+      # so this sub-domain MUST be DNS-only (gray) on Cloudflare — see the
+      # README for the rationale.
+      - "${TELEMETRY_PORT:-8443}:443"
+    environment:
+      - TELEMETRY_DOMAIN=${TELEMETRY_DOMAIN}
+    volumes:
+      # Mount Caddy's auto-renewing certificate volume read-only so the
+      # Fleet Telemetry server picks up the latest cert without manual
+      # intervention. The exact path below depends on your Caddy version
+      # and storage layout — adjust as needed.
+      - ${CADDY_DATA_VOLUME:-caddy-data}:/certs:ro
+      # The Tesla-provided server CA used to authenticate the vehicle's
+      # client certificate during mTLS. Download from Tesla once and
+      # place it under ./fleet-telemetry/.
+      - ./fleet-telemetry/server-ca.crt:/etc/ssl/server-ca.crt:ro
+      # The fleet-telemetry main config: lists which fields are accepted
+      # and which dispatcher (NATS) to forward them to.
+      - ./fleet-telemetry/config.json:/etc/fleet-telemetry/config.json:ro
+
+volumes:
+  nats-data:
+  caddy-data:
+    external: true

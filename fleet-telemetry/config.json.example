@@ -1,0 +1,40 @@
+{
+  "_comment": "TeslaHub — Fleet Telemetry server config template. Copy to config.json and edit TLS paths to match your Caddy volume layout.",
+  "host": "0.0.0.0",
+  "port": 443,
+  "log_level": "info",
+  "json_log_enable": true,
+  "namespace": "tesla_telemetry",
+  "metrics_collector": {
+    "type": "noop"
+  },
+  "tls": {
+    "server_cert": "/certs/certificates/acme-v02.api.letsencrypt.org-directory/${TELEMETRY_DOMAIN}/${TELEMETRY_DOMAIN}.crt",
+    "server_key":  "/certs/certificates/acme-v02.api.letsencrypt.org-directory/${TELEMETRY_DOMAIN}/${TELEMETRY_DOMAIN}.key",
+    "ca": "/etc/ssl/server-ca.crt"
+  },
+  "rate_limit": {
+    "enabled": true,
+    "messages_per_second": 1000,
+    "message_interval_time_seconds": 30
+  },
+  "records": {
+    "alerts": [
+      { "type": "nats", "topic": "tesla.telemetry.alerts" }
+    ],
+    "errors": [
+      { "type": "nats", "topic": "tesla.telemetry.errors" }
+    ],
+    "V": [
+      { "type": "nats", "topic": "tesla.telemetry.v" }
+    ]
+  },
+  "dispatchers": {
+    "nats": {
+      "urls": "nats://nats:4222",
+      "stream_name": "TESLA_TELEMETRY",
+      "stream_subjects": ["tesla.telemetry.>"],
+      "stream_max_age_seconds": 86400
+    }
+  }
+}

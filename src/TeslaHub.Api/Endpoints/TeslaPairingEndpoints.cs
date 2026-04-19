@@ -97,7 +97,27 @@ public static class TeslaPairingEndpoints
             var ok = await pairing.MarkVehiclePairedAsync(id, body.Paired, ct);
             return ok ? Results.NoContent() : Results.NotFound();
         });
+
+        group.MapPost("/configure-telemetry", async (
+            ConfigureTelemetryRequest body,
+            TeslaPairingService pairing,
+            IConfiguration config,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var result = await pairing.ConfigureTelemetryAsync(config, body.VehicleIds, ct);
+                return result.Success
+                    ? Results.Ok(new { configured = true })
+                    : Results.Problem(title: "Telemetry configuration failed", detail: result.Error, statusCode: 502);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
     }
 
     public sealed record VehiclePairedRequest(bool Paired);
+    public sealed record ConfigureTelemetryRequest(int[] VehicleIds);
 }

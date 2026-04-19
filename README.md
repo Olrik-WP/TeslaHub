@@ -258,7 +258,7 @@ TeslaHub never relies on a shared backend. Each TeslaHub installation registers 
 |---|---|---|
 | **1** | Tesla Fleet API OAuth foundation, encrypted token storage, automatic refresh, "Connect Tesla account" UI | ✅ This release |
 | **2** | Public-key generation, `.well-known` endpoint, vehicle pairing wizard with QR code | ✅ This release |
-| **3** | `fleet-telemetry` + NATS Docker stack, Caddy snippets for the telemetry sub-domain | ⏳ Planned |
+| **3** | `fleet-telemetry` + NATS Docker stack, Caddy snippets for the telemetry sub-domain | ✅ This release |
 | **4** | Real-time Sentry / Break-in detection, recipient × vehicle notification matrix, Telegram bot delivery | ⏳ Planned |
 
 ### What you need (eventually)
@@ -344,12 +344,101 @@ teslahub.yourdomain.com {
 }
 ```
 
+### Receiving real-time telemetry (Fleet Telemetry stack)
+
+This is where the actual Sentry events start flowing into your TeslaHub. **Two extra services** are added on demand via a Docker Compose `profile`, so they only run when you opt in.
+
+#### What you need
+
+- A **separate sub-domain** dedicated to telemetry, e.g. `telemetry.yourdomain.com`.
+- That sub-domain must be **DNS-only** on Cloudflare (gray cloud — *not* the orange proxy). The reason is Tesla connects to your server with **mutual TLS**: the vehicle presents a certificate signed by Tesla. The Cloudflare proxy does not forward client certificates on free / Pro plans, so TLS termination must happen on your origin.
+- An **inbound port forward** from your router/box to the host (default `8443`).
+- The Tesla **server CA** file (downloadable from the Tesla Fleet API documentation) placed at `./fleet-telemetry/server-ca.crt`.
+
+#### DNS — Cloudflare example
+
+```
+teslahub.yourdomain.com    A   <your home ip>   🟠 proxied    (web UI + API)
+telemetry.yourdomain.com   A   <your home ip>   ⚪ DNS only   (Tesla mTLS)
+```
+
+> Security note: DNS-only exposes your origin IP for that sub-domain. Realistic risk for a personal install is low, but you can mitigate by limiting source IPs at the firewall to the Tesla cloud ranges if you want to harden it further. The Fleet Telemetry server itself rejects any TLS handshake without a valid Tesla-signed client cert, which is a strong layer-7 filter.
+
+#### Caddy snippet
+
+Add a stanza for the telemetry sub-domain. Caddy fetches and renews the cert via Let's Encrypt automatically, and stores it in a volume that the Fleet Telemetry container reads:
+
+```caddyfile
+teslahub.yourdomain.com {
+    reverse_proxy /.well-known/appspecific/* teslahub-api:8080
+    reverse_proxy /api/*                     teslahub-api:8080
+    reverse_proxy /                          teslahub-web:80
+}
+
+# The telemetry sub-domain only exists so Caddy keeps a cert for it
+# in /data/caddy/certificates/.../telemetry.yourdomain.com/. The actual
+# TLS connection from Tesla terminates at the fleet-telemetry container
+# which mounts the same volume read-only.
+telemetry.yourdomain.com {
+    tls {
+        on_demand
+    }
+    respond 404
+}
+```
+
+Reload Caddy: `caddy reload`.
+
+#### Configuration files
+
+```bash
+mkdir -p fleet-telemetry
+cp fleet-telemetry/config.json.example fleet-telemetry/config.json
+# Edit fleet-telemetry/config.json: replace ${TELEMETRY_DOMAIN} placeholders
+# with your real telemetry sub-domain.
+```
+
+Place the Tesla server CA at `fleet-telemetry/server-ca.crt`.
+
+#### .env additions
+
+```env
+# Optional — Security Alerts telemetry stack
+TELEMETRY_DOMAIN=telemetry.yourdomain.com
+TELEMETRY_PORT=8443
+# Path inside the API container where the Tesla CA is mounted (used when
+# calling /api/1/vehicles/fleet_telemetry_config_create on Tesla).
+TELEMETRY_CA_PATH=/etc/teslahub/server-ca.crt
+# Name of the Caddy data volume that holds the Let's Encrypt certs.
+CADDY_DATA_VOLUME=caddy-data
+```
+
+Add a read-only mount of the Tesla CA into `teslahub-api`:
+
+```yaml
+  teslahub-api:
+    volumes:
+      - ./fleet-telemetry/server-ca.crt:/etc/teslahub/server-ca.crt:ro
+```
+
+#### Start the stack
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.security-alerts.yml \
+    --profile security-alerts up -d nats fleet-telemetry
+```
+
+The stack stays inactive without `--profile security-alerts` so existing TeslaHub installations are unaffected.
+
+#### Tell Tesla to start streaming
+
+Once everything above is up and your vehicles are paired, click **Configure telemetry** in the Settings wizard. TeslaHub calls Tesla's `/api/1/vehicles/fleet_telemetry_config_create` for the selected VINs with your hostname, port and CA. Tesla then opens a persistent mTLS WebSocket from each car to your `fleet-telemetry` container, which forwards events to the `tesla.telemetry.>` subjects on NATS.
+
 ### What today's release does NOT do yet
 
-- Receiving real-time Sentry / break-in events (PR 3 — `fleet-telemetry` + NATS Docker stack, Caddy snippets for the telemetry sub-domain)
-- Sending Telegram notifications (PR 4 — recipient × vehicle matrix, Telegram bot delivery)
+- Consuming the NATS messages and turning them into actual notifications (PR 4 — recipient × vehicle matrix, Telegram bot delivery).
 
-So today the pipeline is fully plumbed up to vehicle pairing. Streaming + alerts will land in subsequent commits on this same branch.
+When PR 4 lands, telemetry already flowing on NATS will be picked up immediately — no additional setup needed.
 
 ### Telegram bot (preview — used in PR 4)
 

@@ -60,6 +60,47 @@ public sealed class TeslaFleetApiClient
         return new PartnerRegistrationResult(true, null);
     }
 
+    public async Task<TelemetryConfigResult> CreateTelemetryConfigAsync(
+        TeslaAccount account,
+        TelemetryConfigRequest request,
+        CancellationToken cancellationToken)
+    {
+        var refreshed = await _oauth.EnsureValidAccessTokenAsync(account, cancellationToken);
+        var token = _oauth.DecryptAccessToken(refreshed);
+
+        var payload = new
+        {
+            vins = request.Vins,
+            config = new
+            {
+                hostname = request.Hostname,
+                port = request.Port,
+                ca = request.CaCertificate,
+                fields = request.Fields,
+            },
+        };
+
+        var http = new HttpRequestMessage(HttpMethod.Post,
+            $"{refreshed.Audience.TrimEnd('/')}/api/1/vehicles/fleet_telemetry_config_create")
+        {
+            Content = JsonContent.Create(payload),
+        };
+        http.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var client = _httpFactory.CreateClient("tesla");
+        using var response = await client.SendAsync(http, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Tesla fleet_telemetry_config_create returned {StatusCode}: {Body}",
+                response.StatusCode, Truncate(body, 500));
+            return new TelemetryConfigResult(false, $"{(int)response.StatusCode}: {Truncate(body, 300)}");
+        }
+
+        return new TelemetryConfigResult(true, null);
+    }
+
     public async Task<List<TeslaVehicle>> ListVehiclesAsync(
         TeslaAccount account,
         CancellationToken cancellationToken)
@@ -126,3 +167,14 @@ public sealed class TeslaFleetApiClient
 }
 
 public record PartnerRegistrationResult(bool Success, string? Error);
+
+public record TelemetryConfigResult(bool Success, string? Error);
+
+public record TelemetryConfigRequest(
+    string[] Vins,
+    string Hostname,
+    int Port,
+    string CaCertificate,
+    Dictionary<string, TelemetryField> Fields);
+
+public record TelemetryField(int IntervalSeconds);

@@ -121,6 +121,63 @@ public sealed class TeslaPairingService
         return fresh.Count;
     }
 
+    public async Task<TelemetryConfigResult> ConfigureTelemetryAsync(
+        IConfiguration config,
+        IEnumerable<int> vehicleIds,
+        CancellationToken cancellationToken)
+    {
+        var account = await _oauth.GetCurrentAccountAsync(cancellationToken)
+            ?? throw new InvalidOperationException("No Tesla account connected.");
+
+        var hostname = config["TELEMETRY_DOMAIN"];
+        if (string.IsNullOrWhiteSpace(hostname))
+            throw new InvalidOperationException("TELEMETRY_DOMAIN env var is not set.");
+
+        var port = int.TryParse(config["TELEMETRY_PORT"], out var p) ? p : 8443;
+        var caPath = config["TELEMETRY_CA_PATH"] ?? "/etc/teslahub/server-ca.crt";
+        var ca = File.Exists(caPath) ? await File.ReadAllTextAsync(caPath, cancellationToken) : string.Empty;
+        if (string.IsNullOrWhiteSpace(ca))
+            throw new InvalidOperationException(
+                $"Server CA file not found or empty at {caPath}. Place the Tesla server CA there before configuring telemetry.");
+
+        var ids = vehicleIds.ToHashSet();
+        var vehicles = await _db.Set<TeslaVehicle>()
+            .Where(v => v.TeslaAccountId == account.Id && ids.Contains(v.Id))
+            .ToListAsync(cancellationToken);
+
+        if (vehicles.Count == 0)
+            throw new InvalidOperationException("No matching paired vehicles to configure.");
+
+        var fields = new Dictionary<string, TelemetryField>
+        {
+            ["SentryMode"] = new TelemetryField(30),
+            ["VehicleSpeed"] = new TelemetryField(10),
+            ["Locked"] = new TelemetryField(60),
+            ["DoorState"] = new TelemetryField(30),
+        };
+
+        var request = new TelemetryConfigRequest(
+            vehicles.Select(v => v.Vin).ToArray(),
+            hostname,
+            port,
+            ca,
+            fields);
+
+        var result = await _fleet.CreateTelemetryConfigAsync(account, request, cancellationToken);
+
+        if (result.Success)
+        {
+            foreach (var v in vehicles)
+            {
+                v.TelemetryConfigured = true;
+                v.UpdatedAt = DateTime.UtcNow;
+            }
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        return result;
+    }
+
     public async Task<bool> MarkVehiclePairedAsync(int vehicleId, bool paired, CancellationToken cancellationToken)
     {
         var vehicle = await _db.Set<TeslaVehicle>().FirstOrDefaultAsync(v => v.Id == vehicleId, cancellationToken);
