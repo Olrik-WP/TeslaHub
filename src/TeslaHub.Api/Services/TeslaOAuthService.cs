@@ -114,6 +114,47 @@ public sealed class TeslaOAuthService
 
     public string DecryptAccessToken(TeslaAccount account) => _encryption.Decrypt(account.EncryptedAccessToken);
 
+    // Partner tokens are obtained through client_credentials (machine-to-machine).
+    // They are required for partner_accounts register/unregister/public_key endpoints,
+    // which user tokens are NOT allowed to call. We cache the token in-memory until
+    // ~60s before expiry to avoid hammering the token endpoint.
+    private string? _cachedPartnerToken;
+    private DateTime _cachedPartnerTokenExpiresAt = DateTime.MinValue;
+    private readonly SemaphoreSlim _partnerTokenLock = new(1, 1);
+
+    public async Task<string> GetPartnerAccessTokenAsync(CancellationToken cancellationToken = default)
+    {
+        EnsureConfigured();
+
+        if (_cachedPartnerToken is not null && DateTime.UtcNow < _cachedPartnerTokenExpiresAt.AddSeconds(-60))
+            return _cachedPartnerToken;
+
+        await _partnerTokenLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (_cachedPartnerToken is not null && DateTime.UtcNow < _cachedPartnerTokenExpiresAt.AddSeconds(-60))
+                return _cachedPartnerToken;
+
+            var tokens = await CallTokenEndpointAsync(new Dictionary<string, string>
+            {
+                ["grant_type"] = "client_credentials",
+                ["client_id"] = _options.ClientId,
+                ["client_secret"] = _options.ClientSecret,
+                ["scope"] = _options.Scopes,
+                ["audience"] = _options.Audience,
+            }, cancellationToken);
+
+            _cachedPartnerToken = tokens.AccessToken;
+            _cachedPartnerTokenExpiresAt = DateTime.UtcNow.AddSeconds(tokens.ExpiresIn);
+            _logger.LogInformation("Obtained Tesla partner token, expires at {ExpiresAt}", _cachedPartnerTokenExpiresAt);
+            return _cachedPartnerToken;
+        }
+        finally
+        {
+            _partnerTokenLock.Release();
+        }
+    }
+
     public async Task<bool> DisconnectAsync(int accountId, CancellationToken cancellationToken = default)
     {
         var account = await _db.Set<TeslaAccount>().FirstOrDefaultAsync(a => a.Id == accountId, cancellationToken);

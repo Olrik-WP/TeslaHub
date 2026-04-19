@@ -37,14 +37,16 @@ public sealed class TeslaFleetApiClient
         string domain,
         CancellationToken cancellationToken)
     {
-        var refreshed = await _oauth.EnsureValidAccessTokenAsync(account, cancellationToken);
-        var token = _oauth.DecryptAccessToken(refreshed);
+        // partner_accounts register/unregister REQUIRE a partner token
+        // (client_credentials grant), NOT the user access token. See
+        // https://developer.tesla.com/docs/fleet-api/authentication/partner-tokens
+        var partnerToken = await _oauth.GetPartnerAccessTokenAsync(cancellationToken);
 
-        var request = new HttpRequestMessage(HttpMethod.Post, $"{refreshed.Audience.TrimEnd('/')}/api/1/partner_accounts")
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{account.Audience.TrimEnd('/')}/api/1/partner_accounts")
         {
             Content = JsonContent.Create(new { domain }),
         };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", partnerToken);
 
         var client = _httpFactory.CreateClient("tesla");
         using var response = await client.SendAsync(request, cancellationToken);
