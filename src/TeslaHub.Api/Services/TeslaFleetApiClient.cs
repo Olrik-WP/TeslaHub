@@ -82,8 +82,14 @@ public sealed class TeslaFleetApiClient
             },
         };
 
+        // Endpoint name: /api/1/vehicles/fleet_telemetry_config (no _create suffix).
+        // Tesla also expects the call to be signed by the partner private key —
+        // in production this is done by routing through the vehicle-command-proxy.
+        // For our self-hosted setup we hit the endpoint directly first; if Tesla
+        // returns 412 Precondition Failed the user will need to add the proxy
+        // (see README "Telemetry stack" troubleshooting section).
         var http = new HttpRequestMessage(HttpMethod.Post,
-            $"{refreshed.Audience.TrimEnd('/')}/api/1/vehicles/fleet_telemetry_config_create")
+            $"{refreshed.Audience.TrimEnd('/')}/api/1/vehicles/fleet_telemetry_config")
         {
             Content = JsonContent.Create(payload),
         };
