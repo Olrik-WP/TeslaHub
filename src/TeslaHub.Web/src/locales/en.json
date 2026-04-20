@@ -224,6 +224,16 @@
     "attribution": "Data by",
     "legend": {
       "title": "Power"
+    },
+    "warning": {
+      "missingKeyTitle": "Open Charge Map API key required",
+      "missingKeyBody": "OCM blocks anonymous requests. Get a free key, then paste it under Settings → Public chargers.",
+      "rateLimitedTitle": "OCM rate limit reached",
+      "rateLimitedBody": "Too many requests to Open Charge Map. Try again later or use a personal API key.",
+      "errorTitle": "Open Charge Map unavailable",
+      "errorBody": "Couldn't reach OCM right now. Try panning the map again in a moment.",
+      "getKey": "Get a free key",
+      "openSettings": "Open Settings"
     }
   },
   "map": {
@@ -288,8 +298,8 @@
       "minPower": "Minimum power",
       "minPowerAll": "Any power",
       "minPowerHint": "Hide stations whose declared max power is below the threshold. Stations with no declared power are also hidden when a threshold is set.",
-      "apiKeyLabel": "Open Charge Map API key (optional)",
-      "apiKeyHint": "Without a key, OCM rate-limits to a few thousand requests per day (plenty for personal use). A key set here takes precedence over the OCM_API_KEY environment variable.",
+      "apiKeyLabel": "Open Charge Map API key (required)",
+      "apiKeyHint": "Open Charge Map no longer accepts anonymous requests: without a key the layer stays empty. Generate a free key (link below). A key set here takes precedence over the OCM_API_KEY environment variable.",
       "getApiKey": "Get a free key",
       "dataSource": "Data from Open Charge Map (CC-BY-SA), cached for 24h server-side."
     },

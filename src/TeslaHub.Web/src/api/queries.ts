@@ -271,10 +271,22 @@ export interface PublicCharger {
   isOperational: boolean;
 }
 
+/**
+ * Wrapped chargers response. `warning` is non-null when OCM blocked or
+ * throttled the upstream call. The frontend uses it to display an
+ * actionable banner (e.g. "add an API key in Settings") instead of an
+ * empty map layer that looks like a silent failure.
+ */
+export interface ChargersResponse {
+  items: PublicCharger[];
+  /** "missing-key" | "rate-limited" | "error" | null */
+  warning: string | null;
+}
+
 export const getChargers = (
   bbox: { south: number; west: number; north: number; east: number },
 ) =>
-  api<PublicCharger[]>(
+  api<ChargersResponse>(
     `/chargers/?south=${bbox.south}&west=${bbox.west}&north=${bbox.north}&east=${bbox.east}`,
   );
 

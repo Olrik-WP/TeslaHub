@@ -224,6 +224,16 @@
     "attribution": "Daten von",
     "legend": {
       "title": "Leistung"
+    },
+    "warning": {
+      "missingKeyTitle": "Open Charge Map API-Schlüssel erforderlich",
+      "missingKeyBody": "OCM blockiert anonyme Anfragen. Erstellen Sie einen kostenlosen Schlüssel und tragen Sie ihn unter Einstellungen → Öffentliche Ladesäulen ein.",
+      "rateLimitedTitle": "OCM-Limit erreicht",
+      "rateLimitedBody": "Zu viele Anfragen an Open Charge Map. Versuchen Sie es später erneut oder verwenden Sie einen eigenen API-Schlüssel.",
+      "errorTitle": "Open Charge Map nicht erreichbar",
+      "errorBody": "OCM ist gerade nicht erreichbar. Verschieben Sie die Karte in einem Moment erneut.",
+      "getKey": "Kostenlosen Schlüssel erhalten",
+      "openSettings": "Einstellungen öffnen"
     }
   },
   "map": {
@@ -288,8 +298,8 @@
       "minPower": "Mindestleistung",
       "minPowerAll": "Beliebige Leistung",
       "minPowerHint": "Blendet Stationen aus, deren maximale deklarierte Leistung unter dem Schwellenwert liegt. Stationen ohne deklarierte Leistung werden ebenfalls ausgeblendet, sobald ein Schwellenwert gesetzt ist.",
-      "apiKeyLabel": "Open Charge Map API-Schlüssel (optional)",
-      "apiKeyHint": "Ohne Schlüssel limitiert OCM auf ein paar tausend Anfragen pro Tag (ausreichend für den privaten Gebrauch). Ein hier gesetzter Schlüssel hat Vorrang vor der Umgebungsvariable OCM_API_KEY.",
+      "apiKeyLabel": "Open Charge Map API-Schlüssel (erforderlich)",
+      "apiKeyHint": "Open Charge Map akzeptiert keine anonymen Anfragen mehr: ohne Schlüssel bleibt die Ebene leer. Erstellen Sie einen kostenlosen Schlüssel (Link unten). Ein hier gesetzter Schlüssel hat Vorrang vor der Umgebungsvariable OCM_API_KEY.",
       "getApiKey": "Kostenlosen Schlüssel besorgen",
       "dataSource": "Daten von Open Charge Map (CC-BY-SA), serverseitig 24 h gecacht."
     },

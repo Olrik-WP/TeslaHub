@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useMapStyle, setup3D } from '../hooks/useMapStyle';
 import MapStylePicker from './MapStylePicker';
-import { getChargers, type PublicCharger, type ChargerConnection } from '../api/queries';
+import { getChargers, getSettings, type PublicCharger, type ChargerConnection } from '../api/queries';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 interface ChargeMarker {
@@ -239,12 +239,19 @@ export default function MapLibreMap({
 
     const update = () => {
       const b = map.getBounds();
-      const round = (n: number) => Math.round(n * 20) / 20;
+      // Snap to a 0.05° grid to keep the React Query key stable for small
+      // pans (cache hit). We expand *outwards* — floor for S/W, ceil for
+      // N/E — instead of rounding to the nearest cell. Rounding-to-nearest
+      // could collapse south===north (or west===east) when zoomed in tight,
+      // which the backend rejects as an empty bbox → no markers shown.
+      const STEP = 0.05;
+      const floor = (n: number) => Math.floor(n / STEP) * STEP;
+      const ceil = (n: number) => Math.ceil(n / STEP) * STEP;
       setBbox({
-        south: round(b.getSouth()),
-        west: round(b.getWest()),
-        north: round(b.getNorth()),
-        east: round(b.getEast()),
+        south: floor(b.getSouth()),
+        west: floor(b.getWest()),
+        north: ceil(b.getNorth()),
+        east: ceil(b.getEast()),
       });
       setZoom(map.getZoom());
     };
@@ -256,17 +263,43 @@ export default function MapLibreMap({
     };
   }, [mapReady, showPublicChargers]);
 
+  // The chargers endpoint applies the user's filters (network / min power /
+  // API key) server-side based on GlobalSettings. We pull the same settings
+  // here purely to derive a cache-busting signature: when the user changes
+  // a filter in Settings the queryKey flips and React Query refetches
+  // instead of serving the stale (pre-change) result for the same bbox.
+  // The duplicate useQuery is free — it shares the cached entry with the
+  // settings consumer in Map.tsx.
+  const { data: chargersSettings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: getSettings,
+    staleTime: 5 * 60_000,
+    enabled: showPublicChargers,
+  });
+  const filterSignature = chargersSettings
+    ? [
+        chargersSettings.chargersNetworkFilter,
+        chargersSettings.chargersCustomNetworks ?? '',
+        chargersSettings.chargersMinPowerKw,
+        // Toggle the key when an API key is added/removed so requests
+        // that previously failed with "missing-key" are re-attempted.
+        chargersSettings.chargersOcmApiKey ? 'k' : '',
+      ].join('|')
+    : '';
+
   // Skip the request entirely when zoomed out — at world-scale OCM would
   // return only a sample anyway, and the resulting blob would dwarf the
   // useful detail.
   const chargersEnabled = showPublicChargers && bbox !== null && zoom >= CHARGER_MIN_ZOOM;
-  const { data: chargers } = useQuery({
-    queryKey: ['publicChargers', bbox],
+  const { data: chargersResponse } = useQuery({
+    queryKey: ['publicChargers', bbox, filterSignature],
     queryFn: () => getChargers(bbox!),
     enabled: chargersEnabled,
     staleTime: 10 * 60_000,
     gcTime: 60 * 60_000,
   });
+  const chargers = chargersResponse?.items;
+  const chargersWarning = chargersResponse?.warning ?? null;
 
   // Wrap the chargers as a clustered GeoJSON source. Using the native
   // MapLibre cluster + `circle` layers scales to thousands of points
@@ -868,6 +901,52 @@ export default function MapLibreMap({
           </Popup>
         )}
       </Map>
+
+      {/* OCM warning banner. Shown when the upstream call returned 401/403/429
+          so the user understands why the layer is empty. The most common case
+          is "missing-key": OCM started rejecting keyless requests in 2024. */}
+      {showPublicChargers && chargersWarning && (
+        <div className="absolute top-2 left-2 right-2 z-20 mx-auto max-w-md bg-[#0a0a0a]/95 backdrop-blur-sm border border-[#f59e0b]/60 rounded-lg px-3 py-2 text-xs text-white shadow-lg">
+          <div className="flex items-start gap-2">
+            <span aria-hidden="true" className="text-[#f59e0b] text-base leading-none">⚠</span>
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-[#f59e0b] mb-0.5">
+                {t(
+                  chargersWarning === 'missing-key'
+                    ? 'chargers.warning.missingKeyTitle'
+                    : chargersWarning === 'rate-limited'
+                    ? 'chargers.warning.rateLimitedTitle'
+                    : 'chargers.warning.errorTitle',
+                )}
+              </div>
+              <div className="text-[#d1d5db] leading-snug">
+                {t(
+                  chargersWarning === 'missing-key'
+                    ? 'chargers.warning.missingKeyBody'
+                    : chargersWarning === 'rate-limited'
+                    ? 'chargers.warning.rateLimitedBody'
+                    : 'chargers.warning.errorBody',
+                )}
+              </div>
+              {chargersWarning === 'missing-key' && (
+                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                  <a
+                    href="https://openchargemap.org/site/loginprovider/beginlogin"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#3b82f6] underline"
+                  >
+                    {t('chargers.warning.getKey')}
+                  </a>
+                  <a href="/settings" className="text-[#3b82f6] underline">
+                    {t('chargers.warning.openSettings')}
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Power-tier legend, only when the layer is on. Compact / mobile-first. */}
       {showPublicChargers && chargers && chargers.length > 0 && (

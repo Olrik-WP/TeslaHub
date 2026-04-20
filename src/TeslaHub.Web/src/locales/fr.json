@@ -224,6 +224,16 @@
     "attribution": "Données par",
     "legend": {
       "title": "Puissance"
+    },
+    "warning": {
+      "missingKeyTitle": "Clé API Open Charge Map requise",
+      "missingKeyBody": "OCM bloque les requêtes anonymes. Créez une clé gratuite, puis collez-la dans Paramètres → Bornes de recharge.",
+      "rateLimitedTitle": "Quota OCM dépassé",
+      "rateLimitedBody": "Trop de requêtes vers Open Charge Map. Réessayez plus tard ou utilisez une clé API personnelle.",
+      "errorTitle": "Open Charge Map indisponible",
+      "errorBody": "Impossible de joindre OCM pour le moment. Réessayez en déplaçant la carte dans quelques instants.",
+      "getKey": "Obtenir une clé gratuite",
+      "openSettings": "Ouvrir les paramètres"
     }
   },
   "map": {
@@ -288,8 +298,8 @@
       "minPower": "Puissance minimale",
       "minPowerAll": "Toutes les puissances",
       "minPowerHint": "Masque les bornes dont la puissance maximale déclarée est inférieure au seuil. Les bornes sans puissance déclarée sont également masquées dès qu'un seuil est défini.",
-      "apiKeyLabel": "Clé API Open Charge Map (optionnelle)",
-      "apiKeyHint": "Sans clé, OCM limite à quelques milliers de requêtes par jour (suffisant en usage personnel). La clé saisie ici est prioritaire sur la variable d'environnement OCM_API_KEY.",
+      "apiKeyLabel": "Clé API Open Charge Map (requise)",
+      "apiKeyHint": "Open Charge Map n'accepte plus les requêtes anonymes : sans clé, aucune borne ne s'affichera. Créez-en une gratuitement (lien ci-dessous). La clé saisie ici est prioritaire sur la variable d'environnement OCM_API_KEY.",
       "getApiKey": "Obtenir une clé gratuite",
       "dataSource": "Données fournies par Open Charge Map (CC-BY-SA), mises en cache 24 h côté serveur."
     },

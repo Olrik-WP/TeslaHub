@@ -961,7 +961,7 @@ The provided `update.sh` script does this for you when `SECURITY_ALERTS_ENABLED=
 | `MAP_TILE_URL` | OpenStreetMap | Custom tile server URL |
 | `TESLAHUB_ALLOWED_IPS` | *(empty = all)* | Restrict access by IP/CIDR |
 | `TESLAHUB_ALLOWED_ORIGINS` | *(empty = same-origin only)* | Comma-separated list of origins allowed to call the API cross-origin with credentials. Leave empty when the SPA is served by the same Caddy as `/api`. |
-| `OCM_API_KEY` | *(optional)* | [Open Charge Map](https://openchargemap.org/site/develop/api) API key for the public chargers map layer. **Easier alternative**: set it from Settings → "Open Charge Map API key" (UI value takes precedence over the env var). Without any key, OCM rate-limits to a few thousand requests per day — plenty for personal use. Server caches each bbox response for 24 h. |
+| `OCM_API_KEY` | *(required for the chargers layer)* | [Open Charge Map](https://openchargemap.org/site/develop/api) API key for the public chargers map layer. OCM no longer accepts anonymous requests, so without a key the layer stays empty (a banner in the map explains it). **Easier alternative**: set it from Settings → "Open Charge Map API key" (UI value takes precedence over the env var). Server caches each bbox response for 24 h. |
 | `MQTT_HOST` | *(empty = disabled)* | MQTT broker hostname (e.g. `mosquitto`). Enables live vehicle status |
 | `MQTT_PORT` | `1883` | MQTT broker port |
 | `MQTT_USER` | *(empty)* | MQTT username (if broker requires auth) |

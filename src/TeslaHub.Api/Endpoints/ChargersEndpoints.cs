@@ -31,7 +31,7 @@ public static class ChargersEndpoints
         {
             var settings = await db.GlobalSettings.FirstOrDefaultAsync(ct);
             if (settings is null || !settings.ChargersEnabled)
-                return Results.Ok(Array.Empty<ChargerDto>());
+                return Results.Ok(ChargersResult.Empty);
 
             var networkFilter = ResolveNetworkFilter(settings.ChargersNetworkFilter, settings.ChargersCustomNetworks);
 

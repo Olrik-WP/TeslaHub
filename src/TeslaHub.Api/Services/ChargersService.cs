@@ -64,8 +64,12 @@ public sealed class ChargersService
     /// Fetch charging stations inside the given bbox, optionally filtered
     /// by network names (case-insensitive match against OCM operator title)
     /// and/or by minimum charging power.
+    ///
+    /// The result is wrapped in <see cref="ChargersResult"/> so the frontend
+    /// can distinguish "OCM blocked us" (no key, expired key, throttled) from
+    /// "no chargers in this bbox" — both look like an empty list otherwise.
     /// </summary>
-    public async Task<IReadOnlyList<ChargerDto>> GetChargersAsync(
+    public async Task<ChargersResult> GetChargersAsync(
         double south,
         double west,
         double north,
@@ -76,10 +80,11 @@ public sealed class ChargersService
         CancellationToken cancellationToken)
     {
         if (south >= north || west >= east)
-            return Array.Empty<ChargerDto>();
+            return ChargersResult.Empty;
 
         // Settings-stored key wins over the env-var fallback.
         var apiKey = !string.IsNullOrWhiteSpace(apiKeyOverride) ? apiKeyOverride : _envApiKey;
+        var hasKey = !string.IsNullOrWhiteSpace(apiKey);
 
         // Snap to tile grid for cache-friendliness.
         var tileSouth = Math.Floor(south / TileDegrees) * TileDegrees;
@@ -90,7 +95,7 @@ public sealed class ChargersService
         // OCM caps the bbox area: very large ones return truncated data.
         // Split the snapped bbox into ≤2°×2° sub-tiles and merge.
         const double MaxTileSpan = 2.0;
-        var tasks = new List<Task<IReadOnlyList<ChargerDto>>>();
+        var tasks = new List<Task<TileResult>>();
         for (var lat = tileSouth; lat < tileNorth; lat += MaxTileSpan)
         {
             for (var lng = tileWest; lng < tileEast; lng += MaxTileSpan)
@@ -105,15 +110,26 @@ public sealed class ChargersService
 
         var results = await Task.WhenAll(tasks);
 
-        // De-dupe by ID across overlapping sub-tiles.
+        // De-dupe by ID across overlapping sub-tiles. Track the worst warning
+        // we saw — if any tile failed with auth/quota the whole bbox is
+        // effectively partial, and the UI should surface the cause.
         var byId = new Dictionary<long, ChargerDto>();
+        ChargersWarning? worstWarning = null;
         foreach (var batch in results)
         {
-            foreach (var charger in batch)
+            foreach (var charger in batch.Items)
             {
                 byId[charger.Id] = charger;
             }
+            if (batch.Warning is { } w && (worstWarning is null || w > worstWarning))
+                worstWarning = w;
         }
+
+        // Promote a transport-level "error" to "missing-key" when the user
+        // has no key configured — that's almost always the actual cause
+        // (OCM started returning 403 to keyless calls in 2024).
+        if (worstWarning == ChargersWarning.Error && !hasKey)
+            worstWarning = ChargersWarning.MissingKey;
 
         IEnumerable<ChargerDto> filtered = byId.Values.Where(c =>
             c.Latitude >= south && c.Latitude <= north &&
@@ -147,13 +163,19 @@ public sealed class ChargersService
             filtered = filtered.Where(c => c.PowerKw is { } p && p >= minPowerKw);
         }
 
-        return filtered
+        var items = filtered
             .OrderByDescending(c => c.PowerKw ?? 0)
             .Take(MaxResultsPerCall)
             .ToArray();
+
+        return new ChargersResult
+        {
+            Items = items,
+            Warning = worstWarning?.ToWireString(),
+        };
     }
 
-    private async Task<IReadOnlyList<ChargerDto>> FetchTileAsync(
+    private async Task<TileResult> FetchTileAsync(
         double south,
         double west,
         double north,
@@ -167,7 +189,7 @@ public sealed class ChargersService
         // same cached entry.
         var cacheKey = $"chargers:{south:F2}:{west:F2}:{north:F2}:{east:F2}";
         if (_cache.TryGetValue(cacheKey, out IReadOnlyList<ChargerDto>? cached) && cached is not null)
-            return cached;
+            return new TileResult(cached, null);
 
         // verbose=true keeps the nested OperatorInfo / ConnectionType / UsageType
         // / StatusType / DataProvider objects so we can read their Title.
@@ -194,7 +216,18 @@ public sealed class ChargersService
                 _logger.LogWarning(
                     "OCM returned {StatusCode} for tile ({S},{W})-({N},{E}); skipping",
                     response.StatusCode, south, west, north, east);
-                return Array.Empty<ChargerDto>();
+
+                // Map HTTP status to a typed warning so the UI can give the
+                // user actionable feedback (add a key, slow down, etc.). We
+                // do *not* cache failures — the next request might succeed
+                // (e.g. user just added a key in Settings).
+                var warning = (int)response.StatusCode switch
+                {
+                    401 or 403 => ChargersWarning.MissingKey,
+                    429 => ChargersWarning.RateLimited,
+                    _ => ChargersWarning.Error,
+                };
+                return new TileResult(Array.Empty<ChargerDto>(), warning);
             }
 
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -211,14 +244,16 @@ public sealed class ChargersService
                 Size = Math.Max(1, dtos.Length),
             });
 
-            return dtos;
+            return new TileResult(dtos, null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Failed to fetch chargers from Open Charge Map");
-            return Array.Empty<ChargerDto>();
+            return new TileResult(Array.Empty<ChargerDto>(), ChargersWarning.Error);
         }
     }
+
+    private readonly record struct TileResult(IReadOnlyList<ChargerDto> Items, ChargersWarning? Warning);
 
     private static ChargerDto MapToDto(OcmPoi poi)
     {
@@ -356,4 +391,43 @@ public sealed record ChargerConnection
     public double? PowerKw { get; init; }
     public string? CurrentType { get; init; }
     public int Quantity { get; init; } = 1;
+}
+
+/// <summary>
+/// Wrapped chargers response. <see cref="Warning"/> is non-null when the
+/// upstream OCM call failed (or returned partial data), and the frontend
+/// should surface that to the user instead of silently showing 0 markers.
+/// </summary>
+public sealed record ChargersResult
+{
+    public IReadOnlyList<ChargerDto> Items { get; init; } = Array.Empty<ChargerDto>();
+
+    /// <summary>
+    /// One of: <c>"missing-key"</c>, <c>"rate-limited"</c>, <c>"error"</c>,
+    /// or <c>null</c> on full success.
+    /// </summary>
+    public string? Warning { get; init; }
+
+    public static readonly ChargersResult Empty = new();
+}
+
+/// <summary>
+/// Ordered by severity (worst last): <see cref="GetChargersAsync"/> keeps
+/// the highest-severity warning seen across sub-tiles.
+/// </summary>
+internal enum ChargersWarning
+{
+    RateLimited = 1,
+    Error = 2,
+    MissingKey = 3,
+}
+
+internal static class ChargersWarningExtensions
+{
+    public static string ToWireString(this ChargersWarning w) => w switch
+    {
+        ChargersWarning.MissingKey => "missing-key",
+        ChargersWarning.RateLimited => "rate-limited",
+        _ => "error",
+    };
 }

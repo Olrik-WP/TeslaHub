@@ -43,6 +43,14 @@ export default function Settings({ carId }: Props) {
     }
   }, [activeTab]);
   const switchTab = (next: SettingsTab) => {
+    // Persist the choice *before* updating the URL: the activeTab useMemo
+    // re-runs synchronously on the searchParams change and falls back to
+    // localStorage when no `?tab=` is present (case: user clicks "General").
+    // If we wrote localStorage in the post-render useEffect instead, the
+    // memo would still see the previous value ("tesla") and stay stuck.
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(TAB_STORAGE_KEY, next);
+    }
     const sp = new URLSearchParams(searchParams);
     if (next === 'general') sp.delete('tab');
     else sp.set('tab', next);
