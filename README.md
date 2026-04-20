@@ -76,7 +76,10 @@ TESLAHUB_ADMIN_PASSWORD=choose_a_strong_password_3
 # Session duration (days the browser stays logged in)
 TESLAHUB_SESSION_DAYS=30
 
-# JWT secret (generate a random 64-character string)
+# JWT secret — REQUIRED, min 32 characters. The API refuses to start
+# without it. It is also used to derive the AES-GCM key that encrypts
+# Tesla OAuth tokens at rest, so DO NOT change it once your stack has
+# data (you would lose access to the encrypted blobs).
 TESLAHUB_JWT_SECRET=generate_a_64_char_random_string
 
 # Optional — custom map tiles (default: OpenStreetMap)
@@ -957,6 +960,7 @@ The provided `update.sh` script does this for you when `SECURITY_ALERTS_ENABLED=
 | `TESLAHUB_JWT_SECRET` | *(required)* | Secret key for JWT signing |
 | `MAP_TILE_URL` | OpenStreetMap | Custom tile server URL |
 | `TESLAHUB_ALLOWED_IPS` | *(empty = all)* | Restrict access by IP/CIDR |
+| `TESLAHUB_ALLOWED_ORIGINS` | *(empty = same-origin only)* | Comma-separated list of origins allowed to call the API cross-origin with credentials. Leave empty when the SPA is served by the same Caddy as `/api`. |
 | `MQTT_HOST` | *(empty = disabled)* | MQTT broker hostname (e.g. `mosquitto`). Enables live vehicle status |
 | `MQTT_PORT` | `1883` | MQTT broker port |
 | `MQTT_USER` | *(empty)* | MQTT username (if broker requires auth) |

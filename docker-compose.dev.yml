@@ -50,9 +50,9 @@ services:
       - APP_DB_USER=teslahub_app
       - APP_DB_PASSWORD=${TESLAHUB_APP_PASS:-devapp}
       - TESLAHUB_ADMIN_USER=${TESLAHUB_ADMIN_USER:-admin}
-      - TESLAHUB_ADMIN_PASSWORD=${TESLAHUB_ADMIN_PASSWORD:-admin}
+      - TESLAHUB_ADMIN_PASSWORD=${TESLAHUB_ADMIN_PASSWORD:-devpass}
       - TESLAHUB_SESSION_DAYS=${TESLAHUB_SESSION_DAYS:-30}
-      - TESLAHUB_JWT_SECRET=${TESLAHUB_JWT_SECRET:-dev_jwt_secret_not_for_production_use}
+      - TESLAHUB_JWT_SECRET=${TESLAHUB_JWT_SECRET:-dev_jwt_secret_not_for_production_use_pad_to_32_chars}
       - MAP_TILE_URL=${MAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
       - TESLAHUB_ALLOWED_IPS=${TESLAHUB_ALLOWED_IPS:-}
       # Optional — Security Alerts (Tesla Fleet API). Leave empty to disable.

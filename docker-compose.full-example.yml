@@ -89,6 +89,7 @@ services:
       - TESLAHUB_JWT_SECRET=${TESLAHUB_JWT_SECRET}
       - MAP_TILE_URL=${MAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
       - TESLAHUB_ALLOWED_IPS=${TESLAHUB_ALLOWED_IPS:-}
+      - TESLAHUB_ALLOWED_ORIGINS=${TESLAHUB_ALLOWED_ORIGINS:-}
       - MQTT_HOST=${MQTT_HOST:-mosquitto}
       - MQTT_PORT=${MQTT_PORT:-1883}
       - MQTT_USER=${MQTT_USER:-}
