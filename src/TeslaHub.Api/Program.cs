@@ -59,12 +59,16 @@ builder.Services.AddScoped<TeslaShareService>();
 builder.Services.AddHostedService<TeslaTokenRefreshBackgroundService>();
 builder.Services.AddHostedService<TeslaTelemetryConsumer>();
 
-var jwtSecret = builder.Configuration["TESLAHUB_JWT_SECRET"]
-    ?? Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N");
-
-if (string.IsNullOrEmpty(builder.Configuration["TESLAHUB_JWT_SECRET"]))
+// TESLAHUB_JWT_SECRET is mandatory: it signs every session JWT AND is used
+// to derive the AES-GCM key that encrypts the Tesla OAuth tokens and the
+// partner private key at rest. Falling back to a random value would silently
+// invalidate every encrypted blob in the database on each restart.
+var jwtSecret = builder.Configuration["TESLAHUB_JWT_SECRET"];
+if (string.IsNullOrWhiteSpace(jwtSecret) || jwtSecret.Length < 32)
 {
-    builder.Configuration["TESLAHUB_JWT_SECRET"] = jwtSecret;
+    throw new InvalidOperationException(
+        "TESLAHUB_JWT_SECRET is required and must be at least 32 characters long. " +
+        "Generate one with: openssl rand -hex 32");
 }
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -100,14 +104,27 @@ builder.Services.AddMemoryCache(options =>
     options.SizeLimit = 1024;
 });
 
+// CORS allow-list. In a standard deployment the Web SPA is served by the
+// same Caddy that reverse-proxies /api/*, so requests are same-origin and
+// no CORS headers are needed. Only set TESLAHUB_ALLOWED_ORIGINS if you
+// serve the frontend from a different origin (e.g. a separate domain).
+// Wildcard origins are deliberately not supported when credentials are in
+// play — that combination is unsafe and was the previous behaviour.
+var corsOrigins = (builder.Configuration["TESLAHUB_ALLOWED_ORIGINS"] ?? string.Empty)
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    .ToArray();
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.SetIsOriginAllowed(_ => true)
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
+        if (corsOrigins.Length > 0)
+        {
+            policy.WithOrigins(corsOrigins)
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials();
+        }
     });
 });
 
@@ -118,11 +135,25 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
 
-    var adminUser = builder.Configuration["TESLAHUB_ADMIN_USER"] ?? "admin";
-    var adminPass = builder.Configuration["TESLAHUB_ADMIN_PASSWORD"] ?? "admin";
+    // Only enforce TESLAHUB_ADMIN_PASSWORD on first run (when the users table
+    // is empty). On subsequent restarts the env var is irrelevant — the user
+    // can change their password from the UI — so we don't want to break
+    // existing installations if the variable is later removed.
+    if (!await db.Users.AnyAsync())
+    {
+        var adminUser = builder.Configuration["TESLAHUB_ADMIN_USER"] ?? "admin";
+        var adminPass = builder.Configuration["TESLAHUB_ADMIN_PASSWORD"];
 
-    var authService = scope.ServiceProvider.GetRequiredService<AuthService>();
-    await authService.EnsureAdminUserAsync(adminUser, adminPass);
+        if (string.IsNullOrWhiteSpace(adminPass) || adminPass.Length < 6)
+        {
+            throw new InvalidOperationException(
+                "TESLAHUB_ADMIN_PASSWORD is required (min 6 characters) to create the initial admin account. " +
+                "Set it in your .env, start the stack, then change the password from the Settings page.");
+        }
+
+        var authService = scope.ServiceProvider.GetRequiredService<AuthService>();
+        await authService.EnsureAdminUserAsync(adminUser, adminPass);
+    }
 }
 
 app.UseMiddleware<IpFilterMiddleware>();

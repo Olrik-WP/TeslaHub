@@ -42,6 +42,10 @@ services:
       - TESLAHUB_JWT_SECRET=${TESLAHUB_JWT_SECRET}
       - MAP_TILE_URL=${MAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
       - TESLAHUB_ALLOWED_IPS=${TESLAHUB_ALLOWED_IPS:-}
+      # Optional — comma-separated list of origins allowed to call the API
+      # cross-origin with credentials. Leave empty for the standard setup
+      # (frontend served by Caddy on the same origin as /api).
+      - TESLAHUB_ALLOWED_ORIGINS=${TESLAHUB_ALLOWED_ORIGINS:-}
       - MQTT_HOST=${MQTT_HOST:-}
       - MQTT_PORT=${MQTT_PORT:-1883}
       - MQTT_USER=${MQTT_USER:-}
