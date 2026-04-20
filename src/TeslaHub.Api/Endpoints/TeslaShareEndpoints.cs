@@ -66,7 +66,7 @@ public static class TeslaShareEndpoints
                 ct);
 
             if (result.Success)
-                return Results.Ok(new { sent = true });
+                return Results.Ok(new { sent = true, wokeUp = result.WokeUp });
 
             var statusCode = result.FailureKind switch
             {

@@ -148,11 +148,57 @@ export default function TeslaPairingWizard() {
   const labelDone = t('securityAlerts.wizard.common.done');
   const labelTodo = t('securityAlerts.wizard.common.todo');
 
+  const prereqStepKeys = ['step1', 'step2', 'step3', 'step4'] as const;
+
   return (
     <div className="space-y-4">
       <div className="border-t border-[#2a2a2a] pt-4 space-y-1">
         <div className={sectionTitleClass}>{t('securityAlerts.wizard.title')}</div>
         <p className={subTextClass}>{t('securityAlerts.wizard.intro')}</p>
+      </div>
+
+      <div className="bg-[#3a2a1a] border border-[#7a5a2a] rounded-lg p-3 space-y-3">
+        <div className="flex items-start gap-2">
+          <span className="text-[#e0a47e] text-base leading-none mt-0.5" aria-hidden="true">⚠️</span>
+          <div className="space-y-2 min-w-0">
+            <p className="text-xs font-semibold text-[#e0a47e]">
+              {t('securityAlerts.wizard.prereqWarning.title')}
+            </p>
+            <p className="text-xs text-[#c0a07e] leading-relaxed">
+              {t('securityAlerts.wizard.prereqWarning.body')}
+            </p>
+            <ul className="space-y-2 text-xs text-[#c0a07e]">
+              {prereqStepKeys.map((stepKey) => {
+                const items = (
+                  t(`securityAlerts.wizard.prereqWarning.${stepKey}Items`) as string
+                )
+                  .split('|')
+                  .map((s) => s.trim())
+                  .filter(Boolean);
+                return (
+                  <li key={stepKey} className="space-y-1">
+                    <div className="font-semibold text-[#e0a47e]">
+                      {t(`securityAlerts.wizard.prereqWarning.${stepKey}Title`)}
+                    </div>
+                    <ul className="list-disc pl-4 space-y-0.5">
+                      {items.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </li>
+                );
+              })}
+            </ul>
+            <a
+              className="text-xs text-[#e0a47e] underline hover:text-[#ffc499] inline-block"
+              href="https://github.com/Olrik-WP/TeslaHub#security-alerts-optional"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t('securityAlerts.wizard.prereqWarning.linkLabel')}
+            </a>
+          </div>
+        </div>
       </div>
 
       {feedback && (

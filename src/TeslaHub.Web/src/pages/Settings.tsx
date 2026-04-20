@@ -1,15 +1,19 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSettings, getChargingLocations, getCarImageInfo } from '../api/queries';
 import { useUnits } from '../hooks/useUnits';
 import { api, logout } from '../api/client';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES } from '../i18n';
 import { MAP_STYLES } from '../hooks/useMapStyle';
 import type { GlobalSettings, ChargingLocation } from '../api/queries';
 import CustomSelect from '../components/CustomSelect';
 import SecurityAlertsCard from '../components/SecurityAlertsCard';
+
+type SettingsTab = 'general' | 'tesla';
+const VALID_TABS: SettingsTab[] = ['general', 'tesla'];
+const TAB_STORAGE_KEY = 'teslahub_settings_tab';
 
 interface Props {
   carId: number | undefined;
@@ -21,6 +25,29 @@ export default function Settings({ carId }: Props) {
   const { t, i18n } = useTranslation();
   const u = useUnits();
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Tabs are URL-driven (?tab=tesla) so other parts of the app (e.g. the
+  // map's "Send to car" panel) can deep-link straight to the right section.
+  // Falls back to localStorage so the user lands on the same tab on refresh.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = useMemo<SettingsTab>(() => {
+    const fromUrl = searchParams.get('tab');
+    if (fromUrl && VALID_TABS.includes(fromUrl as SettingsTab)) return fromUrl as SettingsTab;
+    const fromStorage = (typeof window !== 'undefined' && localStorage.getItem(TAB_STORAGE_KEY)) || '';
+    if (VALID_TABS.includes(fromStorage as SettingsTab)) return fromStorage as SettingsTab;
+    return 'general';
+  }, [searchParams]);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(TAB_STORAGE_KEY, activeTab);
+    }
+  }, [activeTab]);
+  const switchTab = (next: SettingsTab) => {
+    const sp = new URLSearchParams(searchParams);
+    if (next === 'general') sp.delete('tab');
+    else sp.set('tab', next);
+    setSearchParams(sp, { replace: false });
+  };
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: getSettings });
   const { data: latestVersion } = useQuery({
@@ -201,10 +228,35 @@ export default function Settings({ carId }: Props) {
     return <span className={`text-xs px-2 py-0.5 rounded ${s.bg} ${s.text}`}>{s.label}</span>;
   };
 
+  const tabButtonClass = (tab: SettingsTab) =>
+    `flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors ${
+      activeTab === tab
+        ? 'bg-[#e31937] text-white'
+        : 'bg-[#1a1a1a] text-[#9ca3af] hover:text-white hover:bg-[#2a2a2a]'
+    }`;
+
   return (
     <div className="p-4 space-y-4">
       <h1 className="text-xl font-bold">{t('settings.title')}</h1>
 
+      {/* Tab strip ────────────────────────────────────────────────────── */}
+      <div className="flex gap-2 sticky top-0 bg-[#0a0a0a] -mx-4 px-4 py-2 z-10 border-b border-[#1a1a1a]">
+        <button type="button" onClick={() => switchTab('general')} className={tabButtonClass('general')}>
+          {t('settings.tabs.general')}
+        </button>
+        <button type="button" onClick={() => switchTab('tesla')} className={tabButtonClass('tesla')}>
+          <span className="hidden sm:inline">{t('settings.tabs.tesla')}</span>
+          <span className="sm:hidden">{t('settings.tabs.teslaShort')}</span>
+        </button>
+      </div>
+
+      {activeTab === 'tesla' ? (
+        <>
+          {/* Security Alerts (optional Tesla Fleet API integration) */}
+          <SecurityAlertsCard />
+        </>
+      ) : (
+        <>
       {/* General settings */}
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-4">
         <div>
@@ -484,9 +536,6 @@ export default function Settings({ carId }: Props) {
         </div>
       </div>
 
-      {/* Security Alerts (optional Tesla Fleet API integration) */}
-      <SecurityAlertsCard />
-
       {/* Change password */}
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-3">
         <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('settings.changePassword')}</div>
@@ -584,6 +633,8 @@ export default function Settings({ carId }: Props) {
       <button onClick={handleLogout} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-[#ef4444] py-3 rounded-xl text-sm font-medium min-h-[48px] active:bg-[#2a2a2a]">
         {t('auth.logout')}
       </button>
+        </>
+      )}
     </div>
   );
 }

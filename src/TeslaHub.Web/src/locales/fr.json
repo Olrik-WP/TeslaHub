@@ -238,6 +238,11 @@
   },
   "settings": {
     "title": "Paramètres",
+    "tabs": {
+      "general": "Général",
+      "tesla": "Intégration Tesla",
+      "teslaShort": "Tesla"
+    },
     "currency": "Devise",
     "unitOfLength": "Unité de distance",
     "temperature": "Température",
@@ -569,6 +574,11 @@
     "title": "Alertes de sécurité",
     "subtitle": "Notifications temps réel Tesla Sentry et tentative d'effraction (optionnel).",
     "selfHostNote": "Propulsé par votre propre app Tesla developer — entièrement auto-hébergé.",
+    "advancedWarning": {
+      "title": "Installation avancée — réservée aux utilisateurs confirmés",
+      "body": "Activer les alertes Tesla en temps réel implique d'héberger vous-même un serveur Fleet Telemetry et un proxy de signature des commandes Tesla, sur votre propre domaine. Il vous faudra : un nom de domaine public, une redirection de port sur votre routeur, un reverse proxy (Caddy / nginx) avec Let's Encrypt, deux images Docker à compiler localement depuis le code source de Tesla, et un peu d'aisance avec les permissions de fichiers dans les volumes Docker. La philosophie « 100 % auto-hébergé, zéro service tiers » est un vrai plus — mais tout ce qu'un SaaS gérerait à votre place devient votre responsabilité. Si vous voulez juste le tableau de bord, la carte et l'historique, laissez cette fonctionnalité désactivée : le reste de TeslaHub fonctionne parfaitement sans elle.",
+      "guideLabel": "Voir le guide d'installation et de dépannage →"
+    },
     "creditPrefix": "Inspiré de",
     "creditSuffix": "(AGPL-3.0). TeslaHub reste entièrement auto-hébergé : aucune donnée ne quitte votre serveur.",
     "statusConnected": "connecté",
@@ -639,6 +649,19 @@
     "wizard": {
       "title": "Assistant de pairing véhicule",
       "intro": "Une fois votre compte Tesla connecté, suivez ces étapes pour autoriser cette instance TeslaHub à recevoir la télémétrie de vos véhicules.",
+      "prereqWarning": {
+        "title": "Stop — à lire avant de cliquer sur les boutons ci-dessous",
+        "body": "Chaque étape suppose une préparation côté serveur faite AVANT de cliquer. L'assistant ne vérifie rien pour vous. Cliquer dans l'ordre sans avoir préparé les prérequis échouera avec des erreurs Tesla cryptiques (502, redirect_uri_mismatch, permission denied, etc.).",
+        "step1Title": "Avant l'étape 1 (générer la clé)",
+        "step1Items": "DNS public pour teslahub.<votre domaine> pointe sur votre serveur | Reverse proxy redirige /.well-known/appspecific/* vers teslahub-api (et pas vers la SPA React)",
+        "step2Title": "Avant l'étape 2 (enregistrer le partner)",
+        "step2Items": "Étape 1 faite | L'URL de la clé publique ci-dessus renvoie un bloc -----BEGIN PUBLIC KEY----- quand on la fetch en curl depuis n'importe quelle machine externe",
+        "step3Title": "Avant l'étape 3 (pairer les véhicules)",
+        "step3Items": "Étape 2 faite | iPhone avec l'app Tesla installée et connecté au compte Tesla qui possède les voitures",
+        "step4Title": "Avant l'étape 4 (configurer la télémétrie)",
+        "step4Items": "Enregistrement DNS-only pour telemetry.<votre domaine> sur Cloudflare (nuage gris, PAS proxified) | Port 8443/tcp forwardé de votre box vers votre serveur | Caddy a obtenu un cert Let's Encrypt pour telemetry.<votre domaine> ET l'a rendu lisible par l'uid 65532 | fleet-telemetry-src et vehicle-command-src clonés et buildés | fleet-telemetry/config.json rempli avec votre vrai domaine | Conteneurs fleet-telemetry, tesla-http-proxy-init et tesla-http-proxy tous UP | Token de bot Telegram dans .env ET au moins un destinataire ajouté plus bas, qui a envoyé /start à votre bot | Clé privée exportée dans le volume key-vault (bouton orange ci-dessous)",
+        "linkLabel": "Voir le guide d'installation complet Security Alerts →"
+      },
       "step1": {
         "title": "1. Générer la clé publique pour votre domaine",
         "intro": "TeslaHub crée une paire de clés EC P-256 et expose la clé publique à une URL well-known fixe sur votre domaine. La clé privée est chiffrée au repos avec AES-GCM et ne quitte jamais la base de données.",
@@ -751,27 +774,41 @@
     "noAddressFound": "Aucune adresse trouvée — coordonnées seules envoyées.",
     "distanceFromVehicle": "{{distance}} depuis la voiture",
     "targetVehicle": "Véhicule cible",
+    "targetVehicles": "Véhicules cibles ({{count}} sélectionnés)",
+    "selectAll": "Tous",
+    "selectNone": "Aucun",
+    "noTargetSelected": "Aucun véhicule sélectionné",
+    "allCars": "Toutes les {{count}} voitures",
     "sendButton": "Envoyer à la voiture",
+    "sendButtonMany": "Envoyer à {{count}} voitures",
+    "sendShort": "Envoyer",
     "sending": "Envoi…",
+    "expand": "Afficher les détails",
+    "collapse": "Réduire",
     "feedback": {
-      "missing": "Sélectionnez un véhicule et placez un point sur la carte.",
+      "missing": "Sélectionnez au moins un véhicule et placez un point sur la carte.",
       "sent": "Destination envoyée. Confirmez sur l'écran central.",
       "sentTo": "Destination envoyée à {{vehicle}}. Confirmez sur l'écran central.",
+      "sentToMany": "Destination envoyée à {{count}} voitures ({{vehicles}}). Confirmez sur chaque écran central.",
+      "partialFailure": "Envoyée à {{ok}} mais échec pour {{failed}}. Vérifiez la connexion de la voiture et réessayez.",
+      "allFailed": "Impossible d'envoyer à {{vehicles}}. Vérifiez que les voitures sont en ligne et réessayez.",
+      "wakingUp": "Réveil de la voiture en cours… Tesla annonce jusqu'à ~60 s en cas de mauvaise couverture cellulaire.",
+      "wokeNote": "({{vehicles}} dormait — réveillée automatiquement.)",
       "confirmHint": "La voiture affiche une notification \"Démarrer la navigation\" — il faut l'accepter."
     },
     "guard": {
-      "openSettings": "Ouvrir Settings",
+      "openSettings": "Ouvrir Settings → Security Alerts",
       "notConfigured": {
         "title": "Tesla Fleet API non configurée",
-        "body": "Pour envoyer une destination à votre voiture, configurez la connexion Tesla Fleet API dans Settings → Tesla integration (les mêmes prérequis que pour les alertes Sentry)."
+        "body": "Cette fonctionnalité repose sur la même configuration Tesla Fleet API que les alertes Sentry — c'est une intégration complexe (app developer Tesla, OAuth, pairing par QR code, reverse proxy). Suivez le guide complet dans Settings → Security Alerts avant de revenir ici."
       },
       "notConnected": {
         "title": "Compte Tesla non connecté",
-        "body": "L'API Fleet est configurée mais aucun compte Tesla n'est connecté. Connectez-vous depuis Settings → Tesla integration."
+        "body": "L'API Fleet est configurée mais aucun compte Tesla n'est connecté. Connectez votre compte depuis Settings → Security Alerts."
       },
       "noPaired": {
         "title": "Aucun véhicule appairé",
-        "body": "Aucun de vos véhicules n'est appairé avec la clé virtuelle TeslaHub. L'appairage est nécessaire pour pouvoir lui envoyer des commandes. Lancez la procédure depuis Settings → Tesla integration."
+        "body": "Aucun de vos véhicules n'est appairé avec la clé virtuelle TeslaHub. L'appairage par QR code est obligatoire pour pouvoir lui envoyer des commandes. Lancez la procédure depuis Settings → Security Alerts (étape 3 du wizard)."
       }
     }
   }

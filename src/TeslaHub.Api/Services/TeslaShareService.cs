@@ -45,6 +45,41 @@ public sealed class TeslaShareService
         _logger = logger;
     }
 
+    // Tesla cars enter sleep after ~10–15 minutes of inactivity. The
+    // command/share endpoint returns 408 ("device offline") immediately on
+    // a sleeping car instead of buffering, so we have to wake the car
+    // ourselves before sending.
+    //
+    // wake_up is one of the few Fleet API endpoints that is NEVER signed
+    // (chicken-and-egg: a sleeping car cannot authenticate commands). It
+    // is sent over plain REST to the public Fleet API audience, NOT
+    // through tesla-http-proxy. Source: teslamotors/vehicle-command
+    // README → "wake_up over the Internet does not need to be signed".
+    //
+    // Tesla's official best-practice doc says wake can take "10 to 60
+    // seconds" depending on the car's cellular signal. We poll
+    // /vehicles/{id} with a progressive back-off (2s → 3s → 5s) to:
+    //   1. respect Tesla's "don't repeatedly poll vehicle data" guidance,
+    //   2. cover the worst case without bombarding the API,
+    //   3. keep total cost in the single-digit cents-per-month range.
+    private static readonly TimeSpan WakeMaxWait = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan[] WakePollIntervals =
+    {
+        TimeSpan.FromSeconds(2),
+        TimeSpan.FromSeconds(2),
+        TimeSpan.FromSeconds(3),
+        TimeSpan.FromSeconds(3),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(5),
+        TimeSpan.FromSeconds(5),
+    };
+
     public async Task<ShareResult> SendDestinationAsync(
         int vehicleId,
         ShareDestinationRequest request,
@@ -71,8 +106,35 @@ public sealed class TeslaShareService
                 "The TeslaHub virtual key is not paired with this vehicle. Pair it from Settings → Tesla integration.");
 
         var account = await _oauth.EnsureValidAccessTokenAsync(vehicle.TeslaAccount, cancellationToken);
+
+        // First attempt — fast path for cars that are already online.
+        var first = await TrySendShareAsync(account, vehicle, trimmedValue, request.Locale, cancellationToken);
+        if (first.Success || !ShouldRetryAfterWake(first.FailureKind))
+            return first;
+
+        _logger.LogInformation(
+            "Vehicle {VehicleId} ({Vin}) appears to be asleep ({Kind}). Sending wake_up and retrying once.",
+            vehicle.Id, vehicle.Vin, first.FailureKind);
+
+        var wake = await WakeUpAndWaitAsync(account, vehicle, cancellationToken);
+        if (!wake.Awoken)
+            return ShareResult.Fail(ShareFailureKind.VehicleUnreachable,
+                wake.Detail ??
+                "The car did not wake up in time. It may have lost its cellular connection — try again in a moment.");
+
+        var second = await TrySendShareAsync(account, vehicle, trimmedValue, request.Locale, cancellationToken);
+        return second with { WokeUp = true };
+    }
+
+    private async Task<ShareResult> TrySendShareAsync(
+        TeslaAccount account,
+        TeslaVehicle vehicle,
+        string value,
+        string? locale,
+        CancellationToken cancellationToken)
+    {
         var token = _oauth.DecryptAccessToken(account);
-        var locale = NormalizeLocale(request.Locale);
+        var normalisedLocale = NormalizeLocale(locale);
         var timestampMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
 
         var payload = new
@@ -80,9 +142,9 @@ public sealed class TeslaShareService
             type = "share_ext_content_raw",
             value = new Dictionary<string, string>
             {
-                ["android.intent.extra.TEXT"] = trimmedValue,
+                ["android.intent.extra.TEXT"] = value,
             },
-            locale,
+            locale = normalisedLocale,
             timestamp_ms = timestampMs,
         };
 
@@ -118,12 +180,17 @@ public sealed class TeslaShareService
                 _logger.LogInformation(
                     "Tesla rejected share for vehicle {VehicleId} ({Vin}): {Reason}",
                     vehicle.Id, vehicle.Vin, teslaResult.Reason);
-                return ShareResult.Fail(ShareFailureKind.Rejected, teslaResult.Reason ?? "Tesla rejected the destination.");
+
+                // "vehicle unavailable" is Tesla's reason for an asleep car here.
+                var rejectedKind = LooksLikeAsleep(teslaResult.Reason)
+                    ? ShareFailureKind.VehicleUnreachable
+                    : ShareFailureKind.Rejected;
+                return ShareResult.Fail(rejectedKind, teslaResult.Reason ?? "Tesla rejected the destination.");
             }
 
             _logger.LogInformation(
                 "Sent destination to vehicle {VehicleId} ({Vin}): {Value}",
-                vehicle.Id, vehicle.Vin, Truncate(trimmedValue, 120));
+                vehicle.Id, vehicle.Vin, Truncate(value, 120));
 
             return ShareResult.Ok();
         }
@@ -133,6 +200,96 @@ public sealed class TeslaShareService
             return ShareResult.Fail(ShareFailureKind.Transport, ex.Message);
         }
     }
+
+    private async Task<WakeOutcome> WakeUpAndWaitAsync(
+        TeslaAccount account,
+        TeslaVehicle vehicle,
+        CancellationToken cancellationToken)
+    {
+        var token = _oauth.DecryptAccessToken(account);
+        var client = _httpFactory.CreateClient("tesla");
+        var baseUrl = account.Audience.TrimEnd('/');
+        var wakeUrl = $"{baseUrl}/api/1/vehicles/{vehicle.TeslaVehicleId}/wake_up";
+
+        // 1. Fire wake_up. Tesla returns immediately with the current vehicle
+        //    state object; the actual wake takes a few seconds to propagate.
+        try
+        {
+            using var wakeRequest = new HttpRequestMessage(HttpMethod.Post, wakeUrl);
+            wakeRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            wakeRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            using var wakeResponse = await client.SendAsync(wakeRequest, cancellationToken);
+            if (!wakeResponse.IsSuccessStatusCode)
+            {
+                var body = await wakeResponse.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning(
+                    "wake_up returned {StatusCode} for vehicle {VehicleId} ({Vin}): {Body}",
+                    wakeResponse.StatusCode, vehicle.Id, vehicle.Vin, Truncate(body, 240));
+                return new WakeOutcome(false, $"Tesla refused wake_up ({(int)wakeResponse.StatusCode}).");
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "wake_up call failed for vehicle {VehicleId}", vehicle.Id);
+            return new WakeOutcome(false, ex.Message);
+        }
+
+        // 2. Poll /vehicles/{id} until state=online or we hit the deadline.
+        //    Progressive back-off keeps us within Tesla's "be gentle" guidance:
+        //    typical wake completes inside the first 5–10s with only 2–4 polls.
+        var deadline = DateTimeOffset.UtcNow + WakeMaxWait;
+        var statusUrl = $"{baseUrl}/api/1/vehicles/{vehicle.TeslaVehicleId}";
+        for (var attempt = 0; attempt < WakePollIntervals.Length; attempt++)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            await Task.Delay(WakePollIntervals[attempt], cancellationToken);
+            if (DateTimeOffset.UtcNow >= deadline) break;
+
+            try
+            {
+                using var statusRequest = new HttpRequestMessage(HttpMethod.Get, statusUrl);
+                statusRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                statusRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                using var statusResponse = await client.SendAsync(statusRequest, cancellationToken);
+                if (statusResponse.IsSuccessStatusCode)
+                {
+                    var body = await statusResponse.Content.ReadAsStringAsync(cancellationToken);
+                    using var doc = JsonDocument.Parse(body);
+                    if (doc.RootElement.TryGetProperty("response", out var resp)
+                        && resp.TryGetProperty("state", out var st)
+                        && st.ValueKind == JsonValueKind.String
+                        && string.Equals(st.GetString(), "online", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogInformation(
+                            "Vehicle {VehicleId} ({Vin}) woke up after {Attempts} poll(s).",
+                            vehicle.Id, vehicle.Vin, attempt + 1);
+                        return new WakeOutcome(true, null);
+                    }
+                }
+            }
+            catch
+            {
+                // ignore intermittent errors, we will retry within the loop
+            }
+        }
+
+        _logger.LogWarning(
+            "Vehicle {VehicleId} ({Vin}) did not become online within {Seconds}s.",
+            vehicle.Id, vehicle.Vin, WakeMaxWait.TotalSeconds);
+        return new WakeOutcome(false,
+            $"Vehicle did not come online within {(int)WakeMaxWait.TotalSeconds}s after wake_up.");
+    }
+
+    private static bool ShouldRetryAfterWake(ShareFailureKind kind) =>
+        kind is ShareFailureKind.VehicleUnreachable;
+
+    private static bool LooksLikeAsleep(string? reason) =>
+        reason is not null && (
+            reason.Contains("vehicle unavailable", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("vehicle is asleep", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("offline", StringComparison.OrdinalIgnoreCase));
+
+    private sealed record WakeOutcome(bool Awoken, string? Detail);
 
     private static string NormalizeLocale(string? locale)
     {
@@ -218,7 +375,7 @@ public enum ShareFailureKind
     Transport,
 }
 
-public sealed record ShareResult(bool Success, string? Error, ShareFailureKind FailureKind)
+public sealed record ShareResult(bool Success, string? Error, ShareFailureKind FailureKind, bool WokeUp = false)
 {
     public static ShareResult Ok() => new(true, null, ShareFailureKind.None);
     public static ShareResult Fail(ShareFailureKind kind, string error) => new(false, error, kind);

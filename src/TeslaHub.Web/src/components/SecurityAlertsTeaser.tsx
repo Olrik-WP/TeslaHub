@@ -61,7 +61,7 @@ export default function SecurityAlertsTeaser() {
         <div className="flex flex-wrap gap-2 pt-1">
           <button
             className="bg-[#e31937] text-white px-3 py-1.5 rounded-lg text-xs font-medium active:bg-[#c0152f]"
-            onClick={() => navigate('/settings')}
+            onClick={() => navigate('/settings?tab=tesla')}
           >
             {t('securityAlerts.homeTeaser.cta')}
           </button>

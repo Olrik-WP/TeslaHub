@@ -164,6 +164,28 @@ export default function SecurityAlertsCard() {
         </span>
       </div>
 
+      <div className="bg-[#3a2a1a] border border-[#7a5a2a] rounded-lg p-3 space-y-2">
+        <div className="flex items-start gap-2">
+          <span className="text-[#e0a47e] text-base leading-none mt-0.5" aria-hidden="true">⚠️</span>
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-[#e0a47e]">
+              {t('securityAlerts.advancedWarning.title')}
+            </p>
+            <p className="text-xs text-[#c0a07e] leading-relaxed">
+              {t('securityAlerts.advancedWarning.body')}
+            </p>
+            <a
+              className="text-xs text-[#e0a47e] underline hover:text-[#ffc499] inline-block"
+              href="https://github.com/Olrik-WP/TeslaHub#security-alerts-optional"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t('securityAlerts.advancedWarning.guideLabel')}
+            </a>
+          </div>
+        </div>
+      </div>
+
       {feedback && (
         <div
           className={`text-xs px-3 py-2 rounded ${

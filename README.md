@@ -244,13 +244,42 @@ When MQTT is not connected, TeslaHub shows a subtle indicator and hides the body
 
 TeslaHub can optionally connect to your Tesla account via the official **Tesla Fleet API** to deliver real-time security features that go beyond what TeslaMate can capture — most importantly the `SentryModeStateAware` event raised when Sentry detects activity around the vehicle, and break-in detection. Alerts are pushed to Telegram in seconds.
 
+> ⚠️ **Advanced users only — read this before you start.**
+>
+> This feature is genuinely useful, but standing it up end-to-end is **significantly harder than the rest of TeslaHub**. You will need to be comfortable with: a public domain name + DNS records (Cloudflare or similar), opening a port on your router, running a reverse proxy (Caddy / nginx) and managing Let's Encrypt certs, building two Go services from source via Docker Compose (Tesla publishes no images), debugging Linux file permissions inside Docker volumes, and reading container logs when something fails.
+>
+> The "100% self-hosted, zero third party" philosophy is the upside: nothing is shared, nothing leaves your box, no SaaS subscription. The downside is that **everything Tesla, your ISP, your DNS provider, and Caddy normally hide from a paying customer is now your problem**. Several of the steps below have non-obvious failure modes (mTLS perms, Tesla API requiring a signing proxy, snake_case JSON, partner vs user OAuth tokens, Telegram bots needing a `/start`, etc.). The [Troubleshooting](#troubleshooting) section at the end lists every gotcha encountered while bringing this stack up so you can shortcut your own debugging.
+>
+> If you only want core dashboard + map + history features, **leave Security Alerts disabled** — TeslaHub works fully without it. You can come back any time later.
+
 ### What you get
 
 - 🚨 Instant Telegram notification when Tesla Sentry detects activity (`SentryModeStateAware` / `Panic`).
 - 🔓 Break-in detection (vehicle locked but a door / trunk / frunk opens).
 - 👥 Per-recipient routing: multiple Telegram chats can be configured, each subscribed to specific vehicles, with Sentry and break-in toggles per (recipient, vehicle) pair.
 - 📜 Last 500 alerts kept in PostgreSQL with delivery status.
+- 🗺️ **Send a destination to your car from the TeslaHub map.** Long-press / tap any spot on the map (or search an address) → click *Send to car*. The destination shows up on the vehicle's central screen as a "Start navigation" prompt.
+  - **Sleeping cars are woken up automatically.** TeslaHub fires Tesla's plain-REST `POST /api/1/vehicles/{id}/wake_up` (this endpoint is the only Fleet API command that does *not* go through `tesla-http-proxy` — by Tesla design, since a sleeping car cannot authenticate signed commands), then polls `/vehicles/{id}` with a progressive back-off (2s → 3s → 5s) until `state="online"`, capped at 60s as per Tesla's official best-practice doc. The destination is then sent over the same path as a fully-awake car. Typical wait when the car was asleep on good cellular: **5–15s**.
+  - You can tick **multiple cars at once** in the panel to broadcast the same destination to your whole fleet in one click. Each is woken independently and in parallel.
+  - **No vampire drain.** A `wake_up` is issued only on explicit user action (a click); TeslaHub never wakes cars in the background or polls them on a schedule for live data — Fleet Telemetry handles that *push*-side. Tesla puts the car back to sleep on its own after ~10–15 min of inactivity. A handful of intentional wake-ups per day costs less than 1% SoC and stays well inside Tesla's $10/month free Fleet API tier.
 - 🛠 Full setup wizard inside TeslaHub Settings — copy-paste for every Tesla developer app field, QR code for vehicle pairing, "Send test" button for Telegram.
+
+> **One Fleet API setup powers every TeslaHub feature that talks to the car.** Sentry / break-in alerts and *Send destination to car* both rely on the same Tesla developer app, the same OAuth flow, and the same paired virtual key. Once Security Alerts is configured, *Send to car* lights up automatically (and vice-versa). If you see a "Tesla Fleet API not configured" banner inside the map's Send-to-car panel, complete the wizard at Settings → Security Alerts first.
+
+### Roadmap — more vehicle commands coming
+
+The Tesla Fleet API + virtual-key pairing currently in place gives TeslaHub the technical authority to send any signed command to your car (lock/unlock, frunk/trunk, climate, charge, honk/flash, sentry on/off, etc. — see the [security model](#what-paired-virtual-key-actually-grants)). For now, only the two user-facing features above are wired up:
+
+| Feature | Status |
+|---|---|
+| Sentry / break-in Telegram alerts | ✅ available |
+| Send destination from the map | ✅ available |
+| Lock / unlock from the UI | 🛠 planned (with PIN/2FA confirmation) |
+| Climate / preconditioning controls | 🛠 planned |
+| Frunk / trunk / charge port | 🛠 planned |
+| Charge start / stop / set limit | 🛠 planned |
+
+When new commands ship, they'll reuse the **same** Fleet API setup — no extra plumbing required. If you don't enable Security Alerts, none of these features are exposed in the UI.
 
 ### Philosophy: 100% self-hosted, zero third party
 
@@ -273,12 +302,15 @@ Everything stays on **your** server. No third-party cloud, no shared client_id, 
 1. Open [developer.tesla.com](https://developer.tesla.com), click **Sign in** and use your existing Tesla account credentials.
 2. From the left menu, go to **Apps**, then click **Create New App**.
 3. Fill in the form with:
-   - **App Name:** `TeslaHub Self-Hosted`
+   - **App Name:** something **unique to you**, e.g. `TeslaHub <yourname>` or `<yourname> Tesla Companion`. ⚠️ App names are global on the Tesla developer portal — generic names like `TeslaHub Self-Hosted` are likely already taken and Tesla will refuse the form with a cryptic validation error. Pick anything personal and you're good.
    - **Description:** `Personal companion dashboard for TeslaMate`
-   - **Allowed Origin URL:** `https://teslahub.yourdomain.com`
-   - **Allowed Redirect URI:** `https://teslahub.yourdomain.com/api/tesla-oauth/callback`
-   - **Scopes:** `openid`, `offline_access`, `vehicle_device_data`, `vehicle_cmds`
+   - **Allowed Origin URL:** `https://teslahub.yourdomain.com` (a trailing `/` is accepted; a sub-path like `/login` is rejected — keep it at the bare domain).
+   - **Allowed Redirect URI:** `https://teslahub.yourdomain.com/api/tesla-oauth/callback` — **no trailing slash after `callback`**. Whatever you type here must later match `TESLA_REDIRECT_URI` in your `.env` **byte-for-byte**, otherwise Tesla rejects OAuth with `redirect_uri_mismatch`.
+   - **Allowed Returned URL:** same as Origin URL (`https://teslahub.yourdomain.com`).
+   - **Scopes:** at minimum `openid`, `offline_access`, `vehicle_device_data`, `vehicle_cmds`. You can tick more (e.g. `energy_*` for Powerwall) — TeslaHub only requests the four above at sign-in time, but having extras enabled now avoids re-creating the app later if you want them.
 4. Click **Submit**. Tesla returns a `Client ID` and a `Client Secret`. Keep them safe — the secret is shown only once.
+
+> 💳 **Tesla now requires a billing-enabled account.** During the registration flow Tesla will ask you to add a payment method — this is mandatory even for personal use. The good news: Tesla offers a **$10/month free credit** on Fleet API consumption. A typical TeslaHub setup (1–2 vehicles, Sentry events only) consumes **well under $1/month**, so you stay inside the free tier and nothing is actually billed. You can also set a hard monthly cap in the Tesla developer portal if you want belt-and-braces protection.
 
 ### Step 2 — Add the variables to your `.env`
 
@@ -332,6 +364,11 @@ Open TeslaHub → **Settings** → scroll to the **Security Alerts** card → cl
 Once your Tesla account is connected, the Settings card unfolds a 3-step wizard:
 
 1. **Generate the public key for your domain.** TeslaHub creates an EC P-256 keypair, encrypts the private key at rest with AES-GCM, and exposes the public key (PEM, `SubjectPublicKeyInfo`) at `https://<your-domain>/.well-known/appspecific/com.tesla.3p.public-key.pem`. The wizard provides a clickable test link so you can confirm Tesla can fetch it.
+
+   > **About the Chrome warning when you click the test link.** New domains containing the word "tesla" are routinely flagged by **Google Safe Browsing** as suspected phishing for a few weeks. You may see a red full-page warning ("Dangerous site"). This is **not** a TLS / certificate problem — your Caddy cert is fine. It's purely Chrome being conservative. Two ways to confirm the endpoint actually works:
+   >
+   > - **From a terminal:** `curl -v https://teslahub.yourdomain.com/.well-known/appspecific/com.tesla.3p.public-key.pem` — you should get a `-----BEGIN PUBLIC KEY-----` block. Tesla itself fetches the URL with a Go HTTP client that does not consult Safe Browsing, so the call from Tesla will succeed even while Chrome is still warning humans.
+   > - **In Chrome:** click *Details* → *Visit this unsafe site*. Chrome will then download or display the PEM. If your browser offers to download the file (rather than render it), open it with a text editor — that's a good sign, it means Caddy is serving the right `.pem` MIME type and not the React SPA.
 2. **Register your domain with Tesla** as a third-party partner. TeslaHub calls `POST /api/1/partner_accounts` on your behalf using your account's access token. Tesla pulls your public key from the `.well-known` URL above to confirm.
 3. **Pair each vehicle.** TeslaHub generates a QR code pointing to `https://tesla.com/_ak/<your-domain>`. Scan it with your iPhone, the Tesla mobile app opens and asks you to approve TeslaHub's virtual key for the selected vehicle. Repeat for each car. Click *I've approved* in TeslaHub once done.
 
@@ -379,6 +416,8 @@ telemetry.yourdomain.com {
 }
 ```
 
+While you are editing the Caddyfile, double-check that your `teslahub.yourdomain.com` block forwards `/.well-known/appspecific/*` and `/api/*` to the API container — Tesla fetches your partner public key from `/.well-known/appspecific/com.tesla.3p.public-key.pem`, and a SPA fallback would return the React app instead of the PEM.
+
 Reload Caddy:
 
 ```bash
@@ -392,6 +431,38 @@ sudo find /var/lib/caddy -name "telemetry.yourdomain.com.crt"
 ```
 
 Note the parent path containing `caddy/certificates/...` — you will need it below.
+
+> **Different Caddy install? Find your cert path.** The default in this README assumes Caddy installed as a systemd service from the official Debian/Ubuntu package (`/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory`). Other layouts:
+> - **Snap install:** `/var/snap/caddy/current/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory`
+> - **Caddy in Docker:** `<host_path_mounted_to_/data>/caddy/certificates/acme-v02.api.letsencrypt.org-directory`
+> - **Don't know?** Run: `sudo find / -path '*caddy/certificates/*letsencrypt*' -type d 2>/dev/null | head -1`
+>
+> Whatever path you end up with, set `CADDY_CERTS_PATH` in your `.env` so the compose mounts pick it up automatically. The `docker-compose.full-example.yml` and `docker-compose.addon.yml` already use that variable.
+
+#### Make the cert readable by the Tesla containers
+
+Both `fleet-telemetry` and `tesla-http-proxy` run as the `nonroot` user (uid `65532`) inside their Docker images. Caddy stores its certificates with mode `700` / `600` for the `caddy` user, so the Tesla containers will crash on first start with `permission denied: /certs/...`.
+
+Open up read-only access for "others" so the containers can read the cert and its key:
+
+```bash
+sudo chmod -R o+rX /var/lib/caddy/.local/share/caddy/certificates/
+```
+
+> This makes the cert **and** its private key readable by every local user on the host. On a single-tenant box dedicated to your home server this is acceptable — nothing on the public internet sees these files. If your host is multi-tenant, prefer running Caddy as the same `nonroot` (`uid:65532`) user as the Tesla containers and keep mode `600`, or copy the cert into a separate volume owned by uid 65532.
+
+Caddy renews certificates automatically every ~60 days and resets the permissions in the process. Two ways to keep them readable forever:
+
+- **Recommended (works on stock Caddy):** add a tiny daily cron that re-applies the perms:
+
+  ```bash
+  sudo crontab -e
+  ```
+  ```cron
+  0 4 * * * chmod -R o+rX /var/lib/caddy/.local/share/caddy/certificates/ 2>/dev/null
+  ```
+
+- **Caddy event hook:** a `{ events { on cert_obtained exec ... } }` global block at the top of the Caddyfile. This requires a custom Caddy build with the `events.handlers.exec` module (e.g. via `xcaddy`). On a stock Debian/Ubuntu Caddy install you will get `module not registered: events.handlers.exec` — stick with the cron approach above.
 
 #### Clone Tesla's source repos (no pre-built images)
 
@@ -511,7 +582,12 @@ In your main `docker-compose.yml`, add these three services alongside the existi
           openssl req -x509 -newkey rsa:2048 -nodes -keyout /key-vault/proxy.key \
             -out /key-vault/proxy.crt -days 3650 -subj "/CN=tesla-http-proxy"
         fi
+        # CRITICAL: tesla-http-proxy runs as nonroot (uid 65532) and must be
+        # able to read both files. We re-apply the perms on every start so
+        # that an existing volume from an earlier broken setup is healed.
         chmod 644 /key-vault/proxy.crt /key-vault/proxy.key
+        # Same for the partner private key once it has been exported by the
+        # TeslaHub UI ("Export private key for the proxy" button).
         if [ -f /key-vault/private.pem ]; then chmod 644 /key-vault/private.pem; fi
 
   tesla-http-proxy:
@@ -532,9 +608,28 @@ In your main `docker-compose.yml`, add these three services alongside the existi
       - key-vault:/key-vault
     expose:
       - "4443"
+    # --key-file duplicates the env var on purpose: depending on the
+    # vehicle-command release, the Go binary parses the flag more
+    # reliably than TESLA_KEY_FILE. --verbose is optional but extremely
+    # helpful the first time you bring the stack up — drop it once the
+    # proxy is happy.
+    command: ["--key-file", "/key-vault/private.pem", "--verbose"]
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
 ```
+
+> **Permissions inside the `key-vault` volume.** The volume holds three files: the proxy's self-signed `proxy.crt` + `proxy.key` (created by the init container), and the partner `private.pem` (written by `teslahub-api` once you click *Export private key for the proxy* in the UI). All three must end up world-readable inside the volume because the proxy runs as `nonroot` (uid 65532) and the API container that wrote `private.pem` may not match that uid. The init container always re-applies `chmod 644` on container start, which heals any half-broken setup carried over from earlier debugging sessions.
+>
+> If you ever want to inspect or fix the volume by hand:
+>
+> ```bash
+> # List
+> docker run --rm -v <stack>_key-vault:/key-vault alpine ls -la /key-vault
+> # Force-fix perms
+> docker run --rm -v <stack>_key-vault:/key-vault alpine chmod 644 /key-vault/proxy.key /key-vault/private.pem
+> ```
+>
+> Replace `<stack>` with your compose project name (usually the directory containing `docker-compose.yml`, e.g. `teslamate`).
 
 And **add 1 env var + 1 volume** to your existing `teslahub-api` service:
 
@@ -592,12 +687,14 @@ Vehicle ─► fleet-telemetry ─► Mosquitto MQTT ─► teslahub-api ─► 
 
 The final piece is delivery. TeslaHub speaks directly to `api.telegram.org` — there is no intermediate notification service.
 
+> **Do this step _before_ clicking "Configure telemetry" in the wizard.** If telemetry is enabled but no Telegram recipient exists yet, the first real Sentry event raised by your car will be lost (it is logged in the *Recent alerts* panel as "no recipient", but no notification is delivered). The opposite order is harmless: configuring Telegram first costs nothing.
+
 #### Create your personal Telegram bot
 
 1. Open Telegram and start a chat with [@BotFather](https://t.me/BotFather).
 2. Send `/newbot`, pick a display name (e.g. *My TeslaHub Alerts*) and a username ending in `bot`.
 3. BotFather gives you an HTTP API token like `123456789:ABCdef...`. Treat this as a secret.
-4. Open your new bot in Telegram and send `/start` so the bot can later message you.
+4. **Important:** open your new bot in Telegram and send `/start` to it from _every chat_ that should receive alerts (you, your spouse, etc.). Telegram bots cannot initiate a conversation — without a prior `/start` from the recipient, `api.telegram.org` returns `403 Forbidden: bot can't initiate conversation with a user` and TeslaHub surfaces this as a clear error in the wizard. The same applies to a group or channel: invite the bot first, then send any message.
 
 #### Add the bot token to your `.env`
 
@@ -618,10 +715,12 @@ In TeslaHub → **Settings → Security Alerts**, scroll down to *Notification r
 
 1. Find their Telegram chat ID by sending any message to [@userinfobot](https://t.me/userinfobot) on Telegram — it replies with the numeric `id`.
 2. Add a recipient (Name + chat ID + language).
-3. Click **Send test** — they should receive a Telegram message instantly.
+3. Click **Send test** — they should receive a Telegram message instantly. If the test fails with `403 Forbidden` / `chat not found`, the recipient has not yet sent `/start` to your bot (or, for groups, the bot was never invited). Fix that and click **Send test** again.
 4. In the *Sentry* / *Break-in* matrix below the recipient, tick the vehicles each person should be notified about.
 
 You can have multiple recipients per vehicle, or scope each person to specific cars (e.g. spouse only receives alerts for their own car).
+
+> **Reusing an existing bot (e.g. your Watchtower bot) is fine** — the token is just an API credential. Each recipient still needs to send `/start` to that bot from their own Telegram account.
 
 ### What gets detected
 
@@ -647,9 +746,96 @@ The full alert history (last 500) is visible in the *Recent alerts* panel of Set
 - **Disconnect:** removes tokens and associated vehicles from the database immediately.
 - **Network:** TeslaHub talks directly to `auth.tesla.com` and `fleet-auth.prd.vn.cloud.tesla.com` — no intermediate service.
 
+#### What "paired virtual key" actually grants
+
+Pairing TeslaHub as a third-party virtual key on a vehicle (the QR code step) is **not just read-only**. With the `vehicle_cmds` scope and the partner private key sitting on your server, TeslaHub has the cryptographic authority to send signed commands to your cars. Be honest with yourself about what that means:
+
+| TeslaHub **can** do (signed via tesla-http-proxy) | TeslaHub **cannot** do |
+|---|---|
+| Lock / unlock the vehicle | Drive the car (only physical key cards / paired phones can authorise driving) |
+| Open frunk / trunk / charge port | Push a software / OTA update |
+| Arm / disarm Sentry mode | Change vehicle configuration (regen, range, etc.) |
+| Honk / flash lights | Anything that requires the owner's phone for biometric approval |
+| Climate control / preconditioning | |
+| Set / start / stop charging | |
+
+Today TeslaHub uses these capabilities only for the telemetry-config call and (optionally) the *send destination to car* feature. Future UI commands will be opt-in. Either way, the **partner private key** is the keys to the kingdom: anyone who can read it (your DB *and* your `.env`) can replay the same commands.
+
+**Concrete recommendations for self-hosters:**
+
+1. Use a **strong, unique admin password** for TeslaHub (don't reuse your TeslaMate password).
+2. Set `TESLAHUB_ALLOWED_IPS` in your `.env` to restrict the admin UI to your home network / VPN — e.g. `TESLAHUB_ALLOWED_IPS=82.x.x.x/32,192.168.1.0/24`.
+3. **Encrypt your backups** of the PostgreSQL volume *and* `.env` (Restic, Borg, rclone-crypt to Backblaze, etc.). A backup leak is functionally equivalent to a server compromise.
+4. Run the host with **SSH key auth only**, fail2ban, OS auto-updates, and a host firewall.
+5. Consider full-disk encryption (LUKS) on the host if it's physically accessible to anyone other than you.
+
+This is the same threat model as the Tesla mobile app on your phone — the difference is that *you* are now responsible for the operational security that Apple / Google would normally provide.
+
 ### Why is the feature "optional"?
 
 Because it requires a public domain name and a Tesla developer app, which is more setup than most TeslaHub users want. The feature is opt-in: the new environment variables default to empty, the Settings card shows clear instructions, and the rest of TeslaHub continues to work exactly as before for users who don't enable it.
+
+### Troubleshooting
+
+Bringing the Security Alerts stack online involves quite a few moving pieces (Tesla developer app, OAuth, public DNS, Let's Encrypt, two locally-built Tesla Go services, MQTT, Telegram). This section captures every error that came up during real-world bring-up and the fix that resolved it. If you hit something not listed here, open an issue with the relevant container logs.
+
+#### Setup wizard / Tesla API
+
+| Symptom | Root cause | Fix |
+|---|---|---|
+| **`/.well-known/appspecific/com.tesla.3p.public-key.pem` returns the React app instead of a `.pem` file** | Tesla expects this exact path to serve your partner public key. The internal Caddyfile inside `teslahub-web` falls back to `index.html` for any unknown path. | Already fixed in the published `deltawp/teslahub-web` image (PR #13). Make sure your **outer** Caddy block also forwards `/.well-known/appspecific/*` to the API container alongside `/api/*`. |
+| **Chrome shows a red "Dangerous site" warning when clicking the public-key test link** | Google Safe Browsing flags brand-new domains containing the word "tesla" as suspected phishing. It is *not* a TLS issue. | Cosmetic. Tesla's own server-to-server fetch ignores Safe Browsing. Confirm the endpoint with `curl -v https://teslahub.yourdomain.com/.well-known/appspecific/com.tesla.3p.public-key.pem` from any shell — you should see a `-----BEGIN PUBLIC KEY-----` block. To bypass in Chrome itself: *Details* → *Visit this unsafe site*. The warning fades once your domain accumulates browsing reputation. |
+| **Tesla refuses the developer-app form with a vague validation error on the App Name** | App names are global on `developer.tesla.com`. Common names like `TeslaHub Self-Hosted` are already registered by other users. | Use any unique name (e.g. `TeslaHub <yourname>` or `<yourname> Tesla Companion`). The name is purely cosmetic and never shown to the OAuth user. |
+| **OAuth callback returns `redirect_uri_mismatch`** | `TESLA_REDIRECT_URI` in your `.env` does not match exactly what is registered in the Tesla developer app — most often a missing/extra trailing slash, or `http://` vs `https://`. | Make the two strings byte-for-byte identical. The recommended form is `https://teslahub.yourdomain.com/api/tesla-oauth/callback` with no trailing slash. |
+| **Partner registration fails with `401 Unauthorized` from `partner_accounts`** | This endpoint requires a *partner* token (OAuth `client_credentials` grant), not a user token (`authorization_code`). | Already fixed in the published `deltawp/teslahub-api` image (PR #14). Just retry the wizard. |
+| **"Configure telemetry" returns `400 must be called through the Vehicle Command HTTP Proxy`** | Since Tesla firmware **2024.26+**, all signed Fleet API write calls (including `fleet_telemetry_config`) must be proxied through Tesla's `tesla-http-proxy`. | Bring the `tesla-http-proxy` + `tesla-http-proxy-init` services up (`docker compose --profile security-alerts up -d`) and set `TESLA_COMMAND_PROXY_URL=https://tesla-http-proxy:4443` in `.env`. |
+| **"Configure telemetry" returns `400 interval_seconds must be positive and less than 21600`** | The Tesla API expects snake_case for this field; an older TeslaHub version sent camelCase. | Pull the latest `deltawp/teslahub-api` image (PR #19). |
+| **Wizard returns `404 Not Found` calling `fleet_telemetry_config_create`** | Tesla renamed the endpoint to `fleet_telemetry_config`. | Pull the latest `deltawp/teslahub-api` image (PR #17). |
+
+#### `fleet-telemetry` container
+
+| Symptom | Root cause | Fix |
+|---|---|---|
+| **`docker compose pull` fails with `pull access denied`** | Tesla does not publish `fleet-telemetry` on Docker Hub or GHCR. | Clone `https://github.com/teslamotors/fleet-telemetry.git` into `./fleet-telemetry-src/` and let Docker Compose build it locally (`build:` block already present in `docker-compose.security-alerts.yml`). |
+| **`panic: open /certs/<domain>.crt: permission denied`** | The container runs as uid `65532` (distroless `nonroot`) and Caddy stores its certs as mode `700/600` for the `caddy` user. | `sudo chmod -R o+rX /var/lib/caddy/.local/share/caddy/certificates/` and add the daily cron from the [setup section](#make-the-cert-readable-by-the-tesla-containers). |
+| **`json: cannot unmarshal object into Go struct field Config.records of type telemetry.Dispatcher`** | An old `config.json` listed `nats` as a dispatcher; Tesla never shipped NATS support. | Use the supplied `config.json.example` (MQTT only). The TeslaHub stack relies on the Mosquitto broker that is already running for TeslaMate. |
+| **Container starts but Tesla shows the vehicle as "not streaming"** | Cloudflare proxy in front of `telemetry.*` will buffer/close the long-lived WebSocket. | The DNS record for `telemetry.*` must be **DNS-only** (grey cloud), not proxied (orange cloud). The `teslahub.*` record can stay proxied. |
+| **External TLS handshake errors in the logs from random IPs** | Internet scanners hitting port 8443. | Cosmetic noise — every legitimate vehicle session establishes TLS cleanly. You can quiet this by pointing Tesla's vehicles at a non-default port and not opening 8443 to the world, but most users leave it. |
+
+#### `tesla-http-proxy` container
+
+| Symptom | Root cause | Fix |
+|---|---|---|
+| **Proxy crash-loops with `open /key-vault/private.pem: no such file or directory`** | The partner private key lives encrypted in the TeslaHub database. It must be exported once to the shared `key-vault` volume before the proxy can sign requests. | In TeslaHub → **Settings → Security Alerts**, click **"Export private key for the proxy"**. Then `docker compose restart tesla-http-proxy`. |
+| **Proxy crash-loops with `open /key-vault/proxy.key: permission denied`** | The init container previously wrote `proxy.key` with mode `600`; the proxy runs as `nonroot` and could not read its own TLS key. | Pull the latest `docker-compose.security-alerts.yml` from this repo (PR #19) — the init container now sets `chmod 644` on `proxy.key` (acceptable: the file is on a private Docker network and the cert pair is regenerated trivially). On an existing volume: `docker run --rm -v <stack>_key-vault:/key-vault alpine chmod 644 /key-vault/proxy.key`. |
+| **Proxy is up but `configure-telemetry` still 502s** | `teslahub-api` is not pointing at the proxy. | Verify `docker compose exec teslahub-api env \| grep TESLA_COMMAND_PROXY_URL` returns `https://tesla-http-proxy:4443`. If empty, add it to `.env` and to the `teslahub-api` `environment:` block (see `docker-compose.addon.yml`), then `docker compose up -d teslahub-api`. |
+
+#### `teslahub-api` configuration
+
+| Symptom | Root cause | Fix |
+|---|---|---|
+| **Settings page never shows the "Connect Tesla account" button** | `TESLA_CLIENT_ID` / `TESLA_CLIENT_SECRET` are missing from the container's environment. They were added to `.env` but not to the `environment:` block of `teslahub-api`. | Compare your compose file with `docker-compose.addon.yml` and add every `TESLA_*`, `TELEMETRY_*`, `TELEGRAM_BOT_TOKEN` and `TESLA_COMMAND_PROXY_URL` line. Then `docker compose up -d teslahub-api`. |
+| **`docker compose up` fails with `services.teslahub-api.ports must be a list`** | YAML mix-up where `ports` and `volumes` were merged. | Each is its own top-level key under the service. See the canonical layout in `docker-compose.full-example.yml`. |
+| **Telegram test sends nothing, recipient row shows `403 Forbidden`** | Telegram bots cannot DM a user who never opened the chat. | The recipient must send `/start` (or any message) to your bot once. For a group, invite the bot and post any message in the group. Then click *Send test* again. |
+
+#### Networking sanity checks
+
+```bash
+# 1. Public TLS cert on telemetry.* served by fleet-telemetry
+echo | openssl s_client -connect telemetry.yourdomain.com:8443 -servername telemetry.yourdomain.com 2>/dev/null | openssl x509 -noout -subject -dates
+
+# 2. Tesla can fetch your partner public key
+curl -sS https://teslahub.yourdomain.com/.well-known/appspecific/com.tesla.3p.public-key.pem | head -1
+# → must start with "-----BEGIN PUBLIC KEY-----"
+
+# 3. tesla-http-proxy is reachable from the API container
+docker compose exec teslahub-api wget -qO- --no-check-certificate https://tesla-http-proxy:4443/api/1/vehicles 2>&1 | head -5
+# → expect a Tesla 401 (no token), NOT a connection error
+
+# 4. fleet-telemetry is publishing to MQTT
+docker compose exec mosquitto mosquitto_sub -h localhost -t 'telemetry/#' -v -C 5
+# → wakes the car or arms Sentry, then watch live messages
+```
 
 ---
 
@@ -659,15 +845,41 @@ TeslaHub listens on `127.0.0.1` only. To expose it over HTTPS, use a reverse pro
 
 ### Caddy (recommended)
 
-Add to your Caddyfile:
+#### Minimal block (no Security Alerts)
 
-```
+```caddyfile
 teslahub.yourdomain.com {
     reverse_proxy localhost:4002
 }
 ```
 
-Caddy handles TLS certificates automatically. Reload with `caddy reload`.
+Caddy handles TLS certificates automatically. Reload with `sudo systemctl reload caddy` (systemd) or `caddy reload` (manual).
+
+#### Block to use when Security Alerts are enabled
+
+If you plan to use the **Security Alerts** feature, the bare snippet above will break Tesla's `/.well-known/appspecific/...` fetch (it would return the React SPA). Use this expanded block instead — it routes the API + the well-known path to the API container and everything else to the web container:
+
+```caddyfile
+teslahub.yourdomain.com {
+    encode gzip zstd
+    # Tesla fetches your partner public key from this exact path.
+    reverse_proxy /.well-known/appspecific/* localhost:4001
+    # All API calls (OAuth, telemetry config, recipients, etc.).
+    reverse_proxy /api/*                     localhost:4001
+    # Everything else = the React SPA.
+    reverse_proxy                            localhost:4002
+}
+
+# Telemetry sub-domain. Caddy never serves traffic here — its only job
+# is to obtain and renew the Let's Encrypt cert that fleet-telemetry
+# reads from disk. See "Security Alerts (optional)" → "Telemetry stack".
+telemetry.yourdomain.com {
+    encode gzip zstd
+    respond 404
+}
+```
+
+> **If Caddy runs in Docker rather than as a systemd service**, replace `localhost:4001` / `localhost:4002` with the container names `teslahub-api:8080` / `teslahub-web:80` (assuming Caddy shares the same Docker network), and adapt the cert path mounted into `fleet-telemetry` accordingly (Docker installs typically store certs under `/data/caddy/certificates/...` inside the container).
 
 ### Nginx
 
@@ -700,7 +912,7 @@ docker compose pull teslahub-init teslahub-api teslahub-web
 docker compose up -d teslahub-init teslahub-api teslahub-web
 ```
 
-Or use the update script:
+Or use the update script (recommended — also handles `fleet-telemetry` + `tesla-http-proxy` rebuilds when Security Alerts are enabled):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Olrik-WP/TeslaHub/main/update.sh -o update.sh
@@ -714,6 +926,22 @@ Options:
 - `./update.sh --logs` — show logs after restart
 
 Your data is safe — TeslaHub data lives in the PostgreSQL volume. Only the application containers are replaced.
+
+### Updating the Tesla services (Security Alerts)
+
+`fleet-telemetry` and `tesla-http-proxy` are built locally from Tesla's source repos because Tesla does not publish images. **Watchtower (and any image-based updater) cannot update them automatically** — they have a `build:` directive in compose, not an `image:` reference. To pick up upstream Tesla fixes, run:
+
+```bash
+cd ~/teslamate/fleet-telemetry-src && git pull
+cd ~/teslamate/vehicle-command-src && git pull
+cd ~/teslamate
+docker compose build --pull fleet-telemetry tesla-http-proxy
+docker compose up -d fleet-telemetry tesla-http-proxy
+```
+
+The provided `update.sh` script does this for you when `SECURITY_ALERTS_ENABLED=true` is set in `.env`.
+
+> **Tip:** the `labels: ["com.centurylinklabs.watchtower.enable=false"]` in the compose snippets explicitly opts the Tesla containers out of Watchtower so it stops complaining about images it cannot pull. Keep that label.
 
 ---
 

@@ -94,6 +94,13 @@ services:
       - key-vault:/key-vault
     expose:
       - "4443"
+    # --key-file duplicates the env var on purpose: depending on the
+    # vehicle-command release, the Go binary parses the flag more
+    # reliably than TESLA_KEY_FILE. Keep --verbose during initial
+    # bring-up to see why the proxy crashes (typically permissions on
+    # /key-vault/proxy.key or a missing /key-vault/private.pem); you
+    # can drop it once the stack is stable.
+    command: ["--key-file", "/key-vault/private.pem", "--verbose"]
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
 
