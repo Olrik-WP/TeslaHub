@@ -725,5 +725,44 @@
       "cta": "Configurer dans Settings → Alertes de sécurité",
       "dismiss": "Masquer"
     }
+  },
+  "sendToCar": {
+    "openButton": "Envoyer une destination",
+    "openButtonShort": "Envoyer",
+    "title": "Envoyer une destination",
+    "close": "Fermer",
+    "loading": "Chargement…",
+    "searchPlaceholder": "Rechercher une adresse…",
+    "useMyLocation": "Ma position",
+    "orTapMap": "ou touchez la carte",
+    "destination": "Destination",
+    "noPinYet": "Touchez la carte ou cherchez une adresse pour placer un point.",
+    "resolvingAddress": "Recherche de l'adresse…",
+    "noAddressFound": "Aucune adresse trouvée — coordonnées seules envoyées.",
+    "distanceFromVehicle": "{{distance}} depuis la voiture",
+    "targetVehicle": "Véhicule cible",
+    "sendButton": "Envoyer à la voiture",
+    "sending": "Envoi…",
+    "feedback": {
+      "missing": "Sélectionnez un véhicule et placez un point sur la carte.",
+      "sent": "Destination envoyée. Confirmez sur l'écran central.",
+      "sentTo": "Destination envoyée à {{vehicle}}. Confirmez sur l'écran central.",
+      "confirmHint": "La voiture affiche une notification \"Démarrer la navigation\" — il faut l'accepter."
+    },
+    "guard": {
+      "openSettings": "Ouvrir Settings",
+      "notConfigured": {
+        "title": "Tesla Fleet API non configurée",
+        "body": "Pour envoyer une destination à votre voiture, configurez la connexion Tesla Fleet API dans Settings → Tesla integration (les mêmes prérequis que pour les alertes Sentry)."
+      },
+      "notConnected": {
+        "title": "Compte Tesla non connecté",
+        "body": "L'API Fleet est configurée mais aucun compte Tesla n'est connecté. Connectez-vous depuis Settings → Tesla integration."
+      },
+      "noPaired": {
+        "title": "Aucun véhicule appairé",
+        "body": "Aucun de vos véhicules n'est appairé avec la clé virtuelle TeslaHub. L'appairage est nécessaire pour pouvoir lui envoyer des commandes. Lancez la procédure depuis Settings → Tesla integration."
+      }
+    }
   }
 }

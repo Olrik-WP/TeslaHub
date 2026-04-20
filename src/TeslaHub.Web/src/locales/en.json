@@ -725,5 +725,44 @@
       "cta": "Set it up in Settings → Security Alerts",
       "dismiss": "Dismiss"
     }
+  },
+  "sendToCar": {
+    "openButton": "Send a destination",
+    "openButtonShort": "Send",
+    "title": "Send a destination",
+    "close": "Close",
+    "loading": "Loading…",
+    "searchPlaceholder": "Search an address…",
+    "useMyLocation": "My location",
+    "orTapMap": "or tap the map",
+    "destination": "Destination",
+    "noPinYet": "Tap the map or search an address to drop a pin.",
+    "resolvingAddress": "Resolving address…",
+    "noAddressFound": "No address found — coordinates will be sent as is.",
+    "distanceFromVehicle": "{{distance}} from the vehicle",
+    "targetVehicle": "Target vehicle",
+    "sendButton": "Send to vehicle",
+    "sending": "Sending…",
+    "feedback": {
+      "missing": "Pick a vehicle and drop a pin on the map.",
+      "sent": "Destination sent. Confirm on the central screen.",
+      "sentTo": "Destination sent to {{vehicle}}. Confirm on the central screen.",
+      "confirmHint": "The car displays a \"Start navigation\" prompt — accept it to begin."
+    },
+    "guard": {
+      "openSettings": "Open Settings",
+      "notConfigured": {
+        "title": "Tesla Fleet API not configured",
+        "body": "To send a destination to your car, configure the Tesla Fleet API connection in Settings → Tesla integration (same prerequisites as Sentry alerts)."
+      },
+      "notConnected": {
+        "title": "Tesla account not connected",
+        "body": "Fleet API is configured but no Tesla account is currently connected. Sign in from Settings → Tesla integration."
+      },
+      "noPaired": {
+        "title": "No paired vehicle",
+        "body": "None of your vehicles is paired with the TeslaHub virtual key. Pairing is required to send commands. Start the wizard from Settings → Tesla integration."
+      }
+    }
   }
 }

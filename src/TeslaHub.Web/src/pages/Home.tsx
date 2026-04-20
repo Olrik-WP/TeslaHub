@@ -19,6 +19,7 @@ import type { VehicleStatus } from '../api/queries';
 import { useTranslation } from 'react-i18next';
 import { utcDate } from '../utils/date';
 import { computeCostStack } from '../utils/costStack';
+import { reverseGeocode } from '../utils/geocoding';
 
 interface Props {
   carId: number | undefined;
@@ -229,15 +230,9 @@ export default function Home({ carId }: Props) {
   useEffect(() => {
     if (lat == null || lng == null) return;
     const controller = new AbortController();
-    fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18`,
-      { signal: controller.signal, headers: { 'Accept-Language': lang } }
-    )
-      .then(r => r.json())
-      .then(d => {
-        if (d.display_name) {
-          setAddress(d.display_name.split(',').slice(0, 3).join(',').trim());
-        }
+    reverseGeocode(lat, lng, { language: lang, signal: controller.signal })
+      .then((short) => {
+        if (short) setAddress(short);
       })
       .catch(() => {});
     return () => controller.abort();

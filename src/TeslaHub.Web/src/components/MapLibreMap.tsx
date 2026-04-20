@@ -38,6 +38,14 @@ interface MapLibreMapProps {
   /** Called when the user manually pans/zooms while live-follow is active.
    *  Lets the parent disable the auto-follow so the camera stops fighting the user. */
   onUserInteract?: () => void;
+  /** Optional destination marker for the "Send to Vehicle" mode. */
+  destinationPin?: { latitude: number; longitude: number } | null;
+  /** Called when the destination pin is dragged to a new spot. */
+  onDestinationDragEnd?: (latitude: number, longitude: number) => void;
+  /** Called when the user taps anywhere on the map (used in destination mode). */
+  onMapClick?: (latitude: number, longitude: number) => void;
+  /** Visually de-emphasise historical trips/charges. */
+  dimHistorical?: boolean;
 }
 
 const DOT = (color: string, size: number): React.CSSProperties => ({
@@ -162,6 +170,10 @@ export default function MapLibreMap({
   livePosition,
   followLive = false,
   onUserInteract,
+  destinationPin = null,
+  onDestinationDragEnd,
+  onMapClick,
+  dimHistorical = false,
 }: MapLibreMapProps) {
   const { t } = useTranslation();
   const mapRef = useRef<MapRef>(null);
@@ -349,6 +361,11 @@ export default function MapLibreMap({
         attributionControl={false}
         style={{ width: '100%', height: '100%' }}
         onLoad={handleLoad}
+        onClick={(e) => {
+          if (!onMapClick) return;
+          onMapClick(e.lngLat.lat, e.lngLat.lng);
+        }}
+        cursor={onMapClick ? 'crosshair' : undefined}
       >
         <NavigationControl
           position="top-left"
@@ -365,7 +382,7 @@ export default function MapLibreMap({
               paint={{
                 'line-color': '#e31937',
                 'line-width': 3,
-                'line-opacity': 0.8,
+                'line-opacity': dimHistorical ? 0.2 : 0.8,
               }}
               layout={{ 'line-cap': 'round', 'line-join': 'round' }}
             />
@@ -406,7 +423,12 @@ export default function MapLibreMap({
                 setPopupInfo(c);
               }}
             >
-              <div style={DOT(c.fastChargerPresent ? '#f59e0b' : '#3b82f6', 12)} />
+              <div
+                style={{
+                  ...DOT(c.fastChargerPresent ? '#f59e0b' : '#3b82f6', 12),
+                  opacity: dimHistorical ? 0.35 : 1,
+                }}
+              />
             </Marker>
           );
         })}
@@ -418,6 +440,40 @@ export default function MapLibreMap({
             anchor="center"
           >
             <LiveMarker heading={livePosition.heading} connected={livePosition.connected} />
+          </Marker>
+        )}
+
+        {destinationPin && (
+          <Marker
+            longitude={destinationPin.longitude}
+            latitude={destinationPin.latitude}
+            anchor="bottom"
+            draggable
+            onDragEnd={(e) => {
+              if (onDestinationDragEnd) onDestinationDragEnd(e.lngLat.lat, e.lngLat.lng);
+            }}
+          >
+            <div
+              style={{
+                width: 28,
+                height: 36,
+                cursor: 'grab',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                filter: 'drop-shadow(0 2px 3px rgba(0,0,0,.45))',
+              }}
+            >
+              <svg width="28" height="36" viewBox="0 0 28 36" fill="none">
+                <path
+                  d="M14 0C6.27 0 0 6.27 0 14c0 9 14 22 14 22s14-13 14-22C28 6.27 21.73 0 14 0z"
+                  fill="#e31937"
+                  stroke="#fff"
+                  strokeWidth="2"
+                />
+                <circle cx="14" cy="14" r="5" fill="#fff" />
+              </svg>
+            </div>
           </Marker>
         )}
 

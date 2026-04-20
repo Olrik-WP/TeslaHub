@@ -725,5 +725,44 @@
       "cta": "In Einstellungen → Sicherheitswarnungen einrichten",
       "dismiss": "Ausblenden"
     }
+  },
+  "sendToCar": {
+    "openButton": "Ziel senden",
+    "openButtonShort": "Senden",
+    "title": "Ziel senden",
+    "close": "Schließen",
+    "loading": "Wird geladen…",
+    "searchPlaceholder": "Adresse suchen…",
+    "useMyLocation": "Mein Standort",
+    "orTapMap": "oder tippen Sie auf die Karte",
+    "destination": "Ziel",
+    "noPinYet": "Tippen Sie auf die Karte oder suchen Sie eine Adresse, um einen Punkt zu setzen.",
+    "resolvingAddress": "Adresse wird ermittelt…",
+    "noAddressFound": "Keine Adresse gefunden — nur Koordinaten werden gesendet.",
+    "distanceFromVehicle": "{{distance}} vom Fahrzeug",
+    "targetVehicle": "Zielfahrzeug",
+    "sendButton": "Ans Fahrzeug senden",
+    "sending": "Senden…",
+    "feedback": {
+      "missing": "Wählen Sie ein Fahrzeug und setzen Sie einen Punkt auf die Karte.",
+      "sent": "Ziel gesendet. Bestätigen Sie auf dem zentralen Bildschirm.",
+      "sentTo": "Ziel an {{vehicle}} gesendet. Bestätigen Sie auf dem zentralen Bildschirm.",
+      "confirmHint": "Das Auto zeigt eine Aufforderung „Navigation starten\" — bestätigen Sie sie."
+    },
+    "guard": {
+      "openSettings": "Einstellungen öffnen",
+      "notConfigured": {
+        "title": "Tesla Fleet API nicht konfiguriert",
+        "body": "Um ein Ziel an Ihr Auto zu senden, konfigurieren Sie die Tesla Fleet API in Einstellungen → Tesla-Integration (gleiche Voraussetzungen wie für Sentry-Alarme)."
+      },
+      "notConnected": {
+        "title": "Tesla-Konto nicht verbunden",
+        "body": "Fleet API ist konfiguriert, aber kein Tesla-Konto ist verbunden. Melden Sie sich in Einstellungen → Tesla-Integration an."
+      },
+      "noPaired": {
+        "title": "Kein gekoppeltes Fahrzeug",
+        "body": "Keines Ihrer Fahrzeuge ist mit dem TeslaHub-Virtual-Key gekoppelt. Die Kopplung ist für Befehle erforderlich. Starten Sie den Assistenten in Einstellungen → Tesla-Integration."
+      }
+    }
   }
 }

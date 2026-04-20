@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -9,6 +9,7 @@ import {
   getDrivePositions,
 } from '../api/queries';
 import MapLibreMap, { type LivePosition } from '../components/MapLibreMap';
+import SendToCarPanel from '../components/SendToCarPanel';
 import { useLiveStream } from '../hooks/useLiveStream';
 import { useVehicleStatus } from '../hooks/useVehicle';
 import { STALE_TIME } from '../constants/theme';
@@ -195,6 +196,54 @@ export default function MapPage({ carId }: Props) {
     setSearchParams({});
   };
 
+  // ── Send-to-Vehicle mode ────────────────────────────────────────────
+  // Activated via the bottom-right floating button. While active the map
+  // de-emphasises historical trips and accepts taps to drop a destination
+  // pin. We never enter this mode while inspecting a single drive — it
+  // would conflict with the back-to-history flow.
+  const [sendMode, setSendMode] = useState(false);
+  const [destinationPin, setDestinationPin] = useState<{ latitude: number; longitude: number } | null>(
+    null,
+  );
+
+  const closeSendMode = useCallback(() => {
+    setSendMode(false);
+    setDestinationPin(null);
+  }, []);
+
+  // Whenever live-follow is engaged we disable it on entering send-mode so
+  // the camera stops jumping to the vehicle while the user looks for a spot.
+  useEffect(() => {
+    if (sendMode && followLive) setFollowLive(false);
+  }, [sendMode, followLive]);
+
+  const handleMapClick = useCallback(
+    (latitude: number, longitude: number) => {
+      if (!sendMode) return;
+      setDestinationPin({ latitude, longitude });
+    },
+    [sendMode],
+  );
+
+  const handlePinDragEnd = useCallback((latitude: number, longitude: number) => {
+    setDestinationPin({ latitude, longitude });
+  }, []);
+
+  const vehiclePosition = useMemo(() => {
+    if (livePosition?.latitude != null && livePosition?.longitude != null) {
+      return { latitude: livePosition.latitude, longitude: livePosition.longitude };
+    }
+    if (vehicle?.latitude != null && vehicle?.longitude != null) {
+      return { latitude: vehicle.latitude, longitude: vehicle.longitude };
+    }
+    return null;
+  }, [livePosition?.latitude, livePosition?.longitude, vehicle?.latitude, vehicle?.longitude]);
+
+  // The button is hidden while inspecting a single drive (clearParams takes
+  // priority) and hidden in the special teslamate-iframe context where the
+  // top-bar is replaced by a back arrow.
+  const showSendButton = driveId == null;
+
   return (
     <div className="flex flex-col h-[calc(100dvh-64px)]">
       {driveId != null ? (
@@ -311,7 +360,7 @@ export default function MapPage({ carId }: Props) {
       )}
 
       {/* Map */}
-      <div className="flex-1">
+      <div className="flex-1 relative">
         <MapLibreMap
           routePoints={routePoints}
           liveTrail={driveId != null ? undefined : liveTrail}
@@ -319,7 +368,33 @@ export default function MapPage({ carId }: Props) {
           livePosition={driveId != null ? null : livePosition}
           followLive={followLive && liveActive && driveId == null}
           onUserInteract={() => setFollowLive(false)}
+          destinationPin={sendMode ? destinationPin : null}
+          onDestinationDragEnd={sendMode ? handlePinDragEnd : undefined}
+          onMapClick={sendMode ? handleMapClick : undefined}
+          dimHistorical={sendMode}
         />
+
+        {/* Floating "Send to Vehicle" button (hidden in single-drive view). */}
+        {showSendButton && !sendMode && (
+          <button
+            onClick={() => setSendMode(true)}
+            className="absolute bottom-4 right-4 z-20 bg-[#e31937] text-white pl-3 pr-4 py-2.5 rounded-full shadow-lg active:bg-[#c0152f] flex items-center gap-2 text-sm font-medium min-h-[44px]"
+            title={t('sendToCar.title')}
+          >
+            <span aria-hidden="true">✈</span>
+            <span className="hidden sm:inline">{t('sendToCar.openButton')}</span>
+            <span className="sm:hidden">{t('sendToCar.openButtonShort')}</span>
+          </button>
+        )}
+
+        {sendMode && (
+          <SendToCarPanel
+            pin={destinationPin}
+            onClose={closeSendMode}
+            onPinChange={setDestinationPin}
+            vehiclePosition={vehiclePosition}
+          />
+        )}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { VehicleStatus } from '../api/queries';
 import { useUnits } from '../hooks/useUnits';
 import { utcDate } from '../utils/date';
+import { reverseGeocode } from '../utils/geocoding';
 
 interface Props {
   open: boolean;
@@ -94,15 +95,9 @@ export default function GoToCarSheet({
     geocodeAbortRef.current?.abort();
     const ctrl = new AbortController();
     geocodeAbortRef.current = ctrl;
-    fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${carLat}&lon=${carLng}&format=json&zoom=18`,
-      { signal: ctrl.signal, headers: { 'Accept-Language': i18n.language } },
-    )
-      .then((r) => r.json())
-      .then((d) => {
-        if (d?.display_name) {
-          setResolvedAddress(d.display_name.split(',').slice(0, 3).join(',').trim());
-        }
+    reverseGeocode(carLat, carLng, { language: i18n.language, signal: ctrl.signal })
+      .then((short) => {
+        if (short) setResolvedAddress(short);
       })
       .catch(() => {});
     return () => ctrl.abort();
