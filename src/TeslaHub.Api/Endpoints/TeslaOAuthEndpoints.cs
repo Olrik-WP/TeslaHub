@@ -48,7 +48,7 @@ public static class TeslaOAuthEndpoints
             TeslaOAuthService oauth,
             CancellationToken ct) =>
         {
-            const string redirectBase = "/settings?tesla=";
+            const string redirectBase = "/settings?tab=tesla&tesla=";
 
             if (!string.IsNullOrEmpty(error))
             {
