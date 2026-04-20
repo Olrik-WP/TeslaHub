@@ -239,11 +239,6 @@ export default function MapPage({ carId }: Props) {
     return null;
   }, [livePosition?.latitude, livePosition?.longitude, vehicle?.latitude, vehicle?.longitude]);
 
-  // The button is hidden while inspecting a single drive (clearParams takes
-  // priority) and hidden in the special teslamate-iframe context where the
-  // top-bar is replaced by a back arrow.
-  const showSendButton = driveId == null;
-
   return (
     <div className="flex flex-col h-[calc(100dvh-64px)]">
       {driveId != null ? (
@@ -302,6 +297,22 @@ export default function MapPage({ carId }: Props) {
                 <span className="sm:hidden">
                   {followLive && liveActive ? t('map.liveShort') : t('map.followShort')}
                 </span>
+              </button>
+            )}
+
+            {/* "Send to Vehicle" lives in the top toolbar (rather than as a
+                floating button on the map) so it never gets hidden by the
+                mobile address bar, the on-map zoom controls, or the bottom
+                safe-area inset. */}
+            {!sendMode && (
+              <button
+                onClick={() => setSendMode(true)}
+                title={t('sendToCar.title')}
+                className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] bg-[#e31937] text-white active:bg-[#c0152f] transition-colors duration-150"
+              >
+                <span aria-hidden="true">✈</span>
+                <span className="hidden sm:inline">{t('sendToCar.openButton')}</span>
+                <span className="sm:hidden">{t('sendToCar.openButtonShort')}</span>
               </button>
             )}
           </div>
@@ -373,19 +384,6 @@ export default function MapPage({ carId }: Props) {
           onMapClick={sendMode ? handleMapClick : undefined}
           dimHistorical={sendMode}
         />
-
-        {/* Floating "Send to Vehicle" button (hidden in single-drive view). */}
-        {showSendButton && !sendMode && (
-          <button
-            onClick={() => setSendMode(true)}
-            className="absolute bottom-4 right-4 z-20 bg-[#e31937] text-white pl-3 pr-4 py-2.5 rounded-full shadow-lg active:bg-[#c0152f] flex items-center gap-2 text-sm font-medium min-h-[44px]"
-            title={t('sendToCar.title')}
-          >
-            <span aria-hidden="true">✈</span>
-            <span className="hidden sm:inline">{t('sendToCar.openButton')}</span>
-            <span className="sm:hidden">{t('sendToCar.openButtonShort')}</span>
-          </button>
-        )}
 
         {sendMode && (
           <SendToCarPanel
