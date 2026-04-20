@@ -55,6 +55,7 @@ builder.Services.AddScoped<TeslaFleetApiClient>();
 builder.Services.AddScoped<TeslaPairingService>();
 builder.Services.AddSingleton<TelegramNotificationService>();
 builder.Services.AddScoped<SecurityAlertService>();
+builder.Services.AddScoped<TeslaShareService>();
 builder.Services.AddHostedService<TeslaTokenRefreshBackgroundService>();
 builder.Services.AddHostedService<TeslaTelemetryConsumer>();
 
@@ -148,6 +149,7 @@ app.MapLocationsEndpoints();
 app.MapTripEndpoints();
 app.MapTeslaOAuthEndpoints();
 app.MapTeslaPairingEndpoints();
+app.MapTeslaShareEndpoints();
 app.MapSecurityAlertsEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { Status = "OK", Timestamp = DateTime.UtcNow }))
