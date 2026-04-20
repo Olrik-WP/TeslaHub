@@ -46,6 +46,11 @@ services:
       # cross-origin with credentials. Leave empty for the standard setup
       # (frontend served by Caddy on the same origin as /api).
       - TESLAHUB_ALLOWED_ORIGINS=${TESLAHUB_ALLOWED_ORIGINS:-}
+      # Optional — Open Charge Map API key for the public chargers map
+      # layer. Without a key OCM rate-limits to a few thousand requests
+      # per day, which is plenty for personal use. Get a free key at
+      # https://openchargemap.org/site/develop/api
+      - OCM_API_KEY=${OCM_API_KEY:-}
       - MQTT_HOST=${MQTT_HOST:-}
       - MQTT_PORT=${MQTT_PORT:-1883}
       - MQTT_USER=${MQTT_USER:-}

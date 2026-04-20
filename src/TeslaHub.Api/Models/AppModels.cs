@@ -63,6 +63,44 @@ public class GlobalSettings
     /// user across browsers and devices.
     /// </summary>
     public bool SecurityAlertsTeaserDismissed { get; set; }
+
+    /// <summary>
+    /// Display public charging stations (Open Charge Map) on the map.
+    /// Off by default — the user opts in from Settings.
+    /// </summary>
+    public bool ChargersEnabled { get; set; }
+
+    /// <summary>
+    /// Which charging networks to show. One of:
+    ///   "tesla"   — Tesla Superchargers + Destination Charging only
+    ///   "all"     — every network in OCM (Tesla + Ionity + Fastned + …)
+    ///   "custom"  — comma-separated list in <see cref="ChargersCustomNetworks"/>
+    /// </summary>
+    [MaxLength(20)]
+    public string ChargersNetworkFilter { get; set; } = "all";
+
+    /// <summary>
+    /// Comma-separated network names used when <see cref="ChargersNetworkFilter"/>
+    /// is "custom". Matched case-insensitively against OCM's
+    /// <c>OperatorInfo.Title</c>. Example: "Tesla,Ionity,Fastned".
+    /// </summary>
+    [MaxLength(500)]
+    public string? ChargersCustomNetworks { get; set; }
+
+    /// <summary>
+    /// Hide chargers whose maximum connection power is below this value (kW).
+    /// 0 = show every charger including those with no declared power.
+    /// </summary>
+    public int ChargersMinPowerKw { get; set; }
+
+    /// <summary>
+    /// Optional Open Charge Map API key. When set, takes precedence over the
+    /// OCM_API_KEY environment variable. Stored in plain text — OCM keys are
+    /// rate-limit tokens with no payment or PII access, so the worst case
+    /// of a leak is someone burning your daily quota.
+    /// </summary>
+    [MaxLength(100)]
+    public string? ChargersOcmApiKey { get; set; }
 }
 
 public class CarConfig

@@ -1,13 +1,16 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import {
   getRecentPositions,
   getPositionsInRange,
   getChargingSessions,
   getDrivePositions,
+  getSettings,
+  type GlobalSettings,
 } from '../api/queries';
+import { api } from '../api/client';
 import MapLibreMap, { type LivePosition } from '../components/MapLibreMap';
 import SendToCarPanel from '../components/SendToCarPanel';
 import { useLiveStream } from '../hooks/useLiveStream';
@@ -161,6 +164,39 @@ export default function MapPage({ carId }: Props) {
     placeholderData: keepPreviousData,
   });
 
+  // Public chargers layer (Open Charge Map). Off by default. The toggle is
+  // also exposed as a quick button in the toolbar (next to Live / Send-to-car)
+  // so the user can flip it without leaving the map.
+  const queryClient = useQueryClient();
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: getSettings,
+    staleTime: 5 * 60_000,
+  });
+  const showPublicChargers = !!settings?.chargersEnabled;
+  const toggleChargers = useMutation({
+    mutationFn: (enabled: boolean) => {
+      if (!settings) return Promise.resolve(null);
+      const updated: GlobalSettings = { ...settings, chargersEnabled: enabled };
+      return api<GlobalSettings>('/costs/settings', {
+        method: 'PUT',
+        body: JSON.stringify(updated),
+      });
+    },
+    onMutate: (enabled) => {
+      // Optimistic update so the marker layer flips instantly.
+      const prev = queryClient.getQueryData<GlobalSettings>(['settings']);
+      if (prev) {
+        queryClient.setQueryData<GlobalSettings>(['settings'], { ...prev, chargersEnabled: enabled });
+      }
+      return { prev };
+    },
+    onError: (_err, _enabled, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['settings'], ctx.prev);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['settings'] }),
+  });
+
   const positions = driveId != null ? drivePositions : rangePositions;
 
   // Historical points (stable, only changes when range / drive switches).
@@ -227,6 +263,14 @@ export default function MapPage({ carId }: Props) {
 
   const handlePinDragEnd = useCallback((latitude: number, longitude: number) => {
     setDestinationPin({ latitude, longitude });
+  }, []);
+
+  // Triggered from the charger popup → activates send-mode and pre-fills
+  // the pin with the station's coordinates so the SendToCarPanel opens
+  // straight to the address-resolved view.
+  const handleSendChargerToCar = useCallback((latitude: number, longitude: number) => {
+    setDestinationPin({ latitude, longitude });
+    setSendMode(true);
   }, []);
 
   const vehiclePosition = useMemo(() => {
@@ -296,6 +340,28 @@ export default function MapPage({ carId }: Props) {
                 </span>
                 <span className="sm:hidden">
                   {followLive && liveActive ? t('map.liveShort') : t('map.followShort')}
+                </span>
+              </button>
+            )}
+
+            {/* Quick toggle for the public chargers layer. Only shown once
+                the settings query has resolved so we don't render a stale
+                state on first paint. */}
+            {settings && (
+              <button
+                onClick={() => toggleChargers.mutate(!showPublicChargers)}
+                disabled={toggleChargers.isPending}
+                title={t(showPublicChargers ? 'map.hideChargers' : 'map.showChargers')}
+                aria-pressed={showPublicChargers}
+                className={`flex-shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors duration-150 disabled:opacity-50 ${
+                  showPublicChargers
+                    ? 'bg-[#3b82f6] text-white active:bg-[#2563eb]'
+                    : 'bg-[#1a1a1a] text-[#9ca3af] active:bg-[#2a2a2a]'
+                }`}
+              >
+                <span aria-hidden="true">⚡</span>
+                <span className="hidden sm:inline">
+                  {t(showPublicChargers ? 'map.chargersOn' : 'map.chargersOff')}
                 </span>
               </button>
             )}
@@ -383,6 +449,8 @@ export default function MapPage({ carId }: Props) {
           onDestinationDragEnd={sendMode ? handlePinDragEnd : undefined}
           onMapClick={sendMode ? handleMapClick : undefined}
           dimHistorical={sendMode}
+          showPublicChargers={showPublicChargers}
+          onSendChargerToCar={handleSendChargerToCar}
         />
 
         {sendMode && (

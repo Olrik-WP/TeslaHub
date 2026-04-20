@@ -218,6 +218,14 @@
     "coldBattery": "Kalte Batterie",
     "cost": "Kosten"
   },
+  "chargers": {
+    "openInMaps": "Google Maps →",
+    "sendToCar": "An Fahrzeug senden",
+    "attribution": "Daten von",
+    "legend": {
+      "title": "Leistung"
+    }
+  },
   "map": {
     "7days": "7 Tage",
     "30days": "30 Tage",
@@ -234,7 +242,11 @@
     "followShort": "Live",
     "liveShort": "Live AN",
     "liveUnavailable": "MQTT nicht verfügbar — Live-Tracking deaktiviert",
-    "livePoints": "live"
+    "livePoints": "live",
+    "showChargers": "Ladestationen anzeigen",
+    "hideChargers": "Ladestationen ausblenden",
+    "chargersOn": "Ladestationen",
+    "chargersOff": "Ladestationen"
   },
   "settings": {
     "title": "Einstellungen",
@@ -264,6 +276,23 @@
     "teslaMateGeofence": "TeslaMate (Geofence)",
     "costSourceTeslahub": "Kosten werden in TeslaHub pro Ladesession manuell erfasst.",
     "costSourceTeslamate": "Kosten stammen aus TeslaMate-Geofence-Daten. Manuelle Kostenerfassung ist deaktiviert.",
+    "chargers": {
+      "toggle": "Öffentliche Ladestationen anzeigen",
+      "toggleHint": "Zeigt Tesla Supercharger und Drittanbieter (Ionity, Fastned, TotalEnergies, etc.) auf der Karte an. Standardmäßig deaktiviert.",
+      "networkFilter": "Anzuzeigende Netzwerke",
+      "networkAll": "Alle Netzwerke",
+      "networkTesla": "Nur Tesla (Supercharger + Destination)",
+      "networkCustom": "Benutzerdefinierte Liste",
+      "customList": "Netzwerke (kommagetrennt)",
+      "customHint": "Teilweise, Groß-/Kleinschreibung wird ignoriert. Beispiel: \"Tesla, Ionity\" zeigt jeden Anbieter, dessen Name eines dieser Wörter enthält.",
+      "minPower": "Mindestleistung",
+      "minPowerAll": "Beliebige Leistung",
+      "minPowerHint": "Blendet Stationen aus, deren maximale deklarierte Leistung unter dem Schwellenwert liegt. Stationen ohne deklarierte Leistung werden ebenfalls ausgeblendet, sobald ein Schwellenwert gesetzt ist.",
+      "apiKeyLabel": "Open Charge Map API-Schlüssel (optional)",
+      "apiKeyHint": "Ohne Schlüssel limitiert OCM auf ein paar tausend Anfragen pro Tag (ausreichend für den privaten Gebrauch). Ein hier gesetzter Schlüssel hat Vorrang vor der Umgebungsvariable OCM_API_KEY.",
+      "getApiKey": "Kostenlosen Schlüssel besorgen",
+      "dataSource": "Daten von Open Charge Map (CC-BY-SA), serverseitig 24 h gecacht."
+    },
     "saveSettings": "Einstellungen speichern",
     "saving": "Speichere...",
     "vehicleImage": "Fahrzeugbild",

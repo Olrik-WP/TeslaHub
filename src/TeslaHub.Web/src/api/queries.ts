@@ -237,7 +237,46 @@ export interface GlobalSettings {
   dashboardMaxScale: number;
   mapStyle: string;
   securityAlertsTeaserDismissed: boolean;
+  chargersEnabled: boolean;
+  chargersNetworkFilter: 'all' | 'tesla' | 'custom';
+  chargersCustomNetworks: string | null;
+  chargersMinPowerKw: number;
+  chargersOcmApiKey: string | null;
 }
+
+// ─── Public chargers (Open Charge Map) ──────────────────────────
+export interface ChargerConnection {
+  type: string;
+  powerKw: number | null;
+  currentType: string | null;
+  quantity: number;
+}
+
+export interface PublicCharger {
+  id: number;
+  latitude: number;
+  longitude: number;
+  title: string;
+  network: string;
+  operatorWebsite: string | null;
+  /** "tesla-supercharger" | "tesla-destination" | "third-party" */
+  category: 'tesla-supercharger' | 'tesla-destination' | 'third-party';
+  powerKw: number | null;
+  connectorCount: number;
+  connections: ChargerConnection[];
+  address: string | null;
+  city: string | null;
+  usageType: string | null;
+  operationalStatus: string | null;
+  isOperational: boolean;
+}
+
+export const getChargers = (
+  bbox: { south: number; west: number; north: number; east: number },
+) =>
+  api<PublicCharger[]>(
+    `/chargers/?south=${bbox.south}&west=${bbox.west}&north=${bbox.north}&east=${bbox.east}`,
+  );
 
 export interface MonthlyTrend {
   month: string;

@@ -351,6 +351,116 @@ export default function Settings({ carId }: Props) {
             options={Object.entries(MAP_STYLES).map(([key, s]) => ({ value: key, label: t(s.labelKey) }))}
           />
         </div>
+
+        {/* Public chargers (Open Charge Map) ─────────────────────── */}
+        <div className="border-t border-[#2a2a2a] pt-4 space-y-3">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!form.chargersEnabled}
+              onChange={(e) => setForm({ ...form, chargersEnabled: e.target.checked })}
+              className="mt-1 w-4 h-4 accent-[#e31937]"
+            />
+            <span className="flex-1">
+              <span className="block text-sm font-medium text-white">
+                {t('settings.chargers.toggle')}
+              </span>
+              <span className="block text-xs text-[#6b7280] mt-0.5">
+                {t('settings.chargers.toggleHint')}
+              </span>
+            </span>
+          </label>
+
+          {form.chargersEnabled && (
+            <div className="pl-7 space-y-3">
+              <div>
+                <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">
+                  {t('settings.chargers.networkFilter')}
+                </label>
+                <CustomSelect
+                  value={form.chargersNetworkFilter ?? 'all'}
+                  onChange={(v) => setForm({ ...form, chargersNetworkFilter: v as 'all' | 'tesla' | 'custom' })}
+                  options={[
+                    { value: 'all', label: t('settings.chargers.networkAll') },
+                    { value: 'tesla', label: t('settings.chargers.networkTesla') },
+                    { value: 'custom', label: t('settings.chargers.networkCustom') },
+                  ]}
+                />
+              </div>
+
+              {form.chargersNetworkFilter === 'custom' && (
+                <div>
+                  <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">
+                    {t('settings.chargers.customList')}
+                  </label>
+                  <input
+                    type="text"
+                    className={inputClass}
+                    placeholder="Tesla, Ionity, Fastned, TotalEnergies"
+                    value={form.chargersCustomNetworks ?? ''}
+                    onChange={(e) => setForm({ ...form, chargersCustomNetworks: e.target.value })}
+                  />
+                  <p className="text-xs text-[#6b7280] mt-1">
+                    {t('settings.chargers.customHint')}
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">
+                  {t('settings.chargers.minPower')}
+                </label>
+                <CustomSelect
+                  value={String(form.chargersMinPowerKw ?? 0)}
+                  onChange={(v) => setForm({ ...form, chargersMinPowerKw: parseInt(v, 10) || 0 })}
+                  options={[
+                    { value: '0', label: t('settings.chargers.minPowerAll') },
+                    { value: '7', label: '≥ 7 kW' },
+                    { value: '22', label: '≥ 22 kW' },
+                    { value: '50', label: '≥ 50 kW' },
+                    { value: '150', label: '≥ 150 kW' },
+                    { value: '250', label: '≥ 250 kW' },
+                  ]}
+                />
+                <p className="text-xs text-[#6b7280] mt-1">
+                  {t('settings.chargers.minPowerHint')}
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">
+                  {t('settings.chargers.apiKeyLabel')}
+                </label>
+                <input
+                  type="text"
+                  className={`${inputClass} font-mono`}
+                  placeholder="ocm_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={form.chargersOcmApiKey ?? ''}
+                  onChange={(e) => setForm({ ...form, chargersOcmApiKey: e.target.value })}
+                />
+                <p className="text-xs text-[#6b7280] mt-1">
+                  {t('settings.chargers.apiKeyHint')}{' '}
+                  <a
+                    href="https://openchargemap.org/site/develop/api"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#e31937] hover:underline"
+                  >
+                    {t('settings.chargers.getApiKey')}
+                  </a>
+                  .
+                </p>
+              </div>
+
+              <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3 text-xs text-[#9ca3af]">
+                {t('settings.chargers.dataSource')}
+              </div>
+            </div>
+          )}
+        </div>
+
         <button onClick={() => save.mutate()} className="bg-[#e31937] text-white px-6 py-2 rounded-lg text-sm font-medium min-h-[44px] active:bg-[#c0152f]">
           {save.isPending ? t('settings.saving') : t('settings.saveSettings')}
         </button>

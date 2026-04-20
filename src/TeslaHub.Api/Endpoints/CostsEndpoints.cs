@@ -180,6 +180,15 @@ public static class CostsEndpoints
             settings.DashboardMaxScale = update.DashboardMaxScale;
             settings.MapStyle = update.MapStyle;
             settings.SecurityAlertsTeaserDismissed = update.SecurityAlertsTeaserDismissed;
+            settings.ChargersEnabled = update.ChargersEnabled;
+            settings.ChargersNetworkFilter = string.IsNullOrWhiteSpace(update.ChargersNetworkFilter)
+                ? "all"
+                : update.ChargersNetworkFilter;
+            settings.ChargersCustomNetworks = update.ChargersCustomNetworks;
+            settings.ChargersMinPowerKw = Math.Max(0, update.ChargersMinPowerKw);
+            settings.ChargersOcmApiKey = string.IsNullOrWhiteSpace(update.ChargersOcmApiKey)
+                ? null
+                : update.ChargersOcmApiKey.Trim();
 
             await db.SaveChangesAsync();
             return Results.Ok(settings);

@@ -218,6 +218,14 @@
     "coldBattery": "Cold battery",
     "cost": "Cost"
   },
+  "chargers": {
+    "openInMaps": "Google Maps →",
+    "sendToCar": "Send to vehicle",
+    "attribution": "Data by",
+    "legend": {
+      "title": "Power"
+    }
+  },
   "map": {
     "7days": "7 days",
     "30days": "30 days",
@@ -234,7 +242,11 @@
     "followShort": "Live",
     "liveShort": "Live ON",
     "liveUnavailable": "MQTT not available — live tracking disabled",
-    "livePoints": "live"
+    "livePoints": "live",
+    "showChargers": "Show charging stations",
+    "hideChargers": "Hide charging stations",
+    "chargersOn": "Chargers",
+    "chargersOff": "Chargers"
   },
   "settings": {
     "title": "Settings",
@@ -264,6 +276,23 @@
     "teslaMateGeofence": "TeslaMate (geofence)",
     "costSourceTeslahub": "Costs are manually entered per charging session in TeslaHub.",
     "costSourceTeslamate": "Costs come from TeslaMate geofence data. Manual cost entry is disabled.",
+    "chargers": {
+      "toggle": "Show public charging stations",
+      "toggleHint": "Display Tesla Superchargers and third-party operators (Ionity, Fastned, TotalEnergies, etc.) on the map. Off by default.",
+      "networkFilter": "Networks to show",
+      "networkAll": "All networks",
+      "networkTesla": "Tesla only (Superchargers + Destination)",
+      "networkCustom": "Custom list",
+      "customList": "Networks (comma separated)",
+      "customHint": "Partial, case-insensitive match. Example: \"Tesla, Ionity\" shows every operator whose name contains either word.",
+      "minPower": "Minimum power",
+      "minPowerAll": "Any power",
+      "minPowerHint": "Hide stations whose declared max power is below the threshold. Stations with no declared power are also hidden when a threshold is set.",
+      "apiKeyLabel": "Open Charge Map API key (optional)",
+      "apiKeyHint": "Without a key, OCM rate-limits to a few thousand requests per day (plenty for personal use). A key set here takes precedence over the OCM_API_KEY environment variable.",
+      "getApiKey": "Get a free key",
+      "dataSource": "Data from Open Charge Map (CC-BY-SA), cached for 24h server-side."
+    },
     "saveSettings": "Save settings",
     "saving": "Saving...",
     "vehicleImage": "Vehicle image",

@@ -59,6 +59,15 @@ builder.Services.AddScoped<TeslaShareService>();
 builder.Services.AddHostedService<TeslaTokenRefreshBackgroundService>();
 builder.Services.AddHostedService<TeslaTelemetryConsumer>();
 
+// Public chargers map layer (proxies Open Charge Map). Cached server-side so
+// every browser pan does not hit OCM directly.
+builder.Services.AddHttpClient("ocm", c =>
+{
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("TeslaHub/1.0 (+https://github.com/Olrik-WP/TeslaHub)");
+    c.Timeout = TimeSpan.FromSeconds(20);
+});
+builder.Services.AddSingleton<ChargersService>();
+
 // TESLAHUB_JWT_SECRET is mandatory: it signs every session JWT AND is used
 // to derive the AES-GCM key that encrypts the Tesla OAuth tokens and the
 // partner private key at rest. Falling back to a random value would silently
@@ -182,6 +191,7 @@ app.MapTeslaOAuthEndpoints();
 app.MapTeslaPairingEndpoints();
 app.MapTeslaShareEndpoints();
 app.MapSecurityAlertsEndpoints();
+app.MapChargersEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { Status = "OK", Timestamp = DateTime.UtcNow }))
     .AllowAnonymous();

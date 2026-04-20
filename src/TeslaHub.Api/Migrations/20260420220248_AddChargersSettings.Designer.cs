@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TeslaHub.Api.Data;
@@ -11,9 +12,11 @@ using TeslaHub.Api.Data;
 namespace TeslaHub.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260420220248_AddChargersSettings")]
+    partial class AddChargersSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -252,17 +255,10 @@ namespace TeslaHub.Api.Migrations
                     b.Property<bool>("ChargersEnabled")
                         .HasColumnType("boolean");
 
-                    b.Property<int>("ChargersMinPowerKw")
-                        .HasColumnType("integer");
-
                     b.Property<string>("ChargersNetworkFilter")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
-
-                    b.Property<string>("ChargersOcmApiKey")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("CostSource")
                         .IsRequired()
@@ -332,7 +328,6 @@ namespace TeslaHub.Api.Migrations
                         {
                             Id = 1,
                             ChargersEnabled = false,
-                            ChargersMinPowerKw = 0,
                             ChargersNetworkFilter = "all",
                             CostSource = "teslahub",
                             Currency = "EUR",

@@ -1,10 +1,12 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { Map, Source, Layer, Marker, Popup, NavigationControl } from 'react-map-gl/maplibre';
-import type { MapRef } from 'react-map-gl/maplibre';
+import type { MapRef, MapLayerMouseEvent } from 'react-map-gl/maplibre';
 import type { LngLatBoundsLike } from 'maplibre-gl';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { useMapStyle, setup3D } from '../hooks/useMapStyle';
 import MapStylePicker from './MapStylePicker';
+import { getChargers, type PublicCharger, type ChargerConnection } from '../api/queries';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 interface ChargeMarker {
@@ -46,6 +48,45 @@ interface MapLibreMapProps {
   onMapClick?: (latitude: number, longitude: number) => void;
   /** Visually de-emphasise historical trips/charges. */
   dimHistorical?: boolean;
+  /** Render the public chargers (Open Charge Map) layer.
+   *  Disabled by default; controlled by the user from Settings. */
+  showPublicChargers?: boolean;
+  /** When provided, the charger popup shows a "Send to Vehicle" button
+   *  that pre-fills the destination pin with the station's coordinates. */
+  onSendChargerToCar?: (latitude: number, longitude: number) => void;
+}
+
+const CHARGER_SOURCE_ID = 'public-chargers';
+const CHARGER_CLUSTER_LAYER = 'public-chargers-clusters';
+const CHARGER_CLUSTER_COUNT_LAYER = 'public-chargers-cluster-count';
+const CHARGER_POINT_LAYER = 'public-chargers-points';
+const CHARGER_MIN_ZOOM = 8;
+
+// Power-tier colours, aligned with what most EV apps (ABRP, Chargemap,
+// PlugShare) use so seasoned EV drivers read the map at a glance.
+//   < 22 kW   slow AC          green
+//   < 50 kW   fast AC / DC     yellow
+//   < 150 kW  fast DC          orange
+//   < 250 kW  ultra-rapid DC   red
+//   ≥ 250 kW  hyper-charger    purple
+//   unknown                    gray
+const POWER_COLOR_EXPRESSION = [
+  'case',
+  ['==', ['coalesce', ['get', 'powerKw'], -1], -1], '#6b7280',
+  ['<', ['get', 'powerKw'], 22], '#22c55e',
+  ['<', ['get', 'powerKw'], 50], '#eab308',
+  ['<', ['get', 'powerKw'], 150], '#f97316',
+  ['<', ['get', 'powerKw'], 250], '#ef4444',
+  '#a855f7',
+] as unknown as string;
+
+function powerColor(power: number | null | undefined): string {
+  if (power == null) return '#6b7280';
+  if (power < 22) return '#22c55e';
+  if (power < 50) return '#eab308';
+  if (power < 150) return '#f97316';
+  if (power < 250) return '#ef4444';
+  return '#a855f7';
 }
 
 const DOT = (color: string, size: number): React.CSSProperties => ({
@@ -174,13 +215,124 @@ export default function MapLibreMap({
   onDestinationDragEnd,
   onMapClick,
   dimHistorical = false,
+  showPublicChargers = false,
+  onSendChargerToCar,
 }: MapLibreMapProps) {
   const { t } = useTranslation();
   const mapRef = useRef<MapRef>(null);
   const prevCount = useRef(0);
   const { styleUrl, pitch, bearing, is3D } = useMapStyle();
   const [popupInfo, setPopupInfo] = useState<ChargeMarker | null>(null);
+  const [chargerPopup, setChargerPopup] = useState<PublicCharger | null>(null);
   const [mapReady, setMapReady] = useState(false);
+
+  // Visible bbox, refreshed on every moveend. Snapped to ~0.05° so identical
+  // pans don't kick off duplicate requests. The backend additionally caches
+  // by 0.5° tiles, so cache hits are cheap on top of that.
+  const [bbox, setBbox] = useState<{ south: number; west: number; north: number; east: number } | null>(null);
+  const [zoom, setZoom] = useState<number>(13);
+
+  useEffect(() => {
+    if (!mapReady || !showPublicChargers) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+
+    const update = () => {
+      const b = map.getBounds();
+      const round = (n: number) => Math.round(n * 20) / 20;
+      setBbox({
+        south: round(b.getSouth()),
+        west: round(b.getWest()),
+        north: round(b.getNorth()),
+        east: round(b.getEast()),
+      });
+      setZoom(map.getZoom());
+    };
+
+    update();
+    map.on('moveend', update);
+    return () => {
+      map.off('moveend', update);
+    };
+  }, [mapReady, showPublicChargers]);
+
+  // Skip the request entirely when zoomed out — at world-scale OCM would
+  // return only a sample anyway, and the resulting blob would dwarf the
+  // useful detail.
+  const chargersEnabled = showPublicChargers && bbox !== null && zoom >= CHARGER_MIN_ZOOM;
+  const { data: chargers } = useQuery({
+    queryKey: ['publicChargers', bbox],
+    queryFn: () => getChargers(bbox!),
+    enabled: chargersEnabled,
+    staleTime: 10 * 60_000,
+    gcTime: 60 * 60_000,
+  });
+
+  // Wrap the chargers as a clustered GeoJSON source. Using the native
+  // MapLibre cluster + `circle` layers scales to thousands of points
+  // without any DOM cost (compare React `<Marker>` which dies past ~500).
+  // Nested arrays (connections) are stringified because MapLibre feature
+  // properties have to be primitives — we deserialise on click.
+  const chargersGeoJson = useMemo(() => {
+    if (!chargers || chargers.length === 0) {
+      return { type: 'FeatureCollection' as const, features: [] };
+    }
+    return {
+      type: 'FeatureCollection' as const,
+      features: chargers.map((c) => ({
+        type: 'Feature' as const,
+        geometry: { type: 'Point' as const, coordinates: [c.longitude, c.latitude] },
+        properties: {
+          ...c,
+          // MapLibre property store is flat — JSON-encode nested data.
+          connections: JSON.stringify(c.connections),
+        },
+      })),
+    };
+  }, [chargers]);
+
+  // Click handler: clusters expand, single points open a popup.
+  const handleChargerLayerClick = useCallback((e: MapLayerMouseEvent) => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const features = map.queryRenderedFeatures(e.point, {
+      layers: [CHARGER_CLUSTER_LAYER, CHARGER_POINT_LAYER],
+    });
+    if (features.length === 0) return;
+    const feat = features[0];
+    if (feat.layer.id === CHARGER_CLUSTER_LAYER) {
+      const clusterId = feat.properties?.cluster_id;
+      const source = map.getSource(CHARGER_SOURCE_ID) as
+        | { getClusterExpansionZoom: (id: number, cb: (err: unknown, zoom?: number) => void) => void }
+        | undefined;
+      if (clusterId != null && source) {
+        source.getClusterExpansionZoom(clusterId, (err, expZoom) => {
+          if (err || expZoom == null) return;
+          const coords = (feat.geometry as unknown as { coordinates: [number, number] }).coordinates;
+          map.easeTo({ center: coords, zoom: expZoom + 0.1, duration: 500 });
+        });
+      }
+      return;
+    }
+    // Single point — open the popup. Properties came in as primitives;
+    // unwrap the JSON-encoded connections list.
+    const rawProps = feat.properties as (Omit<PublicCharger, 'connections'> & { connections?: string }) | undefined;
+    if (rawProps) {
+      const coords = (feat.geometry as unknown as { coordinates: [number, number] }).coordinates;
+      let connections: ChargerConnection[] = [];
+      try {
+        connections = rawProps.connections ? JSON.parse(rawProps.connections) : [];
+      } catch {
+        connections = [];
+      }
+      setChargerPopup({
+        ...rawProps,
+        connections,
+        longitude: coords[0],
+        latitude: coords[1],
+      } as PublicCharger);
+    }
+  }, []);
 
   const liveTarget = useMemo(
     () =>
@@ -361,7 +513,22 @@ export default function MapLibreMap({
         attributionControl={false}
         style={{ width: '100%', height: '100%' }}
         onLoad={handleLoad}
+        interactiveLayerIds={
+          showPublicChargers ? [CHARGER_CLUSTER_LAYER, CHARGER_POINT_LAYER] : undefined
+        }
         onClick={(e) => {
+          // Charger interactions take priority over destination drops so the
+          // user can read a station's details without setting a pin on top of it.
+          if (showPublicChargers) {
+            const map = mapRef.current?.getMap();
+            const hit = map?.queryRenderedFeatures(e.point, {
+              layers: [CHARGER_CLUSTER_LAYER, CHARGER_POINT_LAYER],
+            });
+            if (hit && hit.length > 0) {
+              handleChargerLayerClick(e);
+              return;
+            }
+          }
           if (!onMapClick) return;
           onMapClick(e.lngLat.lat, e.lngLat.lng);
         }}
@@ -373,6 +540,86 @@ export default function MapLibreMap({
           showCompass
           visualizePitch
         />
+
+        {showPublicChargers && (
+          <Source
+            id={CHARGER_SOURCE_ID}
+            type="geojson"
+            data={chargersGeoJson}
+            cluster
+            clusterMaxZoom={12}
+            clusterRadius={45}
+          >
+            <Layer
+              id={CHARGER_CLUSTER_LAYER}
+              type="circle"
+              filter={['has', 'point_count']}
+              paint={{
+                'circle-color': [
+                  'step',
+                  ['get', 'point_count'],
+                  '#3b82f6', 10,
+                  '#f59e0b', 50,
+                  '#e31937',
+                ],
+                'circle-radius': [
+                  'step',
+                  ['get', 'point_count'],
+                  16, 10,
+                  20, 50,
+                  26,
+                ],
+                'circle-stroke-color': '#ffffff',
+                'circle-stroke-width': 2,
+                'circle-opacity': dimHistorical ? 0.55 : 0.9,
+              }}
+            />
+            <Layer
+              id={CHARGER_CLUSTER_COUNT_LAYER}
+              type="symbol"
+              filter={['has', 'point_count']}
+              layout={{
+                'text-field': '{point_count_abbreviated}',
+                'text-font': ['Noto Sans Regular'],
+                'text-size': 12,
+              }}
+              paint={{
+                'text-color': '#ffffff',
+              }}
+            />
+            <Layer
+              id={CHARGER_POINT_LAYER}
+              type="circle"
+              filter={['!', ['has', 'point_count']]}
+              paint={{
+                'circle-color': POWER_COLOR_EXPRESSION,
+                'circle-radius': [
+                  'interpolate', ['linear'], ['zoom'],
+                  8, 4,
+                  12, 6,
+                  16, 8,
+                ],
+                // Tesla sites get a black ring so they stand out from
+                // third-party stations of the same power tier.
+                'circle-stroke-color': [
+                  'match',
+                  ['get', 'category'],
+                  'tesla-supercharger', '#000000',
+                  'tesla-destination', '#000000',
+                  '#ffffff',
+                ],
+                'circle-stroke-width': [
+                  'match',
+                  ['get', 'category'],
+                  'tesla-supercharger', 2,
+                  'tesla-destination', 2,
+                  1.5,
+                ],
+                'circle-opacity': dimHistorical ? 0.55 : 1,
+              }}
+            />
+          </Source>
+        )}
 
         {routeGeoJson && (
           <Source id="route" type="geojson" data={routeGeoJson}>
@@ -492,7 +739,162 @@ export default function MapLibreMap({
             </div>
           </Popup>
         )}
+
+        {chargerPopup && (
+          <Popup
+            longitude={chargerPopup.longitude}
+            latitude={chargerPopup.latitude}
+            anchor="bottom"
+            onClose={() => setChargerPopup(null)}
+            closeOnClick={false}
+            className="text-black"
+            maxWidth="320px"
+          >
+            <div className="text-xs space-y-2 min-w-[240px]">
+              <div>
+                <div className="font-semibold text-sm leading-tight pr-4">
+                  {chargerPopup.title}
+                </div>
+                <div className="text-[11px] text-[#6b7280] mt-0.5">
+                  {chargerPopup.operatorWebsite ? (
+                    <a
+                      href={chargerPopup.operatorWebsite}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:underline"
+                    >
+                      {chargerPopup.network} ↗
+                    </a>
+                  ) : (
+                    chargerPopup.network
+                  )}
+                </div>
+              </div>
+
+              {(chargerPopup.address || chargerPopup.city) && (
+                <div className="text-[11px] text-[#4b5563]">
+                  {[chargerPopup.address, chargerPopup.city].filter(Boolean).join(', ')}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-x-2 gap-y-1 pt-0.5">
+                {chargerPopup.powerKw != null && (
+                  <span
+                    className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-white"
+                    style={{ background: powerColor(chargerPopup.powerKw) }}
+                  >
+                    {chargerPopup.powerKw} kW
+                  </span>
+                )}
+                {chargerPopup.connectorCount > 0 && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#1f2937] text-white">
+                    🔌 ×{chargerPopup.connectorCount}
+                  </span>
+                )}
+                {chargerPopup.usageType && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#374151] text-white">
+                    {chargerPopup.usageType}
+                  </span>
+                )}
+                {chargerPopup.operationalStatus && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                      chargerPopup.isOperational
+                        ? 'bg-[#dcfce7] text-[#166534]'
+                        : 'bg-[#fee2e2] text-[#991b1b]'
+                    }`}
+                  >
+                    {chargerPopup.operationalStatus}
+                  </span>
+                )}
+              </div>
+
+              {chargerPopup.connections.length > 0 && (
+                <div className="border-t border-[#e5e7eb] pt-1.5 space-y-0.5">
+                  {chargerPopup.connections.slice(0, 5).map((conn, idx) => (
+                    <div key={idx} className="flex items-center gap-1.5 text-[11px]">
+                      <span className="font-medium text-[#374151] flex-1 truncate">
+                        {conn.type}
+                      </span>
+                      <span className="text-[#6b7280]">
+                        {conn.powerKw != null ? `${conn.powerKw} kW` : ''}
+                        {conn.currentType ? ` · ${conn.currentType}` : ''}
+                      </span>
+                      {conn.quantity > 1 && (
+                        <span className="text-[#9ca3af] tabular-nums">×{conn.quantity}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-1.5 pt-1">
+                {onSendChargerToCar && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSendChargerToCar(chargerPopup.latitude, chargerPopup.longitude);
+                      setChargerPopup(null);
+                    }}
+                    className="flex-1 bg-[#e31937] text-white px-2 py-1.5 rounded text-[11px] font-semibold hover:bg-[#c0152f] flex items-center justify-center gap-1"
+                  >
+                    <span aria-hidden>✈</span>
+                    {t('chargers.sendToCar')}
+                  </button>
+                )}
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${chargerPopup.latitude},${chargerPopup.longitude}&travelmode=driving`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 bg-[#1f2937] text-white px-2 py-1.5 rounded text-[11px] font-medium hover:bg-[#374151] text-center"
+                >
+                  {t('chargers.openInMaps')}
+                </a>
+              </div>
+
+              <div className="text-[9px] text-[#9ca3af] pt-1 border-t border-[#e5e7eb]">
+                {t('chargers.attribution')}{' '}
+                <a
+                  href="https://openchargemap.org/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  Open Charge Map
+                </a>{' '}
+                · CC-BY-SA
+              </div>
+            </div>
+          </Popup>
+        )}
       </Map>
+
+      {/* Power-tier legend, only when the layer is on. Compact / mobile-first. */}
+      {showPublicChargers && chargers && chargers.length > 0 && (
+        <div className="absolute bottom-2 left-2 z-10 bg-[#0a0a0a]/85 backdrop-blur-sm border border-[#2a2a2a] rounded-lg px-2 py-1.5 text-[10px] text-white pointer-events-none">
+          <div className="text-[#9ca3af] uppercase tracking-wider mb-1 text-[9px]">
+            {t('chargers.legend.title')}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {[
+              { color: '#22c55e', label: '< 22' },
+              { color: '#eab308', label: '< 50' },
+              { color: '#f97316', label: '< 150' },
+              { color: '#ef4444', label: '< 250' },
+              { color: '#a855f7', label: '≥ 250' },
+            ].map((tier) => (
+              <span key={tier.label} className="inline-flex items-center gap-1">
+                <span
+                  className="w-2.5 h-2.5 rounded-full border border-white"
+                  style={{ background: tier.color }}
+                />
+                <span>{tier.label}</span>
+              </span>
+            ))}
+            <span className="text-[#9ca3af]">kW</span>
+          </div>
+        </div>
+      )}
       <MapStylePicker />
     </div>
   );
