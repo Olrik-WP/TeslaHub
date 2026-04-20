@@ -256,7 +256,12 @@
     "showChargers": "Show charging stations",
     "hideChargers": "Hide charging stations",
     "chargersOn": "Chargers",
-    "chargersOff": "Chargers"
+    "chargersOff": "Chargers",
+    "showRoute": "Show trips",
+    "hideRoute": "Hide trips",
+    "routeOn": "Trips",
+    "routeOff": "Trips",
+    "routeHidden": "Trips hidden"
   },
   "settings": {
     "title": "Settings",

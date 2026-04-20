@@ -256,7 +256,12 @@
     "showChargers": "Ladestationen anzeigen",
     "hideChargers": "Ladestationen ausblenden",
     "chargersOn": "Ladestationen",
-    "chargersOff": "Ladestationen"
+    "chargersOff": "Ladestationen",
+    "showRoute": "Fahrten anzeigen",
+    "hideRoute": "Fahrten ausblenden",
+    "routeOn": "Fahrten",
+    "routeOff": "Fahrten",
+    "routeHidden": "Fahrten ausgeblendet"
   },
   "settings": {
     "title": "Einstellungen",

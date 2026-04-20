@@ -64,6 +64,21 @@ export default function MapPage({ carId }: Props) {
   const driveIdParam = searchParams.get('driveId');
   const driveId = driveIdParam ? parseInt(driveIdParam, 10) : null;
 
+  // Historical route layer can be heavy on long ranges (thousands of points)
+  // — keep it off by default and persist the user's choice. Always force-on
+  // when looking at a single drive: that *is* the page's whole purpose.
+  const SHOW_ROUTE_STORAGE_KEY = 'teslahub_map_show_route';
+  const [showRoute, setShowRoute] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(SHOW_ROUTE_STORAGE_KEY) === '1';
+  });
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(SHOW_ROUTE_STORAGE_KEY, showRoute ? '1' : '0');
+    }
+  }, [showRoute]);
+  const routeVisible = driveId != null || showRoute;
+
   const [rangeKey, setRangeKey] = useState<RangeKey>('48h');
   const [customFromDate, setCustomFromDate] = useState(() =>
     fmtDate(new Date(Date.now() - 48 * 3600_000)),
@@ -152,7 +167,10 @@ export default function MapPage({ carId }: Props) {
       }
       return getRecentPositions(carId, selectedRange.hours!);
     },
-    enabled: !!carId && driveId == null,
+    // Skip the (potentially heavy) positions fetch when the user has
+    // hidden the route. Single-drive mode goes through `drivePositions`
+    // above so this only gates the range view.
+    enabled: !!carId && driveId == null && showRoute,
     staleTime: STALE_TIME.live,
     placeholderData: keepPreviousData,
   });
@@ -200,9 +218,15 @@ export default function MapPage({ carId }: Props) {
   const positions = driveId != null ? drivePositions : rangePositions;
 
   // Historical points (stable, only changes when range / drive switches).
+  // When the user hides the route we drop the points entirely instead of
+  // passing an empty array down — keeps the GeoJSON source out of the
+  // MapLibre style and avoids an unnecessary diff on every toggle.
   const routePoints = useMemo(
-    () => positions?.map((p) => [p.latitude, p.longitude] as [number, number]) ?? [],
-    [positions],
+    () =>
+      routeVisible
+        ? positions?.map((p) => [p.latitude, p.longitude] as [number, number]) ?? []
+        : [],
+    [positions, routeVisible],
   );
 
   // The live trail is sent as a separate prop so MQTT ticks don't refit bounds
@@ -344,6 +368,26 @@ export default function MapPage({ carId }: Props) {
               </button>
             )}
 
+            {/* Toggle for the historical route layer. Off by default to keep
+                the map fast on long ranges (a 30-day range can be tens of
+                thousands of points). Hidden in single-drive mode where the
+                route is the whole point of the page. */}
+            <button
+              onClick={() => setShowRoute((v) => !v)}
+              title={t(showRoute ? 'map.hideRoute' : 'map.showRoute')}
+              aria-pressed={showRoute}
+              className={`flex-shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium min-h-[40px] transition-colors duration-150 ${
+                showRoute
+                  ? 'bg-[#a855f7] text-white active:bg-[#9333ea]'
+                  : 'bg-[#1a1a1a] text-[#9ca3af] active:bg-[#2a2a2a]'
+              }`}
+            >
+              <span aria-hidden="true">🛣</span>
+              <span className="hidden sm:inline">
+                {t(showRoute ? 'map.routeOn' : 'map.routeOff')}
+              </span>
+            </button>
+
             {/* Quick toggle for the public chargers layer. Only shown once
                 the settings query has resolved so we don't render a stale
                 state on first paint. */}
@@ -420,7 +464,9 @@ export default function MapPage({ carId }: Props) {
           {/* Info bar */}
           <div className="flex items-center justify-between px-3 py-1.5 bg-[#141414] border-b border-[#2a2a2a] text-xs text-[#9ca3af]">
             <span>
-              {routePoints.length > 0
+              {!showRoute
+                ? t('map.routeHidden')
+                : routePoints.length > 0
                 ? `${routePoints.length} ${t('map.points')}`
                 : t('map.noData')}
             </span>

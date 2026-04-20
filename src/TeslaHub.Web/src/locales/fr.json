@@ -256,7 +256,12 @@
     "showChargers": "Afficher les bornes de recharge",
     "hideChargers": "Masquer les bornes de recharge",
     "chargersOn": "Bornes",
-    "chargersOff": "Bornes"
+    "chargersOff": "Bornes",
+    "showRoute": "Afficher les trajets",
+    "hideRoute": "Masquer les trajets",
+    "routeOn": "Trajets",
+    "routeOff": "Trajets",
+    "routeHidden": "Trajets masqués"
   },
   "settings": {
     "title": "Paramètres",
