@@ -3,6 +3,16 @@
     "connecting": "Connecting...",
     "loading": "Loading..."
   },
+  "carSelector": {
+    "state": {
+      "unknown": "Unknown state",
+      "charging": "Charging",
+      "driving": "Driving",
+      "asleep": "Asleep",
+      "offline": "Offline",
+      "parked": "Parked"
+    }
+  },
   "auth": {
     "title": "TeslaHub",
     "subtitle": "Connect to your dashboard",

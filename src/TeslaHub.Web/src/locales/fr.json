@@ -3,6 +3,16 @@
     "connecting": "Connexion...",
     "loading": "Chargement..."
   },
+  "carSelector": {
+    "state": {
+      "unknown": "État inconnu",
+      "charging": "En charge",
+      "driving": "En conduite",
+      "asleep": "En veille",
+      "offline": "Hors ligne",
+      "parked": "Stationnée"
+    }
+  },
   "auth": {
     "title": "TeslaHub",
     "subtitle": "Connectez-vous à votre tableau de bord",
