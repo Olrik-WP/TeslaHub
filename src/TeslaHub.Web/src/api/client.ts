@@ -75,10 +75,33 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${res.statusText}`);
+    const message = await extractErrorMessage(res);
+    throw new Error(message);
   }
 
   return res.json();
+}
+
+async function extractErrorMessage(res: Response): Promise<string> {
+  try {
+    const contentType = res.headers.get('content-type') ?? '';
+    if (contentType.includes('application/json') || contentType.includes('application/problem+json')) {
+      const body = await res.json();
+      const detail = typeof body?.detail === 'string' ? body.detail.trim() : '';
+      const title = typeof body?.title === 'string' ? body.title.trim() : '';
+      const error = typeof body?.error === 'string' ? body.error.trim() : '';
+      if (detail && title) return `${title}: ${detail}`;
+      if (detail) return detail;
+      if (title) return title;
+      if (error) return error;
+    } else {
+      const text = (await res.text()).trim();
+      if (text) return text;
+    }
+  } catch {
+    // ignore body parsing failures, fall back to status line
+  }
+  return `API error: ${res.status} ${res.statusText}`;
 }
 
 export async function login(username: string, password: string) {

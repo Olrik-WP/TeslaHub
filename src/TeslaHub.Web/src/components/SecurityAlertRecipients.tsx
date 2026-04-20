@@ -149,6 +149,13 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
       {/* Add recipient form */}
       <div className={cardClass}>
         <div className="text-sm text-[#e0e0e0]">{t('securityAlerts.recipients.addTitle')}</div>
+        <div className="text-xs px-3 py-2 rounded bg-[#3a2a1a] text-[#e0c47e] border border-[#5a3a1a]">
+          <Trans
+            i18nKey="securityAlerts.recipients.startBotWarning"
+            t={t}
+            components={{ b: <strong /> }}
+          />
+        </div>
         <div className="grid sm:grid-cols-3 gap-2">
           <input
             className={inputClass}
@@ -187,6 +194,7 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
                   @userinfobot
                 </a>
               ),
+              b: <strong />,
             }}
           />
         </p>

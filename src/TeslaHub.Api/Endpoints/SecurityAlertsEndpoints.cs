@@ -164,9 +164,31 @@ public static class SecurityAlertsEndpoints
                 "Security alerts will arrive here when triggered.",
                 ct);
 
-            return result.Success
-                ? Results.Ok(new { sent = true })
-                : Results.Problem(title: "Telegram send failed", detail: result.Error, statusCode: 502);
+            if (result.Success)
+                return Results.Ok(new { sent = true });
+
+            // Recipient-side problems (user has not started the bot, blocked
+            // it, wrong chat id…) are NOT a 502 Bad Gateway: the upstream
+            // (Telegram) is healthy, we just can't reach this particular
+            // chat. Returning 400 with a clear "detail" lets the UI show
+            // actionable guidance instead of "API error: 502".
+            var statusCode = result.FailureKind switch
+            {
+                TelegramFailureKind.NotConfigured => 503,
+                TelegramFailureKind.RecipientNotReachable => 400,
+                TelegramFailureKind.InvalidRecipient => 400,
+                _ => 502,
+            };
+
+            var title = result.FailureKind switch
+            {
+                TelegramFailureKind.RecipientNotReachable => "Recipient must start the bot first",
+                TelegramFailureKind.InvalidRecipient => "Invalid Telegram chat ID",
+                TelegramFailureKind.NotConfigured => "Telegram bot not configured",
+                _ => "Telegram send failed",
+            };
+
+            return Results.Problem(title: title, detail: result.Error, statusCode: statusCode);
         });
 
         group.MapGet("/events", async (
