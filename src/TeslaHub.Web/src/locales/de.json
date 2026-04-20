@@ -3,6 +3,16 @@
     "connecting": "Verbindung wird hergestellt...",
     "loading": "Lade..."
   },
+  "carSelector": {
+    "state": {
+      "unknown": "Unbekannter Zustand",
+      "charging": "Lädt",
+      "driving": "Fährt",
+      "asleep": "Im Ruhezustand",
+      "offline": "Offline",
+      "parked": "Geparkt"
+    }
+  },
   "auth": {
     "title": "TeslaHub",
     "subtitle": "Melden Sie sich bei Ihrem Dashboard an",
