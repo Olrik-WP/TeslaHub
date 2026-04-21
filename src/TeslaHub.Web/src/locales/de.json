@@ -809,12 +809,12 @@
     "shiftState": "Gang"
   },
   "securityAlerts": {
-    "title": "Sicherheitswarnungen",
-    "subtitle": "Optionale Echtzeit-Benachrichtigungen für Tesla Sentry & Einbruchsversuche.",
-    "selfHostNote": "Mit Ihrer eigenen Tesla-Developer-App betrieben — vollständig selbstgehostet.",
+    "title": "Tesla Fleet API Integration",
+    "subtitle": "Schaltet die Steuerungsseite frei (Klima, Laden, Verriegelung, Wächter, Frunk, OTA-Updates…), das Senden von Zielen aus der Karte, Echtzeit-Sentry-/Einbruchsbenachrichtigungen und mehr — angetrieben von Ihrer eigenen Tesla-Developer-App.",
+    "selfHostNote": "Mehrkonten-fähig: verbinden Sie auch das Tesla-Konto Ihres Ehepartners, damit jedes Fahrzeug mit dem Token seines tatsächlichen Eigentümers angesprochen wird.",
     "advancedWarning": {
       "title": "Fortgeschrittene Einrichtung — nur für erfahrene Nutzer",
-      "body": "Echtzeit-Tesla-Warnungen einzurichten bedeutet, Ihren eigenen Fleet-Telemetry-Server und einen Tesla-Befehlssignatur-Proxy auf Ihrer eigenen Domain zu betreiben. Sie benötigen: einen öffentlichen DNS-Namen, eine Port-Weiterleitung im Router, einen Reverse-Proxy (Caddy / nginx) mit Let's Encrypt, zwei Docker-Images, die lokal aus Teslas Quellcode kompiliert werden, und etwas Vertrautheit mit Dateirechten in Docker-Volumes. Die „Vollständig selbstgehostet, keine Drittanbieter“-Philosophie ist großartig — aber alles, was ein SaaS-Anbieter für Sie übernehmen würde, liegt nun in Ihrer Verantwortung. Wenn Sie nur Dashboard, Karte und Historie brauchen, lassen Sie dieses Feature deaktiviert; der Rest von TeslaHub funktioniert auch ohne es einwandfrei.",
+      "body": "Die Aktivierung von Fleet API schaltet die vollständige Fahrzeug-Steuerungsseite frei (Klima, Laden, Verriegelung, Wächter, Frunk, Fenster, Sitze, OTA-Updates, Medien…), das Senden von Zielen aus der Karte und optional Echtzeit-Sentry-/Einbruchsbenachrichtigungen. Die Gegenleistung: Sie betreiben Ihren eigenen Fleet-Telemetry-Server und einen Tesla-Befehlssignatur-Proxy auf Ihrer eigenen Domain. Sie benötigen: einen öffentlichen DNS-Namen, eine Port-Weiterleitung im Router, einen Reverse-Proxy (Caddy / nginx) mit Let's Encrypt, zwei Docker-Images, die lokal aus Teslas Quellcode kompiliert werden, und etwas Vertrautheit mit Dateirechten in Docker-Volumes. Die „Vollständig selbstgehostet, keine Drittanbieter“-Philosophie ist großartig — aber alles, was ein SaaS-Anbieter für Sie übernehmen würde, liegt nun in Ihrer Verantwortung. Wenn Sie nur Dashboard, Karte und Historie brauchen, lassen Sie dieses Feature deaktiviert; der Rest von TeslaHub funktioniert auch ohne es einwandfrei.",
       "guideLabel": "Vollständige Einrichtungs- und Fehlerbehebungsanleitung lesen →"
     },
     "creditPrefix": "Inspiriert von",

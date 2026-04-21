@@ -809,12 +809,12 @@
     "shiftState": "Gear"
   },
   "securityAlerts": {
-    "title": "Security Alerts",
-    "subtitle": "Optional real-time Tesla Sentry & break-in notifications.",
-    "selfHostNote": "Powered by your own Tesla developer app — fully self-hosted.",
+    "title": "Tesla Fleet API integration",
+    "subtitle": "Unlocks the Control page (climate, charging, locks, sentry, frunk, OTA…), Send-to-car from the map, real-time Sentry / break-in alerts and more — all powered by your own Tesla developer app.",
+    "selfHostNote": "Multi-account aware: link your spouse's Tesla identity too so each car is reached with its real owner's token.",
     "advancedWarning": {
       "title": "Advanced setup — for confirmed users",
-      "body": "Setting up real-time Tesla alerts means running your own Fleet Telemetry server and Tesla command-signing proxy on your own domain. You will need a public DNS name, a router port forward, a reverse proxy (Caddy / nginx) with Let's Encrypt, two Docker images built locally from Tesla's source code, and some comfort with file permissions inside Docker volumes. The 'fully self-hosted, zero third party' philosophy is great — but everything that a SaaS would normally hide is now your responsibility. If you only need the dashboard, map, and history, leave this feature off; the rest of TeslaHub works perfectly without it.",
+      "body": "Enabling Fleet API unlocks the full vehicle Control page (climate, charging, locks, sentry, frunk, windows, seats, OTA, media…), Send-to-car destinations from the map, and optional real-time Sentry / break-in alerts. The trade-off is that you must run your own Fleet Telemetry server and Tesla command-signing proxy on your own domain. You will need a public DNS name, a router port forward, a reverse proxy (Caddy / nginx) with Let's Encrypt, two Docker images built locally from Tesla's source code, and some comfort with file permissions inside Docker volumes. The 'fully self-hosted, zero third party' philosophy is great — but everything that a SaaS would normally hide is now your responsibility. If you only need the dashboard, map, and history, leave this feature off; the rest of TeslaHub works perfectly without it.",
       "guideLabel": "Read the full setup guide & troubleshooting →"
     },
     "creditPrefix": "Inspired by",

@@ -809,12 +809,12 @@
     "shiftState": "Rapport"
   },
   "securityAlerts": {
-    "title": "Alertes de sécurité",
-    "subtitle": "Notifications temps réel Tesla Sentry et tentative d'effraction (optionnel).",
-    "selfHostNote": "Propulsé par votre propre app Tesla developer — entièrement auto-hébergé.",
+    "title": "Intégration Tesla Fleet API",
+    "subtitle": "Débloque la page Contrôle (clim, recharge, verrouillage, sentinelle, frunk, MAJ logicielle…), l'envoi de destination depuis la carte, les alertes Sentry/effraction temps réel et plus encore — propulsé par votre propre app Tesla developer.",
+    "selfHostNote": "Multi-comptes : reliez aussi le compte Tesla de votre conjoint·e pour que chaque voiture soit pilotée avec le token de son vrai propriétaire.",
     "advancedWarning": {
       "title": "Installation avancée — réservée aux utilisateurs confirmés",
-      "body": "Activer les alertes Tesla en temps réel implique d'héberger vous-même un serveur Fleet Telemetry et un proxy de signature des commandes Tesla, sur votre propre domaine. Il vous faudra : un nom de domaine public, une redirection de port sur votre routeur, un reverse proxy (Caddy / nginx) avec Let's Encrypt, deux images Docker à compiler localement depuis le code source de Tesla, et un peu d'aisance avec les permissions de fichiers dans les volumes Docker. La philosophie « 100 % auto-hébergé, zéro service tiers » est un vrai plus — mais tout ce qu'un SaaS gérerait à votre place devient votre responsabilité. Si vous voulez juste le tableau de bord, la carte et l'historique, laissez cette fonctionnalité désactivée : le reste de TeslaHub fonctionne parfaitement sans elle.",
+      "body": "Activer Fleet API débloque la page Contrôle complète (clim, recharge, verrouillage, sentinelle, frunk, vitres, sièges, MAJ, médias…), l'envoi de destinations depuis la carte, et optionnellement les alertes Sentry / effraction en temps réel. La contrepartie : héberger vous-même un serveur Fleet Telemetry et un proxy de signature des commandes Tesla sur votre propre domaine. Il vous faudra : un nom de domaine public, une redirection de port sur votre routeur, un reverse proxy (Caddy / nginx) avec Let's Encrypt, deux images Docker à compiler localement depuis le code source de Tesla, et un peu d'aisance avec les permissions de fichiers dans les volumes Docker. La philosophie « 100 % auto-hébergé, zéro service tiers » est un vrai plus — mais tout ce qu'un SaaS gérerait à votre place devient votre responsabilité. Si vous voulez juste le tableau de bord, la carte et l'historique, laissez cette fonctionnalité désactivée : le reste de TeslaHub fonctionne parfaitement sans elle.",
       "guideLabel": "Voir le guide d'installation et de dépannage →"
     },
     "creditPrefix": "Inspiré de",

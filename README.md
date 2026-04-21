@@ -26,12 +26,13 @@ TeslaHub reads your existing TeslaMate data (read-only) and provides a touch-fir
 - Charging sessions with manual cost tracking and DC charging curves
 - Trip history with expandable details, efficiency metrics, and route visualization
 - Vampire drain analysis with sleep health verdict and power analogies
-- Interactive map with historical data
+- Interactive map with historical data + **Send-to-car destinations** (works on any car shared with you, even without virtual-key pairing)
 - Cost analytics by location, month, and period
 - Multi-car support
 - Internationalization (English / French / German)
+- **Optional, but the headline feature**: a full **Vehicle Control** page that goes well beyond the official Tesla app's 4 quick-action shortcuts — climate (temps + dual-zone + seat heaters per available seat + dog/camp/keep modes + cabin overheat), charging (start/stop, limit slider, amps slider, port door, cable unlock), access (lock, sentry, horn, lights, valet PIN, speed-limit PIN), openings (frunk, trunk, vent/close windows), media (play, next/prev, favorites, volume), software updates (schedule 1m/1h/6h or cancel), with auto wake-up, dynamic state colours, capability-aware UI and zero polling (vampire-drain safe). See [Vehicle Control](#vehicle-control-page-optional).
 - **Optional** real-time Sentry / break-in alerts via Tesla Fleet Telemetry — see [Security Alerts](#security-alerts-optional)
-- **Optional** full **Vehicle Control** page (climate, charging, locks, sentry, frunk/trunk, windows, seat heaters, OTA, valet, speed limit, media…) once Fleet API + virtual key are paired — see [Vehicle Control](#vehicle-control-page-optional)
+- **Multi-account aware**: link multiple Tesla identities to the same TeslaHub instance (typical use case: a couple where each spouse owns their own car). Every command is routed with the right owner's OAuth token automatically.
 
 TeslaMate remains your telemetry source. TeslaHub is the UX layer.
 
@@ -268,7 +269,21 @@ TeslaHub can optionally connect to your Tesla account via the official **Tesla F
   - **No vampire drain.** A `wake_up` is issued only on explicit user action (a click); TeslaHub never wakes cars in the background or polls them on a schedule for live data — Fleet Telemetry handles that *push*-side. Tesla puts the car back to sleep on its own after ~10–15 min of inactivity. A handful of intentional wake-ups per day costs less than 1% SoC and stays well inside Tesla's $10/month free Fleet API tier.
 - 🛠 Full setup wizard inside TeslaHub Settings — copy-paste for every Tesla developer app field, QR code for vehicle pairing, "Send test" button for Telegram.
 
-> **One Fleet API setup powers every TeslaHub feature that talks to the car.** Sentry / break-in alerts and *Send destination to car* both rely on the same Tesla developer app, the same OAuth flow, and the same paired virtual key. Once Security Alerts is configured, *Send to car* lights up automatically (and vice-versa). If you see a "Tesla Fleet API not configured" banner inside the map's Send-to-car panel, complete the wizard at Settings → Security Alerts first.
+> **One Fleet API setup powers every TeslaHub feature that talks to the car.** Sentry / break-in alerts, *Send destination to car*, **and the full Vehicle Control page** all rely on the same Tesla developer app, the same OAuth flow, and the same paired virtual key. Once one of these features is configured, the others light up automatically. If you see a "Tesla Fleet API not configured" banner anywhere, complete the wizard at Settings → Tesla integration first.
+
+### Multi-account support (couples / shared TeslaHub)
+
+TeslaHub supports linking **several Tesla identities** to the same instance. Typical use case: a couple where each spouse owns their own car, sharing one TeslaHub on their home server. Each car is then reached with the OAuth token of its **actual owner** (mandatory — Tesla rejects signed commands sent with a non-owner Driver token).
+
+Concretely, when both accounts are linked:
+
+- Settings → Tesla integration shows **one card per linked account** (token expiry, vehicle count, refresh / disconnect per account). A "Connect another Tesla account" button below opens the OAuth flow again for the second identity.
+- The pairing wizard shows **all vehicles from all accounts** (shared cars appear under both — that's expected, Tesla shares them in both directions when a partner adds you as Driver). Each row indicates which Tesla account it belongs to so you can pair the key from the right phone.
+- Backend stores one `TeslaVehicle` row per `(TeslaAccountId, Vin)` pair (unique index). The Control / Send-to-car commands look up the right row by VIN and route the request through the owner's OAuth token automatically.
+- The BottomNav, Control page and Home quick-action chips dedupe by VIN at display time and prefer the row whose `KeyPaired = true` — so the user never sees the duplicate entries that exist in the pairing wizard.
+- A self-heal mechanism flips `KeyPaired = false` automatically when Tesla rejects a signed command with `vehicle rejected request: your public key has not been paired`, so a Driver-only row that was optimistically marked paired cleans itself up at the first failed command.
+
+The setup flow on the second account is exactly the same as the first one — done from the second person's phone (so Tesla auto-uses *their* identity in the OAuth login), then they scan the same pairing QR / tap the same `tesla.com/_ak/<your-domain>` link to pair the TeslaHub virtual key on their car, from their phone.
 
 ### Vehicle Control page (optional)
 
@@ -283,6 +298,8 @@ Once the Tesla Fleet API + virtual-key pairing described above is in place, a ne
 | **Media** | play / pause, next / previous track, next / previous favorite, volume up / down |
 | **Software updates** | schedule update (1 min / 1 h / 6 h offset), cancel a scheduled update with confirmation dialog |
 | **Navigation** | one-tap link to the map, where the existing *Send to car* panel handles geocoding, multi-car broadcast, and live wake feedback |
+
+> **Out of scope on purpose**: charge / departure scheduling (`set_scheduled_charging`, `set_scheduled_departure`, `add_charge_schedule`, `add_precondition_schedule`). These are intentionally **delegated to the Tesla mobile app** to avoid duplicating an entire date-picker / day-of-week / lat-lon UI for a feature that is already polished in the official app. TeslaHub's Control page focuses on the actions the in-car app limits to 4 shortcuts (climate, locks, openings, sentry, media…), not on scheduling. If you want them later, the proxy supports the commands — just ask.
 
 #### Auto-wake, single semaphore per vehicle
 Tap any control on a sleeping car and TeslaHub fires `wake_up`, polls `GET /vehicles/{id}` until the car reports `state="online"` (progressive back-off 2 s → 3 s → 5 s, capped at 60 s), then retries the original command. The button shows a spinner the whole time and switches to a *"Waking your Tesla…"* hint after 4 s. A `ConcurrentDictionary<vehicleId, SemaphoreSlim>` ensures only one wake per car is ever in flight, no matter how many buttons the user taps in succession — Tesla rate-limits `wake_up` to 3 / minute / vehicle.
@@ -313,7 +330,7 @@ Verified against `teslamotors/vehicle-command/pkg/proxy/command.go`:
 
 | Path | How TeslaHub sends it |
 |---|---|
-| `command/auto_conditioning_*`, `set_temps`, `remote_seat_*`, `set_climate_keeper_mode`, `door_lock/unlock`, `actuate_trunk`, `window_control`, `charge_start/stop`, `set_charge_limit`, `set_sentry_mode`, `schedule_software_update`, `cancel_software_update`, `set_valet_mode`, `speed_limit_*`, `media_*`, `flash_lights`, `honk_horn`, `remote_start_drive`, `add_charge_schedule`, `add_precondition_schedule`, `set_preconditioning_max`, `set_cabin_overheat_protection`, `set_cop_temp`, `trigger_homelink` | **Signed via local `tesla-http-proxy`** (the proxy adds the partner-key signature on top of the user bearer token, then forwards to `fleet-api.prd.<region>`). |
+| `command/auto_conditioning_*`, `set_temps`, `remote_seat_*`, `set_climate_keeper_mode`, `door_lock/unlock`, `actuate_trunk`, `window_control`, `charge_start/stop`, `set_charge_limit`, `set_charging_amps`, `charge_port_door_*`, `set_sentry_mode`, `schedule_software_update`, `cancel_software_update`, `set_valet_mode`, `speed_limit_*`, `media_*`, `flash_lights`, `honk_horn`, `set_preconditioning_max`, `set_cabin_overheat_protection`, `set_cop_temp` | **Signed via local `tesla-http-proxy`** (the proxy adds the partner-key signature on top of the user bearer token, then forwards to `fleet-api.prd.<region>`). |
 | `wake_up` (no `command/` prefix) | **Plain REST** straight to `fleet-api.prd.<region>` — Tesla cannot verify a signature from a sleeping car. |
 | `command/share` (navigation_request, used by *Send to car*) | **Plain REST** — the proxy returns `ErrCommandUseRESTAPI` because Tesla parses the address server-side. |
 | `vehicle_data`, `GET /vehicles/{id}` | **Plain REST** — read-only, never signed. |
@@ -794,13 +811,16 @@ Pairing TeslaHub as a third-party virtual key on a vehicle (the QR code step) is
 | TeslaHub **can** do (signed via tesla-http-proxy) | TeslaHub **cannot** do |
 |---|---|
 | Lock / unlock the vehicle | Drive the car (only physical key cards / paired phones can authorise driving) |
-| Open frunk / trunk / charge port | Push a software / OTA update |
-| Arm / disarm Sentry mode | Change vehicle configuration (regen, range, etc.) |
-| Honk / flash lights | Anything that requires the owner's phone for biometric approval |
-| Climate control / preconditioning | |
-| Set / start / stop charging | |
+| Open frunk / trunk / charge port + unlock cable | Change vehicle configuration (regen, range, etc.) |
+| Arm / disarm Sentry mode + Valet (PIN) + Speed Limit (PIN) | Anything that requires the owner's phone for biometric approval |
+| Honk / flash lights, vent / close windows | Tesla "Boombox" / Fart sounds (Tesla retired it from the signed Fleet API) |
+| Climate: A/C on/off, target temps (dual-zone), seat heaters, steering wheel heater, dog/camp/keep modes, defrost, cabin overheat protection | Charge / departure scheduling (intentionally delegated to the official Tesla mobile app — see the Control-page note above) |
+| Charging: start / stop, set charge limit, set charging amps, charge port door | |
+| Schedule / cancel software (OTA) updates | |
+| Media: play / pause / next / prev / favorites / volume | |
+| Send navigation destination (REST direct, not signed) | |
 
-Today TeslaHub uses these capabilities only for the telemetry-config call and (optionally) the *send destination to car* feature. Future UI commands will be opt-in. Either way, the **partner private key** is the keys to the kingdom: anyone who can read it (your DB *and* your `.env`) can replay the same commands.
+All of these are exposed in the **Vehicle Control page** today. The **partner private key** is the keys to the kingdom: anyone who can read it (your DB *and* your `.env`) can replay the same commands.
 
 **Concrete recommendations for self-hosters:**
 
