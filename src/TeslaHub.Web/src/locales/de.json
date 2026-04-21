@@ -28,6 +28,7 @@
   },
   "nav": {
     "home": "Start",
+    "control": "Steuerung",
     "charging": "Laden",
     "dcCurve": "DC-Kurve",
     "trips": "Fahrten",
@@ -47,8 +48,173 @@
     "database": "Datenbank",
     "dashboard": "Dashboard"
   },
+  "control": {
+    "loading": "Fahrzeug wird geladen…",
+    "wake": "Aufwecken",
+    "refresh": "Aktualisieren",
+    "asleepHint": "Das Fahrzeug schläft — tippen Sie auf eine Taste, um es vor dem Senden eines Befehls aufzuwecken.",
+    "state": {
+      "online": "Online",
+      "asleep": "Schläft",
+      "offline": "Offline",
+      "unknown": "Unbekannt"
+    },
+    "feedback": {
+      "sending": "Senden…",
+      "waking": "Tesla wird geweckt…"
+    },
+    "setup": {
+      "configure": {
+        "title": "Fleet-API nicht konfiguriert",
+        "body": "Hinterlegen Sie Ihre Tesla-Entwicklerdaten in den Einstellungen, um die Fernsteuerung zu aktivieren."
+      },
+      "connect": {
+        "title": "Tesla-Konto nicht verbunden",
+        "body": "Verbinden Sie Ihr Tesla-Konto unter Einstellungen → Tesla-Integration."
+      },
+      "syncVehicles": {
+        "title": "Kein Fahrzeug synchronisiert",
+        "body": "Synchronisieren Sie Ihre Fahrzeuge unter Einstellungen → Tesla-Integration."
+      },
+      "pairKey": {
+        "title": "Virtuellen Schlüssel koppeln",
+        "body": "{{name}} kann keine Befehle annehmen, bevor der TeslaHub-Schlüssel in der Tesla-App gekoppelt ist."
+      },
+      "goToSettings": "Einstellungen öffnen"
+    },
+    "climate": {
+      "title": "Klimaanlage",
+      "start": "Start",
+      "stop": "Stopp",
+      "driver": "Fahrer",
+      "passenger": "Beifahrer",
+      "sync": "Sync",
+      "inside": "Innen",
+      "outside": "Außen",
+      "precondition": "Vorklim.",
+      "steeringWheel": "Lenkrad",
+      "bioweapon": "Biowaffenmodus",
+      "bioweaponHint": "Biowaffen-Verteidigungsmodus (nur Model S/X)",
+      "seatHeaters": "Sitzheizung",
+      "seatHeaterLevel": "Heizstufe",
+      "seat": {
+        "frontLeft": "Fahrer",
+        "frontRight": "Beifahrer",
+        "rearLeft": "Hinten links",
+        "rearCenter": "Hinten Mitte",
+        "rearRight": "Hinten rechts",
+        "thirdRowLeft": "3. Reihe L",
+        "thirdRowRight": "3. Reihe R"
+      },
+      "keeperMode": "Klimakomfort",
+      "keeper": {
+        "off": "Aus",
+        "on": "Halten",
+        "dog": "Hund",
+        "camp": "Camping"
+      },
+      "copTitle": "Innenraum-Überhitzungsschutz",
+      "cop": {
+        "off": "Aus",
+        "fanOnly": "Ohne A/C",
+        "on": "An"
+      }
+    },
+    "charge": {
+      "title": "Laden",
+      "charging": "Lädt",
+      "plugged": "Eingesteckt",
+      "disconnected": "Getrennt",
+      "limit": "Ladegrenze",
+      "amps": "Ladestrom",
+      "start": "Start",
+      "stop": "Stopp",
+      "openPort": "Klappe öffnen",
+      "closePort": "Klappe schließen"
+    },
+    "access": {
+      "title": "Zugang",
+      "lock": "Verriegeln",
+      "unlock": "Entriegeln",
+      "sentry": "Wächter",
+      "flash": "Lichthupe",
+      "honk": "Hupe",
+      "valet": "Valet",
+      "speedLimit": "Tempolimit",
+      "speedLimit.activate": "Aktivieren",
+      "speedLimit.deactivate": "Deaktivieren",
+      "speedLimit.pinHint": "Geben Sie Ihren 4-stelligen Tesla-Tempolimit-PIN ein.",
+      "valet.enable": "Valet-Modus aktivieren",
+      "valet.disable": "Valet-Modus deaktivieren",
+      "valet.pinHint": "Geben Sie den 4-stelligen PIN zum Aktivieren oder Deaktivieren des Valet-Modus ein."
+    },
+    "openings": {
+      "title": "Öffnungen",
+      "frunkOpen": "Frunk öffnen",
+      "frunkClose": "Frunk schließen",
+      "trunkOpen": "Kofferraum öffnen",
+      "trunkClose": "Kofferraum schließen",
+      "vent": "Fenster lüften",
+      "close": "Fenster schließen"
+    },
+    "media": {
+      "title": "Medien",
+      "play": "Wiedergabe / Pause",
+      "next": "Nächster",
+      "prev": "Vorheriger",
+      "nextFav": "Nächster Favorit",
+      "prevFav": "Vorheriger Favorit",
+      "volumeUp": "Lautstärke +",
+      "volumeDown": "Lautstärke −"
+    },
+    "software": {
+      "title": "Software-Update",
+      "version": "Version",
+      "schedule": {
+        "now": "In 1 Min.",
+        "in1h": "In 1 h",
+        "in6h": "In 6 h"
+      },
+      "cancel": "Update abbrechen",
+      "cancelConfirm": {
+        "title": "Update abbrechen?",
+        "body": "Das Update wird nicht installiert. Sie können es später erneut planen, wenn es noch verfügbar ist.",
+        "confirm": "Update abbrechen",
+        "cancel": "Geplant lassen"
+      },
+      "status": {
+        "available": "Verfügbar",
+        "scheduled": "Geplant",
+        "downloading": "Wird geladen",
+        "downloading_wifi_wait": "Warten auf WLAN",
+        "installing": "Installation",
+        "unknown": "Ausstehend"
+      }
+    },
+    "navigation": {
+      "openMap": "Ziel von der Karte senden"
+    },
+    "pin": {
+      "confirm": "Bestätigen",
+      "cancel": "Abbrechen",
+      "clear": "Löschen"
+    }
+  },
   "home": {
     "loadingVehicle": "Fahrzeugdaten werden geladen...",
+    "quickActions": {
+      "title": "Schnellaktionen",
+      "more": "Mehr",
+      "locked": "Verriegelt",
+      "unlocked": "Entriegelt",
+      "sentry": "Wächter",
+      "frunk": "Frunk",
+      "trunk": "Kofferraum",
+      "vent": "Lüften",
+      "closeWindows": "Schließen",
+      "flash": "Lichthupe",
+      "honk": "Hupe"
+    },
     "medianDist": "Medianstrecke",
     "avgDistDay": "Ø Dist/Tag",
     "avgKwhDay": "Ø kWh/Tag",

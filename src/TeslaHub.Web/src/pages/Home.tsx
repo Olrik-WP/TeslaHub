@@ -14,6 +14,7 @@ import StatCard from '../components/StatCard';
 import VehicleTopView from '../components/VehicleTopView';
 import GoToCarSheet from '../components/GoToCarSheet';
 import SecurityAlertsTeaser from '../components/SecurityAlertsTeaser';
+import HomeQuickActions from '../components/HomeQuickActions';
 import { getStats, getChargingStats, getDriveStats, getSettings, getCostOverrides, getCostSummary, getTeslaMateCostSummary, getCarConfig } from '../api/queries';
 import type { VehicleStatus } from '../api/queries';
 import { useTranslation } from 'react-i18next';
@@ -500,6 +501,9 @@ export default function Home({ carId }: Props) {
 
       {/* Vehicle status: TPMS, Body, Climate */}
       <VehicleTopView vehicle={vehicle} />
+
+      {/* Fleet API quick actions (silent if MQTT/Fleet/key not all present). */}
+      <HomeQuickActions vehicle={vehicle} />
 
       {/* Stats grid */}
       <div className="grid grid-cols-3 gap-3">

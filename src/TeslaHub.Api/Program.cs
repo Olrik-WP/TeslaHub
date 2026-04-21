@@ -55,6 +55,7 @@ builder.Services.AddScoped<TeslaFleetApiClient>();
 builder.Services.AddScoped<TeslaPairingService>();
 builder.Services.AddSingleton<TelegramNotificationService>();
 builder.Services.AddScoped<SecurityAlertService>();
+builder.Services.AddScoped<TeslaCommandService>();
 builder.Services.AddScoped<TeslaShareService>();
 builder.Services.AddHostedService<TeslaTokenRefreshBackgroundService>();
 builder.Services.AddHostedService<TeslaTelemetryConsumer>();
@@ -190,6 +191,7 @@ app.MapTripEndpoints();
 app.MapTeslaOAuthEndpoints();
 app.MapTeslaPairingEndpoints();
 app.MapTeslaShareEndpoints();
+app.MapTeslaControlEndpoints();
 app.MapSecurityAlertsEndpoints();
 app.MapChargersEndpoints();
 

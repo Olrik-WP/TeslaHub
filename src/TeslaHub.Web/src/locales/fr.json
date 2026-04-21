@@ -28,6 +28,7 @@
   },
   "nav": {
     "home": "Accueil",
+    "control": "Contrôle",
     "charging": "Charge",
     "dcCurve": "DC Curve",
     "trips": "Trajets",
@@ -47,8 +48,173 @@
     "database": "Base",
     "dashboard": "Compteur"
   },
+  "control": {
+    "loading": "Chargement du véhicule…",
+    "wake": "Réveiller",
+    "refresh": "Rafraîchir",
+    "asleepHint": "Le véhicule est en veille — touchez un bouton pour le réveiller avant d'envoyer une commande.",
+    "state": {
+      "online": "En ligne",
+      "asleep": "En veille",
+      "offline": "Hors ligne",
+      "unknown": "Inconnu"
+    },
+    "feedback": {
+      "sending": "Envoi…",
+      "waking": "Réveil de la voiture…"
+    },
+    "setup": {
+      "configure": {
+        "title": "API Fleet non configurée",
+        "body": "Renseignez vos identifiants développeur Tesla dans Réglages pour activer le contrôle à distance."
+      },
+      "connect": {
+        "title": "Compte Tesla non connecté",
+        "body": "Connectez votre compte Tesla dans Réglages → Intégration Tesla."
+      },
+      "syncVehicles": {
+        "title": "Aucun véhicule synchronisé",
+        "body": "Synchronisez vos véhicules dans Réglages → Intégration Tesla."
+      },
+      "pairKey": {
+        "title": "Pairer la clé virtuelle",
+        "body": "{{name}} ne peut pas accepter de commandes tant que la clé virtuelle TeslaHub n'est pas pairée depuis l'application Tesla."
+      },
+      "goToSettings": "Ouvrir les Réglages"
+    },
+    "climate": {
+      "title": "Climatisation",
+      "start": "Démarrer",
+      "stop": "Arrêter",
+      "driver": "Conducteur",
+      "passenger": "Passager",
+      "sync": "Sync",
+      "inside": "Intérieur",
+      "outside": "Extérieur",
+      "precondition": "Précond.",
+      "steeringWheel": "Volant",
+      "bioweapon": "Biodéfense",
+      "bioweaponHint": "Mode défense biologique (Model S/X uniquement)",
+      "seatHeaters": "Sièges chauffants",
+      "seatHeaterLevel": "Niveau de chauffage",
+      "seat": {
+        "frontLeft": "Conducteur",
+        "frontRight": "Passager",
+        "rearLeft": "AR-G",
+        "rearCenter": "AR-M",
+        "rearRight": "AR-D",
+        "thirdRowLeft": "3e rang G",
+        "thirdRowRight": "3e rang D"
+      },
+      "keeperMode": "Mode prolongé",
+      "keeper": {
+        "off": "Arrêt",
+        "on": "Garder",
+        "dog": "Animal",
+        "camp": "Camping"
+      },
+      "copTitle": "Protection surchauffe habitacle",
+      "cop": {
+        "off": "Arrêt",
+        "fanOnly": "Sans A/C",
+        "on": "Marche"
+      }
+    },
+    "charge": {
+      "title": "Recharge",
+      "charging": "En charge",
+      "plugged": "Branché",
+      "disconnected": "Débranché",
+      "limit": "Limite de charge",
+      "amps": "Ampérage",
+      "start": "Démarrer",
+      "stop": "Arrêter",
+      "openPort": "Ouvrir la trappe",
+      "closePort": "Fermer la trappe"
+    },
+    "access": {
+      "title": "Accès",
+      "lock": "Verrouiller",
+      "unlock": "Déverrouiller",
+      "sentry": "Sentinelle",
+      "flash": "Phares",
+      "honk": "Klaxon",
+      "valet": "Voiturier",
+      "speedLimit": "Limite de vitesse",
+      "speedLimit.activate": "Activer",
+      "speedLimit.deactivate": "Désactiver",
+      "speedLimit.pinHint": "Saisissez votre code PIN à 4 chiffres de limite de vitesse Tesla.",
+      "valet.enable": "Activer le mode voiturier",
+      "valet.disable": "Désactiver le mode voiturier",
+      "valet.pinHint": "Saisissez le code PIN à 4 chiffres pour activer ou désactiver le mode voiturier."
+    },
+    "openings": {
+      "title": "Ouvertures",
+      "frunkOpen": "Ouvrir le frunk",
+      "frunkClose": "Fermer le frunk",
+      "trunkOpen": "Ouvrir le coffre",
+      "trunkClose": "Fermer le coffre",
+      "vent": "Aérer les vitres",
+      "close": "Fermer les vitres"
+    },
+    "media": {
+      "title": "Médias",
+      "play": "Lecture / Pause",
+      "next": "Suivant",
+      "prev": "Précédent",
+      "nextFav": "Favori suivant",
+      "prevFav": "Favori précédent",
+      "volumeUp": "Volume +",
+      "volumeDown": "Volume −"
+    },
+    "software": {
+      "title": "Mise à jour logicielle",
+      "version": "Version",
+      "schedule": {
+        "now": "Dans 1 min",
+        "in1h": "Dans 1 h",
+        "in6h": "Dans 6 h"
+      },
+      "cancel": "Annuler la MAJ",
+      "cancelConfirm": {
+        "title": "Annuler la mise à jour ?",
+        "body": "La mise à jour ne sera pas installée. Vous pourrez la replanifier plus tard si elle est encore disponible.",
+        "confirm": "Annuler la MAJ",
+        "cancel": "Garder planifiée"
+      },
+      "status": {
+        "available": "Disponible",
+        "scheduled": "Planifiée",
+        "downloading": "Téléchargement",
+        "downloading_wifi_wait": "Attente du Wi-Fi",
+        "installing": "Installation",
+        "unknown": "En attente"
+      }
+    },
+    "navigation": {
+      "openMap": "Envoyer une destination depuis la carte"
+    },
+    "pin": {
+      "confirm": "Confirmer",
+      "cancel": "Annuler",
+      "clear": "Effacer"
+    }
+  },
   "home": {
     "loadingVehicle": "Chargement des données...",
+    "quickActions": {
+      "title": "Actions rapides",
+      "more": "Plus",
+      "locked": "Verrouillée",
+      "unlocked": "Déverrouillée",
+      "sentry": "Sentinelle",
+      "frunk": "Frunk",
+      "trunk": "Coffre",
+      "vent": "Aérer",
+      "closeWindows": "Fermer",
+      "flash": "Phares",
+      "honk": "Klaxon"
+    },
     "medianDist": "Dist. médiane",
     "avgDistDay": "Ø Dist/jour",
     "avgKwhDay": "Ø kWh/jour",

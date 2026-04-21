@@ -28,6 +28,7 @@
   },
   "nav": {
     "home": "Home",
+    "control": "Control",
     "charging": "Charge",
     "dcCurve": "DC Curve",
     "trips": "Trips",
@@ -47,8 +48,173 @@
     "database": "Database",
     "dashboard": "Dashboard"
   },
+  "control": {
+    "loading": "Loading vehicle…",
+    "wake": "Wake",
+    "refresh": "Refresh",
+    "asleepHint": "Vehicle is asleep — tap a button to wake it before sending a command.",
+    "state": {
+      "online": "Online",
+      "asleep": "Asleep",
+      "offline": "Offline",
+      "unknown": "Unknown"
+    },
+    "feedback": {
+      "sending": "Sending…",
+      "waking": "Waking your Tesla…"
+    },
+    "setup": {
+      "configure": {
+        "title": "Fleet API not configured",
+        "body": "Set up your Tesla developer credentials in Settings to enable remote control."
+      },
+      "connect": {
+        "title": "Tesla account not connected",
+        "body": "Connect your Tesla account in Settings → Tesla integration."
+      },
+      "syncVehicles": {
+        "title": "No vehicle synced",
+        "body": "Sync your vehicles in Settings → Tesla integration."
+      },
+      "pairKey": {
+        "title": "Pair the virtual key",
+        "body": "{{name}} cannot accept commands until the TeslaHub virtual key is paired from the Tesla mobile app."
+      },
+      "goToSettings": "Open Settings"
+    },
+    "climate": {
+      "title": "Climate",
+      "start": "Start",
+      "stop": "Stop",
+      "driver": "Driver",
+      "passenger": "Passenger",
+      "sync": "Sync",
+      "inside": "Inside",
+      "outside": "Outside",
+      "precondition": "Precondition",
+      "steeringWheel": "Steering wheel",
+      "bioweapon": "Bioweapon",
+      "bioweaponHint": "Bioweapon defense mode (Model S/X only)",
+      "seatHeaters": "Heated seats",
+      "seatHeaterLevel": "Heat level",
+      "seat": {
+        "frontLeft": "Driver",
+        "frontRight": "Passenger",
+        "rearLeft": "Rear left",
+        "rearCenter": "Rear center",
+        "rearRight": "Rear right",
+        "thirdRowLeft": "3rd row L",
+        "thirdRowRight": "3rd row R"
+      },
+      "keeperMode": "Keeper mode",
+      "keeper": {
+        "off": "Off",
+        "on": "Keep",
+        "dog": "Dog",
+        "camp": "Camp"
+      },
+      "copTitle": "Cabin overheat protection",
+      "cop": {
+        "off": "Off",
+        "fanOnly": "No A/C",
+        "on": "On"
+      }
+    },
+    "charge": {
+      "title": "Charging",
+      "charging": "Charging",
+      "plugged": "Plugged in",
+      "disconnected": "Disconnected",
+      "limit": "Charge limit",
+      "amps": "Charging amps",
+      "start": "Start",
+      "stop": "Stop",
+      "openPort": "Open port",
+      "closePort": "Close port"
+    },
+    "access": {
+      "title": "Access",
+      "lock": "Lock",
+      "unlock": "Unlock",
+      "sentry": "Sentry",
+      "flash": "Flash",
+      "honk": "Horn",
+      "valet": "Valet",
+      "speedLimit": "Speed limit",
+      "speedLimit.activate": "Activate",
+      "speedLimit.deactivate": "Deactivate",
+      "speedLimit.pinHint": "Enter your 4-digit Tesla speed limit PIN.",
+      "valet.enable": "Enable valet mode",
+      "valet.disable": "Disable valet mode",
+      "valet.pinHint": "Enter the 4-digit PIN to set or clear valet mode."
+    },
+    "openings": {
+      "title": "Openings",
+      "frunkOpen": "Open frunk",
+      "frunkClose": "Close frunk",
+      "trunkOpen": "Open trunk",
+      "trunkClose": "Close trunk",
+      "vent": "Vent windows",
+      "close": "Close windows"
+    },
+    "media": {
+      "title": "Media",
+      "play": "Play / Pause",
+      "next": "Next",
+      "prev": "Previous",
+      "nextFav": "Next favorite",
+      "prevFav": "Prev favorite",
+      "volumeUp": "Volume +",
+      "volumeDown": "Volume −"
+    },
+    "software": {
+      "title": "Software update",
+      "version": "Version",
+      "schedule": {
+        "now": "In 1 min",
+        "in1h": "In 1 h",
+        "in6h": "In 6 h"
+      },
+      "cancel": "Cancel update",
+      "cancelConfirm": {
+        "title": "Cancel software update?",
+        "body": "The update will not install. You can re-schedule it later if it is still available.",
+        "confirm": "Cancel update",
+        "cancel": "Keep scheduled"
+      },
+      "status": {
+        "available": "Available",
+        "scheduled": "Scheduled",
+        "downloading": "Downloading",
+        "downloading_wifi_wait": "Waiting for Wi-Fi",
+        "installing": "Installing",
+        "unknown": "Pending"
+      }
+    },
+    "navigation": {
+      "openMap": "Send a destination from the map"
+    },
+    "pin": {
+      "confirm": "Confirm",
+      "cancel": "Cancel",
+      "clear": "Clear"
+    }
+  },
   "home": {
     "loadingVehicle": "Loading vehicle data...",
+    "quickActions": {
+      "title": "Quick actions",
+      "more": "More",
+      "locked": "Locked",
+      "unlocked": "Unlocked",
+      "sentry": "Sentry",
+      "frunk": "Frunk",
+      "trunk": "Trunk",
+      "vent": "Vent",
+      "closeWindows": "Close",
+      "flash": "Flash",
+      "honk": "Horn"
+    },
     "medianDist": "Median dist.",
     "avgDistDay": "Ø Dist/day",
     "avgKwhDay": "Ø kWh/day",

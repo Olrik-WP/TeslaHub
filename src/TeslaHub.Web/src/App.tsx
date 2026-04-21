@@ -30,6 +30,7 @@ const DatabaseInfo = lazy(() => import('./pages/DatabaseInfo'));
 const Locations = lazy(() => import('./pages/Locations'));
 const Trip = lazy(() => import('./pages/Trip'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Control = lazy(() => import('./pages/Control'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -160,12 +161,13 @@ function AppLayout() {
               <Route path="/locations" element={<Locations carId={selectedCarId} />} />
               <Route path="/trip" element={<Trip carId={selectedCarId} />} />
               <Route path="/dashboard" element={<Dashboard carId={selectedCarId} />} />
+              <Route path="/control" element={<Control carId={selectedCarId} />} />
               <Route path="/settings" element={<Settings carId={selectedCarId} />} />
             </Routes>
           </Suspense>
         </ErrorBoundary>
       </div>
-      <BottomNav />
+      <BottomNav carId={selectedCarId} />
     </div>
   );
 }

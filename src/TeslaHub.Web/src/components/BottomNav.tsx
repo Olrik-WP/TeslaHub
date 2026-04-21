@@ -1,6 +1,12 @@
-import { useState, useCallback, useEffect, type ReactNode } from 'react';
+import { useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useControlAvailability } from '../hooks/useVehicleControl';
+import { useVehicleStatus } from '../hooks/useVehicle';
+
+interface BottomNavProps {
+  carId?: number;
+}
 
 const S = { size: 20, stroke: 'currentColor', fill: 'none', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
 const Svg = ({ children }: { children: ReactNode }) => (
@@ -26,11 +32,18 @@ const icons: Record<string, ReactNode> = {
   dashboard:  <Svg><circle cx="12" cy="14" r="8" /><path d="M12 14V8" /><path d="M12 14l4 3" /><path d="M8 10h0" /><path d="M16 10h0" /><circle cx="12" cy="14" r="1.5" /></Svg>,
   database:   <Svg><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5" /><path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" /></Svg>,
   settings:   <Svg><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1.08-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" /></Svg>,
+  control:    <Svg><circle cx="6" cy="8" r="2" /><circle cx="18" cy="16" r="2" /><path d="M6 10v8M18 6v8M3 8h2M7 8h14M3 16h14M19 16h2" /></Svg>,
   more:       <Svg><line x1="4" y1="6" x2="20" y2="6" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="18" x2="20" y2="18" /></Svg>,
   close:      <Svg><line x1="6" y1="6" x2="18" y2="18" /><line x1="6" y1="18" x2="18" y2="6" /></Svg>,
 };
 
-const primaryLinks = [
+interface NavLink {
+  to: string;
+  labelKey: string;
+  icon: string;
+}
+
+const primaryLinksBase: NavLink[] = [
   { to: '/', labelKey: 'nav.home', icon: 'home' },
   { to: '/dashboard', labelKey: 'nav.dashboard', icon: 'dashboard' },
   { to: '/charging', labelKey: 'nav.charging', icon: 'charging' },
@@ -38,7 +51,12 @@ const primaryLinks = [
   { to: '/costs', labelKey: 'nav.costs', icon: 'costs' },
 ];
 
-const drawerLinks = [
+// When Fleet API + paired key are available, "Control" replaces /costs in
+// the primary slots (we cap at 5 to keep the bar tap-friendly), and /costs
+// moves to the drawer between /map and /battery.
+const controlLink: NavLink = { to: '/control', labelKey: 'nav.control', icon: 'control' };
+
+const drawerLinksBase: NavLink[] = [
   { to: '/map', labelKey: 'nav.map', icon: 'map' },
   { to: '/charging-stats', labelKey: 'nav.dcCurve', icon: 'dcCurve' },
   { to: '/battery', labelKey: 'nav.battery', icon: 'battery' },
@@ -54,14 +72,41 @@ const drawerLinks = [
   { to: '/settings', labelKey: 'nav.settings', icon: 'settings' },
 ];
 
-const allDrawerPaths = drawerLinks.map((l) => l.to);
-
-export default function BottomNav() {
+export default function BottomNav({ carId }: BottomNavProps = {}) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { data: availability } = useControlAvailability();
+  const { data: vehicleStatus } = useVehicleStatus(carId);
 
+  // Control is offered only when Fleet API is configured AND the
+  // currently-selected car has the virtual key paired. We match by VIN
+  // because TeslaMate carId and TeslaHub TeslaVehicle.Id are different
+  // identifiers from different databases.
+  const showControl = useMemo(() => {
+    if (!availability?.configured || !availability.connected) return false;
+    if (!availability.vehicles?.length) return false;
+    const vin = vehicleStatus?.vin;
+    const match = vin
+      ? availability.vehicles.find((v) => v.vin === vin)
+      : availability.vehicles[0];
+    return !!match?.keyPaired;
+  }, [availability, vehicleStatus?.vin]);
+
+  // primary = home, [control], dashboard, charging, trips. /costs goes
+  // to the drawer when control is present so the bar stays at 5 slots.
+  const { primaryLinks, drawerLinks } = useMemo(() => {
+    if (!showControl) {
+      return { primaryLinks: primaryLinksBase, drawerLinks: drawerLinksBase };
+    }
+    const primary = [primaryLinksBase[0], controlLink, ...primaryLinksBase.slice(1, 4)];
+    const costsLink = primaryLinksBase[4];
+    const drawer = [drawerLinksBase[0], costsLink, ...drawerLinksBase.slice(1)];
+    return { primaryLinks: primary, drawerLinks: drawer };
+  }, [showControl]);
+
+  const allDrawerPaths = useMemo(() => drawerLinks.map((l) => l.to), [drawerLinks]);
   const isDrawerPageActive = allDrawerPaths.some((p) => location.pathname === p);
 
   const close = useCallback(() => setOpen(false), []);

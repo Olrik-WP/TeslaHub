@@ -30,3 +30,7 @@ Thumbs.db
 
 # TeslaMate
 # ExempleTeslaMateRepo/
+
+# Tesla upstream sources kept locally for reference, never committed
+vehicle-command-src/
+fleet-telemetry-src/
