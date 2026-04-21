@@ -1,9 +1,20 @@
 import type { VehicleStateSnapshot } from '../../hooks/useVehicleControl';
+import type { VehicleStatus } from '../../api/queries';
 
 /**
  * Tiny defensive parsers for the raw Fleet API JSON sub-trees we pass
  * through from the backend. We keep the SPA decoupled from a tightly-
  * typed C# DTO so Tesla can add fields without us shipping a release.
+ *
+ * Anti-vampire-drain hydration:
+ * Each reader optionally accepts the live TeslaMate VehicleStatus as a
+ * fallback. When the Fleet snapshot is empty (sleeping car: we never
+ * call vehicle_data on asleep cars) we fall back to the MQTT-pushed
+ * values that TeslaMate already broadcasts. Only fields where Fleet
+ * has nothing get the MQTT fallback — once the car is online and we
+ * have fresh Fleet data, that wins. COP / seat heaters / bioweapon /
+ * valet / software_update are NOT in TeslaMate MQTT, so they remain
+ * unknown until the user explicitly wakes the car.
  */
 
 function parse<T = Record<string, unknown>>(raw: string | null | undefined): Partial<T> {
@@ -110,16 +121,75 @@ export interface DriveState {
   gps_as_of?: number;
 }
 
-export function readClimate(snapshot: VehicleStateSnapshot | undefined): ClimateState {
-  return parse<ClimateState>(snapshot?.climateStateJson ?? null);
+function withFallback<T>(primary: T | undefined, fallback: T | null | undefined): T | undefined {
+  return primary !== undefined ? primary : fallback ?? undefined;
 }
 
-export function readCharge(snapshot: VehicleStateSnapshot | undefined): ChargeState {
-  return parse<ChargeState>(snapshot?.chargeStateJson ?? null);
+export function readClimate(
+  snapshot: VehicleStateSnapshot | undefined,
+  mqtt?: VehicleStatus,
+): ClimateState {
+  const fleet = parse<ClimateState>(snapshot?.climateStateJson ?? null);
+  if (!mqtt) return fleet;
+  return {
+    ...fleet,
+    is_climate_on: withFallback(fleet.is_climate_on, mqtt.isClimateOn),
+    is_auto_conditioning_on: withFallback(fleet.is_auto_conditioning_on, mqtt.isClimateOn),
+    is_preconditioning: withFallback(fleet.is_preconditioning, mqtt.isPreconditioning),
+    is_front_defroster_on: withFallback(fleet.is_front_defroster_on, mqtt.isFrontDefrosterOn),
+    is_rear_defroster_on: withFallback(fleet.is_rear_defroster_on, mqtt.isRearDefrosterOn),
+    driver_temp_setting: withFallback(fleet.driver_temp_setting, mqtt.driverTempSetting),
+    passenger_temp_setting: withFallback(fleet.passenger_temp_setting, mqtt.passengerTempSetting),
+    inside_temp: withFallback(fleet.inside_temp, mqtt.insideTemp),
+    outside_temp: withFallback(fleet.outside_temp, mqtt.outsideTemp),
+    climate_keeper_mode: withFallback(fleet.climate_keeper_mode, mqtt.climateKeeperMode),
+  };
 }
 
-export function readVehicle(snapshot: VehicleStateSnapshot | undefined): VehicleState {
-  return parse<VehicleState>(snapshot?.vehicleStateJson ?? null);
+export function readCharge(
+  snapshot: VehicleStateSnapshot | undefined,
+  mqtt?: VehicleStatus,
+): ChargeState {
+  const fleet = parse<ChargeState>(snapshot?.chargeStateJson ?? null);
+  if (!mqtt) return fleet;
+  return {
+    ...fleet,
+    battery_level: withFallback(fleet.battery_level, mqtt.batteryLevel),
+    charging_state: withFallback(fleet.charging_state, mqtt.chargingState),
+    charge_port_door_open: withFallback(fleet.charge_port_door_open, mqtt.chargePortDoorOpen),
+    charge_limit_soc: withFallback(fleet.charge_limit_soc, mqtt.chargeLimitSoc),
+    charger_actual_current: withFallback(fleet.charger_actual_current, mqtt.chargerActualCurrent),
+    charger_voltage: withFallback(fleet.charger_voltage, mqtt.chargerVoltage),
+    charger_power: withFallback(fleet.charger_power, mqtt.chargerPower),
+    time_to_full_charge: withFallback(fleet.time_to_full_charge, mqtt.timeToFullCharge),
+    charge_energy_added: withFallback(fleet.charge_energy_added, mqtt.chargeEnergyAdded),
+  };
+}
+
+export function readVehicle(
+  snapshot: VehicleStateSnapshot | undefined,
+  mqtt?: VehicleStatus,
+): VehicleState {
+  const fleet = parse<VehicleState>(snapshot?.vehicleStateJson ?? null);
+  if (!mqtt) return fleet;
+  return {
+    ...fleet,
+    locked: withFallback(fleet.locked, mqtt.isLocked),
+    sentry_mode: withFallback(fleet.sentry_mode, mqtt.sentryMode),
+    is_user_present: withFallback(fleet.is_user_present, mqtt.isUserPresent),
+    odometer: withFallback(fleet.odometer, mqtt.odometer),
+    car_version: withFallback(fleet.car_version, mqtt.firmwareVersion),
+    // TeslaMate exposes only an aggregate "open" boolean per opening,
+    // not the raw CAN value the Fleet API returns. We coerce true→1 so
+    // the existing >0 checks in OpeningsCard still work, and leave the
+    // detailed door-by-door values undefined when MQTT is the source.
+    ft: withFallback(fleet.ft, mqtt.frunkOpen ? 1 : 0),
+    rt: withFallback(fleet.rt, mqtt.trunkOpen ? 1 : 0),
+    fd_window: withFallback(fleet.fd_window, mqtt.windowsOpen ? 1 : 0),
+    fp_window: withFallback(fleet.fp_window, mqtt.windowsOpen ? 1 : 0),
+    rd_window: withFallback(fleet.rd_window, mqtt.windowsOpen ? 1 : 0),
+    rp_window: withFallback(fleet.rp_window, mqtt.windowsOpen ? 1 : 0),
+  };
 }
 
 export function readDrive(snapshot: VehicleStateSnapshot | undefined): DriveState {

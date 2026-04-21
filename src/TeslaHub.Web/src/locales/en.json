@@ -53,6 +53,7 @@
     "wake": "Wake",
     "refresh": "Refresh",
     "asleepHint": "Vehicle is asleep — tap a button to wake it before sending a command.",
+    "staleHint": "Vehicle is asleep — values shown come from your local TeslaMate cache. Some advanced settings (cabin overheat, seat heaters, bioweapon, valet, software update) won't be visible until you wake the car.",
     "state": {
       "online": "Online",
       "asleep": "Asleep",
@@ -79,6 +80,10 @@
       "pairKey": {
         "title": "Pair the virtual key",
         "body": "{{name}} cannot accept commands until the TeslaHub virtual key is paired from the Tesla mobile app."
+      },
+      "vinMismatch": {
+        "title": "Vehicle not found in Fleet API",
+        "body": "{{name}} is in TeslaMate but is not synced as a Fleet API vehicle yet. Open Settings → Tesla integration and re-sync your vehicles, then pair the virtual key for this car."
       },
       "goToSettings": "Open Settings"
     },
@@ -130,7 +135,9 @@
       "start": "Start",
       "stop": "Stop",
       "openPort": "Open port",
-      "closePort": "Close port"
+      "closePort": "Close port",
+      "unlockCable": "Unlock cable",
+      "unlockCableHint": "Releases the charging cable lock so you can unplug it."
     },
     "access": {
       "title": "Access",

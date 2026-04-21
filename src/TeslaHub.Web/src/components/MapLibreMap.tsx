@@ -3,7 +3,7 @@ import { Map, Source, Layer, Marker, Popup, NavigationControl } from 'react-map-
 import type { MapRef, MapLayerMouseEvent } from 'react-map-gl/maplibre';
 import type { LngLatBoundsLike } from 'maplibre-gl';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useMapStyle, setup3D } from '../hooks/useMapStyle';
 import MapStylePicker from './MapStylePicker';
 import { getChargers, getSettings, type PublicCharger, type ChargerConnection } from '../api/queries';
@@ -54,6 +54,12 @@ interface MapLibreMapProps {
   /** When provided, the charger popup shows a "Send to Vehicle" button
    *  that pre-fills the destination pin with the station's coordinates. */
   onSendChargerToCar?: (latitude: number, longitude: number) => void;
+  /** Imperative camera target. The parent bumps this whenever it wants
+   *  the map to recentre (e.g. after a city search picks a result). The
+   *  effect compares the *reference*, not the values, so the parent must
+   *  pass a fresh object each time it wants a new fly-to to fire — even
+   *  if the coordinates happen to match a previous one. */
+  flyTo?: { latitude: number; longitude: number; zoom?: number } | null;
 }
 
 const CHARGER_SOURCE_ID = 'public-chargers';
@@ -217,6 +223,7 @@ export default function MapLibreMap({
   dimHistorical = false,
   showPublicChargers = false,
   onSendChargerToCar,
+  flyTo = null,
 }: MapLibreMapProps) {
   const { t } = useTranslation();
   const mapRef = useRef<MapRef>(null);
@@ -297,6 +304,10 @@ export default function MapLibreMap({
     enabled: chargersEnabled,
     staleTime: 10 * 60_000,
     gcTime: 60 * 60_000,
+    // Keep the previous bbox's markers visible while the new bbox is being
+    // fetched. Without this every pan/zoom briefly drops the layer to []
+    // and the icons "flicker" off then back on as the new tile resolves.
+    placeholderData: keepPreviousData,
   });
   const chargers = chargersResponse?.items;
   const chargersWarning = chargersResponse?.warning ?? null;
@@ -424,6 +435,22 @@ export default function MapLibreMap({
       duration: 900,
     });
   }, [followLive, mapReady, livePosition?.latitude, livePosition?.longitude, pitch, bearing]);
+
+  // Imperative recentre on demand (city search, "go to coordinates", …).
+  // We fire on identity change of the `flyTo` object so the parent can
+  // re-trigger the same coordinate by simply passing a fresh reference.
+  useEffect(() => {
+    if (!flyTo || !mapReady) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    programmaticMoveRef.current = true;
+    map.flyTo({
+      center: [flyTo.longitude, flyTo.latitude],
+      zoom: flyTo.zoom ?? Math.max(map.getZoom(), 14),
+      duration: 900,
+      essential: true,
+    });
+  }, [flyTo, mapReady]);
 
   // Detect manual user interaction (drag / wheel zoom / touch) and let the parent
   // disable auto-follow. The internal flag lets us ignore programmatic easeTo events.

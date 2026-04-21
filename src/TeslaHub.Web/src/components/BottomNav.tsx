@@ -51,10 +51,12 @@ const primaryLinksBase: NavLink[] = [
   { to: '/costs', labelKey: 'nav.costs', icon: 'costs' },
 ];
 
-// When Fleet API + paired key are available, "Control" replaces /costs in
-// the primary slots (we cap at 5 to keep the bar tap-friendly), and /costs
-// moves to the drawer between /map and /battery.
+// When Fleet API + paired key are available, "Control" + "Map" are added
+// to the primary slots (Map sits right after Control so the two
+// most-used live actions are adjacent), and /costs moves to the drawer
+// to keep the bar from overflowing.
 const controlLink: NavLink = { to: '/control', labelKey: 'nav.control', icon: 'control' };
+const mapLink: NavLink = { to: '/map', labelKey: 'nav.map', icon: 'map' };
 
 const drawerLinksBase: NavLink[] = [
   { to: '/map', labelKey: 'nav.map', icon: 'map' },
@@ -83,26 +85,38 @@ export default function BottomNav({ carId }: BottomNavProps = {}) {
   // Control is offered only when Fleet API is configured AND the
   // currently-selected car has the virtual key paired. We match by VIN
   // because TeslaMate carId and TeslaHub TeslaVehicle.Id are different
-  // identifiers from different databases.
+  // identifiers from different databases. Multi-car safety: never fall
+  // back to vehicles[0] — on accounts where only some cars are paired,
+  // that would expose the Control link for a car that cannot accept
+  // commands.
   const showControl = useMemo(() => {
     if (!availability?.configured || !availability.connected) return false;
     if (!availability.vehicles?.length) return false;
     const vin = vehicleStatus?.vin;
-    const match = vin
-      ? availability.vehicles.find((v) => v.vin === vin)
-      : availability.vehicles[0];
+    if (!vin) return false;
+    const match = availability.vehicles.find((v) => v.vin === vin);
     return !!match?.keyPaired;
   }, [availability, vehicleStatus?.vin]);
 
-  // primary = home, [control], dashboard, charging, trips. /costs goes
-  // to the drawer when control is present so the bar stays at 5 slots.
+  // primary = home, [control, map], dashboard, charging, trips. When the
+  // Fleet API is available we add BOTH /control and /map to the bar (map
+  // right after control) — the user spends most of their time on these
+  // two pages, jumping between them via the drawer was a friction point.
+  // /costs and /map are removed from the drawer to avoid duplicates.
   const { primaryLinks, drawerLinks } = useMemo(() => {
     if (!showControl) {
       return { primaryLinks: primaryLinksBase, drawerLinks: drawerLinksBase };
     }
-    const primary = [primaryLinksBase[0], controlLink, ...primaryLinksBase.slice(1, 4)];
+    const primary = [
+      primaryLinksBase[0], // home
+      controlLink,
+      mapLink,
+      ...primaryLinksBase.slice(1, 4), // dashboard, charging, trips
+    ];
     const costsLink = primaryLinksBase[4];
-    const drawer = [drawerLinksBase[0], costsLink, ...drawerLinksBase.slice(1)];
+    // Drop the standalone /map entry (it now lives in the bar) and
+    // re-insert /costs where /map used to sit.
+    const drawer = [costsLink, ...drawerLinksBase.filter((l) => l.to !== '/map')];
     return { primaryLinks: primary, drawerLinks: drawer };
   }, [showControl]);
 
@@ -115,8 +129,16 @@ export default function BottomNav({ carId }: BottomNavProps = {}) {
     setOpen(false);
   }, [location.pathname]);
 
+  // With 6 primary links + the "more" button we hit 7 slots, which
+  // overflows on the narrowest phones (iPhone SE ≈ 320 CSS px) at the
+  // default 48 px tap target. Tighten the minimum just enough to fit
+  // them all when the bar is "full"; otherwise keep the comfortable
+  // 48 px target.
+  const compactBar = primaryLinks.length >= 6;
   const linkClass = (isActive: boolean) =>
-    `flex flex-col items-center justify-center min-w-[48px] min-h-[56px] rounded-lg text-xs ${
+    `flex flex-col items-center justify-center ${
+      compactBar ? 'min-w-[40px]' : 'min-w-[48px]'
+    } min-h-[56px] rounded-lg text-xs ${
       isActive ? 'text-[#e31937]' : 'text-[#9ca3af]'
     }`;
 

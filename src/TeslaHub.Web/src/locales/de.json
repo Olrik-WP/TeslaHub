@@ -53,6 +53,7 @@
     "wake": "Aufwecken",
     "refresh": "Aktualisieren",
     "asleepHint": "Das Fahrzeug schläft — tippen Sie auf eine Taste, um es vor dem Senden eines Befehls aufzuwecken.",
+    "staleHint": "Das Fahrzeug schläft — die angezeigten Werte stammen aus dem lokalen TeslaMate-Cache. Einige erweiterte Einstellungen (Innenraum-Überhitzungsschutz, Sitzheizung, Biowaffenmodus, Valet, Software-Update) sind erst nach dem Wecken sichtbar.",
     "state": {
       "online": "Online",
       "asleep": "Schläft",
@@ -79,6 +80,10 @@
       "pairKey": {
         "title": "Virtuellen Schlüssel koppeln",
         "body": "{{name}} kann keine Befehle annehmen, bevor der TeslaHub-Schlüssel in der Tesla-App gekoppelt ist."
+      },
+      "vinMismatch": {
+        "title": "Fahrzeug nicht in der Fleet-API",
+        "body": "{{name}} ist in TeslaMate vorhanden, aber noch nicht als Fleet-API-Fahrzeug synchronisiert. Öffnen Sie Einstellungen → Tesla-Integration, synchronisieren Sie Ihre Fahrzeuge erneut und koppeln Sie dann den virtuellen Schlüssel für dieses Fahrzeug."
       },
       "goToSettings": "Einstellungen öffnen"
     },
@@ -130,7 +135,9 @@
       "start": "Start",
       "stop": "Stopp",
       "openPort": "Klappe öffnen",
-      "closePort": "Klappe schließen"
+      "closePort": "Klappe schließen",
+      "unlockCable": "Kabel entriegeln",
+      "unlockCableHint": "Entriegelt das Ladekabel, damit Sie es abziehen können."
     },
     "access": {
       "title": "Zugang",

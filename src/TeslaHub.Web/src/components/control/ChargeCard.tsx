@@ -3,11 +3,13 @@ import { useTranslation } from 'react-i18next';
 import ControlCard from './ControlCard';
 import ControlButton from './ControlButton';
 import { useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
+import type { VehicleStatus } from '../../api/queries';
 import { readCharge } from './stateParsers';
 
 interface Props {
   vehicleId: number;
   snapshot: VehicleStateSnapshot | undefined;
+  vehicleStatus?: VehicleStatus;
   capabilities: VehicleCapabilities;
   online: boolean;
 }
@@ -22,12 +24,18 @@ const ICON = (
  * Charging controls. Sliders are debounced (500ms) before sending the
  * command — Tesla rate-limits us to 30 cmd/min/vehicle.
  */
-export default function ChargeCard({ vehicleId, snapshot, capabilities, online }: Props) {
+export default function ChargeCard({ vehicleId, snapshot, vehicleStatus, capabilities, online }: Props) {
   const { t } = useTranslation();
-  const charge = readCharge(snapshot);
+  const charge = readCharge(snapshot, vehicleStatus);
 
   const isCharging = (charge.charging_state ?? '').toLowerCase() === 'charging';
-  const isPlugged = (charge.charging_state ?? '').toLowerCase() !== 'disconnected';
+  const chargingStateLower = (charge.charging_state ?? '').toLowerCase();
+  // "disconnected" or empty/unknown means not plugged. Tesla also
+  // returns "Stopped" / "Complete" / "Charging" / "NoPower" when a
+  // cable is connected — all those count as plugged.
+  const isPlugged = !!charge.charging_state
+    && chargingStateLower !== 'disconnected'
+    && chargingStateLower !== 'unknown';
   const limitServer = charge.charge_limit_soc ?? 80;
   const ampsServer = charge.charge_amps ?? charge.charge_current_request ?? 16;
   const maxAmps = charge.charge_current_request_max ?? 32;
@@ -135,13 +143,20 @@ export default function ChargeCard({ vehicleId, snapshot, capabilities, online }
         />
         {capabilities.motorizedChargePort && (
           <ControlButton
-            label={charge.charge_port_door_open ? t('control.charge.closePort') : t('control.charge.openPort')}
-            onClick={() => portDoor.mutate({ on: !charge.charge_port_door_open })}
-            state={charge.charge_port_door_open ? 'warning' : 'neutral'}
+            label={
+              isPlugged
+                ? t('control.charge.unlockCable')
+                : charge.charge_port_door_open
+                  ? t('control.charge.closePort')
+                  : t('control.charge.openPort')
+            }
+            onClick={() => portDoor.mutate({ on: isPlugged ? true : !charge.charge_port_door_open })}
+            state={isPlugged ? 'info' : charge.charge_port_door_open ? 'warning' : 'neutral'}
             loading={portDoor.isPending}
             wakingHint={portDoor.wakingHint}
             disabled={!online}
             icon={<PortIcon />}
+            title={isPlugged ? t('control.charge.unlockCableHint') : undefined}
           />
         )}
       </div>

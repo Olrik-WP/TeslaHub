@@ -31,13 +31,17 @@ public sealed class ChargersService
 {
     private const string OcmEndpoint = "https://api.openchargemap.io/v3/poi";
 
-    // Snap bbox edges to this grid (degrees). 0.5° is roughly 55 km N-S,
+    // Snap bbox edges to this grid (degrees). 0.25° is roughly 27 km N-S,
     // wide enough that a normal pan stays inside one tile, narrow enough
-    // that a single tile rarely tops the OCM `maxresults` cap.
-    private const double TileDegrees = 0.5;
+    // that even dense areas (Paris, London, Bay Area) rarely top the OCM
+    // `maxresults` cap. The previous 0.5° tile sometimes truncated heavily
+    // populated regions and caused well-known Superchargers to disappear.
+    private const double TileDegrees = 0.25;
 
-    // Cap returned per-bbox; aligned with what the UI clusters comfortably.
-    private const int MaxResultsPerCall = 500;
+    // Cap returned per-bbox. Bumped from 500 to 2000 so dense urban tiles
+    // (Paris, London, etc.) get the full picture from OCM instead of a
+    // truncated subset that drops popular Tesla Superchargers.
+    private const int MaxResultsPerCall = 2000;
 
     private static readonly TimeSpan CacheDuration = TimeSpan.FromHours(24);
 

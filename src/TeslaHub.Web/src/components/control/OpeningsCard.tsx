@@ -2,11 +2,13 @@ import { useTranslation } from 'react-i18next';
 import ControlCard from './ControlCard';
 import ControlButton from './ControlButton';
 import { useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
+import type { VehicleStatus } from '../../api/queries';
 import { readVehicle } from './stateParsers';
 
 interface Props {
   vehicleId: number;
   snapshot: VehicleStateSnapshot | undefined;
+  vehicleStatus?: VehicleStatus;
   capabilities: VehicleCapabilities;
   online: boolean;
 }
@@ -22,9 +24,9 @@ const ICON = (
  * Trunks + windows. Capability-gated: hidden buttons when the car
  * does not have a motorised frunk / can't actuate trunks at all.
  */
-export default function OpeningsCard({ vehicleId, snapshot, capabilities, online }: Props) {
+export default function OpeningsCard({ vehicleId, snapshot, vehicleStatus, capabilities, online }: Props) {
   const { t } = useTranslation();
-  const v = readVehicle(snapshot);
+  const v = readVehicle(snapshot, vehicleStatus);
 
   const trunk = useControlMutation<{ which: string }>(vehicleId, 'access/trunk');
   const window = useControlMutation<{ command: string }>(vehicleId, 'access/window');

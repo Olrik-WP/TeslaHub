@@ -35,12 +35,21 @@ export default function Control({ carId }: Props) {
 
   // Map TeslaMate carId → TeslaHub TeslaVehicle.Id by VIN. We need the
   // Fleet-side id (paired key + Fleet vehicle_id), not the TeslaMate one.
+  // Multi-car safety: if the selected TeslaMate car's VIN does NOT match
+  // any Fleet vehicle, return undefined and surface a setup banner —
+  // never silently fall back to vehicles[0], which would route commands
+  // to the wrong car on multi-vehicle accounts where only some are
+  // paired with the TeslaHub virtual key.
   const teslaVehicle = useMemo(() => {
     if (!availability?.vehicles?.length) return undefined;
     const vin = vehicleStatus?.vin;
-    if (!vin) return availability.vehicles[0];
-    return availability.vehicles.find((v) => v.vin === vin) ?? availability.vehicles[0];
+    if (!vin) return undefined;
+    return availability.vehicles.find((v) => v.vin === vin);
   }, [availability, vehicleStatus?.vin]);
+
+  const vinMismatch = !!availability?.vehicles?.length
+    && !!vehicleStatus?.vin
+    && !teslaVehicle;
 
   const vehicleId = teslaVehicle?.id;
   const { data: snapshot, isLoading: stateLoading, isFetching } = useVehicleState(vehicleId);
@@ -56,6 +65,9 @@ export default function Control({ carId }: Props) {
   }
   if (!availability.connected) {
     return <SetupBanner intent="connect" />;
+  }
+  if (vinMismatch) {
+    return <SetupBanner intent="vinMismatch" displayName={vehicleStatus?.name ?? vehicleStatus?.vin ?? ''} />;
   }
   if (!teslaVehicle) {
     return <SetupBanner intent="syncVehicles" />;
@@ -147,11 +159,24 @@ export default function Control({ carId }: Props) {
         <p className="text-sm text-[#9ca3af] mb-3">{t('control.loading')}</p>
       )}
 
+      {/* Stale-state banner: when the car is asleep/offline we deliberately
+          skip vehicle_data (anti vampire-drain). The cards then hydrate
+          from TeslaMate MQTT for whatever it has (climate on/off, temps,
+          locks, sentry, charge state, …). The handful of fields that
+          MQTT does NOT publish — cabin overheat protection, COP temp,
+          seat heaters, bioweapon, valet, software_update — display their
+          UI defaults. This banner makes that explicit. */}
+      {!online && (
+        <div className="bg-[#f59e0b]/10 border border-[#f59e0b]/30 rounded-xl p-3 mb-3 text-[12px] text-[#f59e0b]">
+          {t('control.staleHint')}
+        </div>
+      )}
+
       <div className="space-y-3 pb-4">
-        <ClimateCard vehicleId={vehicleId!} snapshot={snapshot} capabilities={teslaVehicle.capabilities} online={online} />
-        <ChargeCard vehicleId={vehicleId!} snapshot={snapshot} capabilities={teslaVehicle.capabilities} online={online} />
-        <AccessCard vehicleId={vehicleId!} snapshot={snapshot} online={online} />
-        <OpeningsCard vehicleId={vehicleId!} snapshot={snapshot} capabilities={teslaVehicle.capabilities} online={online} />
+        <ClimateCard vehicleId={vehicleId!} snapshot={snapshot} vehicleStatus={vehicleStatus} capabilities={teslaVehicle.capabilities} online={online} />
+        <ChargeCard vehicleId={vehicleId!} snapshot={snapshot} vehicleStatus={vehicleStatus} capabilities={teslaVehicle.capabilities} online={online} />
+        <AccessCard vehicleId={vehicleId!} snapshot={snapshot} vehicleStatus={vehicleStatus} online={online} />
+        <OpeningsCard vehicleId={vehicleId!} snapshot={snapshot} vehicleStatus={vehicleStatus} capabilities={teslaVehicle.capabilities} online={online} />
         <MediaCard vehicleId={vehicleId!} online={online} />
         <SoftwareCard vehicleId={vehicleId!} snapshot={snapshot} online={online} />
 
@@ -174,7 +199,7 @@ export default function Control({ carId }: Props) {
   );
 }
 
-function SetupBanner({ intent, displayName }: { intent: 'configure' | 'connect' | 'pairKey' | 'syncVehicles'; displayName?: string }) {
+function SetupBanner({ intent, displayName }: { intent: 'configure' | 'connect' | 'pairKey' | 'syncVehicles' | 'vinMismatch'; displayName?: string }) {
   const { t } = useTranslation();
   return (
     <div className="p-4 max-w-md mx-auto">

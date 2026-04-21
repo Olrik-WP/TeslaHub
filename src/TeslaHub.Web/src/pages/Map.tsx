@@ -265,10 +265,17 @@ export default function MapPage({ carId }: Props) {
   const [destinationPin, setDestinationPin] = useState<{ latitude: number; longitude: number } | null>(
     null,
   );
+  // Imperative camera target. We pass a fresh object to MapLibreMap each
+  // time we want to recentre (search pick, charger pick, …) — comparing
+  // by reference lets the same coordinate retrigger if needed.
+  const [flyToCoords, setFlyToCoords] = useState<
+    { latitude: number; longitude: number; zoom?: number } | null
+  >(null);
 
   const closeSendMode = useCallback(() => {
     setSendMode(false);
     setDestinationPin(null);
+    setFlyToCoords(null);
   }, []);
 
   // Whenever live-follow is engaged we disable it on entering send-mode so
@@ -295,7 +302,22 @@ export default function MapPage({ carId }: Props) {
   const handleSendChargerToCar = useCallback((latitude: number, longitude: number) => {
     setDestinationPin({ latitude, longitude });
     setSendMode(true);
+    setFlyToCoords({ latitude, longitude, zoom: 16 });
   }, []);
+
+  // Called by the SendToCarPanel when the user picks an autocomplete
+  // suggestion. We both drop the pin AND fly the camera there — picking
+  // a city from a search list and not seeing the map move was the whole
+  // point of the bug fix that introduced this hook.
+  const handleSearchSelect = useCallback(
+    (latitude: number, longitude: number) => {
+      setDestinationPin({ latitude, longitude });
+      // City-grain zoom (≈14) — the same heuristic the camera effect
+      // uses when the user is already zoomed out.
+      setFlyToCoords({ latitude, longitude, zoom: 14 });
+    },
+    [],
+  );
 
   const vehiclePosition = useMemo(() => {
     if (livePosition?.latitude != null && livePosition?.longitude != null) {
@@ -497,6 +519,7 @@ export default function MapPage({ carId }: Props) {
           dimHistorical={sendMode}
           showPublicChargers={showPublicChargers}
           onSendChargerToCar={handleSendChargerToCar}
+          flyTo={flyToCoords}
         />
 
         {sendMode && (
@@ -504,6 +527,7 @@ export default function MapPage({ carId }: Props) {
             pin={destinationPin}
             onClose={closeSendMode}
             onPinChange={setDestinationPin}
+            onSearchSelect={handleSearchSelect}
             vehiclePosition={vehiclePosition}
           />
         )}

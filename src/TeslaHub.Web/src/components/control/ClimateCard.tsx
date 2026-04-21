@@ -4,11 +4,13 @@ import ControlCard from './ControlCard';
 import ControlButton from './ControlButton';
 import SeatHeaterRow from './SeatHeaterRow';
 import { useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
+import type { VehicleStatus } from '../../api/queries';
 import { copTempToInt, keeperModeToInt, readClimate } from './stateParsers';
 
 interface Props {
   vehicleId: number;
   snapshot: VehicleStateSnapshot | undefined;
+  vehicleStatus?: VehicleStatus;
   capabilities: VehicleCapabilities;
   online: boolean;
 }
@@ -28,9 +30,9 @@ const ICON = (
  * shortcut: full temperature stepper, dual-zone, seat heaters per
  * available seat (filtered by capabilities), keeper mode, COP, etc.
  */
-export default function ClimateCard({ vehicleId, snapshot, capabilities, online }: Props) {
+export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabilities, online }: Props) {
   const { t } = useTranslation();
-  const climate = readClimate(snapshot);
+  const climate = readClimate(snapshot, vehicleStatus);
 
   const isOn = climate.is_climate_on ?? climate.is_auto_conditioning_on ?? false;
   const driverServer = climate.driver_temp_setting ?? 22;
@@ -56,6 +58,7 @@ export default function ClimateCard({ vehicleId, snapshot, capabilities, online 
   const keeper = useControlMutation<{ mode: number }>(vehicleId, 'climate/keeper');
   const copToggle = useControlMutation<{ on: boolean; fanOnly: boolean }>(vehicleId, 'climate/cabin-overheat');
   const copTemp = useControlMutation<{ level: number }>(vehicleId, 'climate/cabin-overheat-temp');
+  const bioweapon = useControlMutation<{ on: boolean }>(vehicleId, 'climate/bioweapon');
 
   const adjustDriver = (delta: number) => {
     const next = Math.max(min, Math.min(max, +(driver + delta).toFixed(1)));
@@ -182,10 +185,10 @@ export default function ClimateCard({ vehicleId, snapshot, capabilities, online 
         />
         <ControlButton
           label={t('control.climate.bioweapon')}
-          onClick={() => climate.bioweapon_mode != null
-            ? precondition.mutate({ on: !climate.bioweapon_mode })
-            : undefined}
+          onClick={() => bioweapon.mutate({ on: !(climate.bioweapon_mode ?? false) })}
           state={climate.bioweapon_mode ? 'info' : 'neutral'}
+          loading={bioweapon.isPending}
+          wakingHint={bioweapon.wakingHint}
           disabled={!online || climate.bioweapon_mode == null}
           icon={<ShieldIcon />}
           title={t('control.climate.bioweaponHint')}

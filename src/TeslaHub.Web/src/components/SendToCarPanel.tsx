@@ -28,6 +28,11 @@ interface Props {
   pin: Pin | null;
   onClose: () => void;
   onPinChange: (pin: Pin) => void;
+  /** Called when the user picks a search suggestion. Lets the parent fly
+   *  the map to the picked location in addition to dropping a pin (the
+   *  default `onPinChange` only updates the marker — without flying the
+   *  camera the user could not see where their search landed). */
+  onSearchSelect?: (latitude: number, longitude: number) => void;
   /** Optional reference to centre auto-suggestions and compute distance. */
   vehiclePosition?: { latitude: number; longitude: number } | null;
 }
@@ -35,7 +40,13 @@ interface Props {
 const inputClass =
   'w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg px-3 py-2.5 text-sm text-[#e0e0e0] placeholder-[#6b7280] focus:outline-none focus:border-[#e31937]';
 
-export default function SendToCarPanel({ pin, onClose, onPinChange, vehiclePosition }: Props) {
+export default function SendToCarPanel({
+  pin,
+  onClose,
+  onPinChange,
+  onSearchSelect,
+  vehiclePosition,
+}: Props) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const lang = i18n.language || 'en';
@@ -133,7 +144,7 @@ export default function SendToCarPanel({ pin, onClose, onPinChange, vehiclePosit
         language: lang,
         signal: ctrl.signal,
         near: vehiclePosition ?? undefined,
-        limit: 6,
+        limit: 10,
       })
         .then((results) => {
           if (!ctrl.signal.aborted) setSuggestions(results);
@@ -440,7 +451,15 @@ export default function SendToCarPanel({ pin, onClose, onPinChange, vehiclePosit
                         type="button"
                         className="w-full text-left px-3 py-2 hover:bg-[#1a1a1a] active:bg-[#1a1a1a] text-xs text-[#e0e0e0] border-b border-[#1a1a1a] last:border-b-0"
                         onClick={() => {
-                          onPinChange({ latitude: s.latitude, longitude: s.longitude });
+                          // Prefer the parent's combined "pin + fly" hook
+                          // when available so the camera follows the
+                          // search; fall back to a plain pin update so
+                          // the panel still works in isolation.
+                          if (onSearchSelect) {
+                            onSearchSelect(s.latitude, s.longitude);
+                          } else {
+                            onPinChange({ latitude: s.latitude, longitude: s.longitude });
+                          }
                           setQuery('');
                           setSuggestions([]);
                         }}

@@ -131,7 +131,10 @@ export async function searchAddress(
   if (trimmed.length < 3) return [];
 
   const lang = options.language || 'en';
-  const limit = Math.min(Math.max(options.limit ?? 5, 1), 10);
+  // Bumped default cap from 5 → 10. Short queries (e.g. "Rieux") match
+  // multiple French communes and the user often wants the less-popular
+  // one, which Nominatim returns lower in the list.
+  const limit = Math.min(Math.max(options.limit ?? 10, 1), 20);
   const near = options.near;
   const cacheKey = `${trimmed.toLowerCase()}|${lang}|${limit}|${near?.latitude.toFixed(2) ?? ''}|${
     near?.longitude.toFixed(2) ?? ''
@@ -143,20 +146,18 @@ export async function searchAddress(
   const params = new URLSearchParams({
     q: trimmed,
     format: 'jsonv2',
-    limit: String(limit),
+    // Ask Nominatim for a few extra candidates so we have headroom to
+    // re-rank locally (importance + proximity to `near`) and still expose
+    // the requested `limit` to the caller.
+    limit: String(Math.min(limit * 2, 20)),
     addressdetails: '1',
   });
   if (options.countryCodes) params.set('countrycodes', options.countryCodes);
-  if (near) {
-    // viewbox = left,top,right,bottom (~50km box around the point)
-    const dLat = 0.45;
-    const dLng = 0.6;
-    params.set(
-      'viewbox',
-      `${near.longitude - dLng},${near.latitude + dLat},${near.longitude + dLng},${near.latitude - dLat}`,
-    );
-    params.set('bounded', '0');
-  }
+  // Note: we intentionally do NOT pass a `viewbox` here. Even with
+  // bounded=0 it skews relevance scores towards the bias point — which
+  // makes searches like "Rieux" (a name shared by 5+ French communes)
+  // surface the closest one instead of the most-important one. We
+  // re-introduce proximity locally below as a *tiebreaker*, not a filter.
 
   const url = `${BASE_URL}/search?${params.toString()}`;
   try {
@@ -183,8 +184,38 @@ export async function searchAddress(
         };
       })
       .filter((r) => Number.isFinite(r.latitude) && Number.isFinite(r.longitude));
-    rememberSearch(cacheKey, mapped);
-    return mapped;
+
+    // Re-rank: primary criterion is OSM importance (so well-known places
+    // win), with a small proximity bonus to break ties when several
+    // results share a similar importance score (typical for small French
+    // communes that all sit around 0.45). We dedupe near-duplicates that
+    // Nominatim sometimes returns at the same coords with different types.
+    const seen = new Set<string>();
+    const ranked = mapped
+      .filter((r) => {
+        const key = `${r.latitude.toFixed(4)},${r.longitude.toFixed(4)}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((r) => {
+        const importance = r.importance ?? 0;
+        let proximityBonus = 0;
+        if (near) {
+          const km =
+            haversineMeters(near, { latitude: r.latitude, longitude: r.longitude }) / 1000;
+          // Bounded contribution: only kicks in for tied importance.
+          // Caps at +0.05 (full bonus within 25 km, decays to 0 by 500 km).
+          proximityBonus = 0.05 * Math.max(0, 1 - Math.max(0, km - 25) / 475);
+        }
+        return { ...r, _score: importance + proximityBonus };
+      })
+      .sort((a, b) => b._score - a._score)
+      .slice(0, limit)
+      .map(({ _score, ...rest }) => rest);
+
+    rememberSearch(cacheKey, ranked);
+    return ranked;
   } catch {
     return [];
   }

@@ -4,11 +4,13 @@ import ControlCard from './ControlCard';
 import ControlButton from './ControlButton';
 import PinPad from './PinPad';
 import { useControlMutation, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
+import type { VehicleStatus } from '../../api/queries';
 import { readVehicle } from './stateParsers';
 
 interface Props {
   vehicleId: number;
   snapshot: VehicleStateSnapshot | undefined;
+  vehicleStatus?: VehicleStatus;
   online: boolean;
 }
 
@@ -24,9 +26,9 @@ const ICON = (
  * Only the two PIN-protected actions open a modal — everything else
  * is one-tap with optimistic colouring.
  */
-export default function AccessCard({ vehicleId, snapshot, online }: Props) {
+export default function AccessCard({ vehicleId, snapshot, vehicleStatus, online }: Props) {
   const { t } = useTranslation();
-  const v = readVehicle(snapshot);
+  const v = readVehicle(snapshot, vehicleStatus);
 
   const lock = useControlMutation(vehicleId, 'access/lock');
   const unlock = useControlMutation(vehicleId, 'access/unlock');

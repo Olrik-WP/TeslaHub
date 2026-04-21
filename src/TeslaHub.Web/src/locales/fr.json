@@ -53,6 +53,7 @@
     "wake": "Réveiller",
     "refresh": "Rafraîchir",
     "asleepHint": "Le véhicule est en veille — touchez un bouton pour le réveiller avant d'envoyer une commande.",
+    "staleHint": "Le véhicule est en veille — les valeurs affichées proviennent du cache TeslaMate local. Certains réglages avancés (surchauffe habitacle, sièges chauffants, biodéfense, voiturier, mise à jour) ne seront visibles qu'après réveil.",
     "state": {
       "online": "En ligne",
       "asleep": "En veille",
@@ -79,6 +80,10 @@
       "pairKey": {
         "title": "Pairer la clé virtuelle",
         "body": "{{name}} ne peut pas accepter de commandes tant que la clé virtuelle TeslaHub n'est pas pairée depuis l'application Tesla."
+      },
+      "vinMismatch": {
+        "title": "Véhicule introuvable dans l'API Fleet",
+        "body": "{{name}} est dans TeslaMate mais n'est pas encore synchronisée comme véhicule Fleet API. Ouvrez Réglages → Intégration Tesla et resynchronisez vos véhicules, puis pairez la clé virtuelle pour cette voiture."
       },
       "goToSettings": "Ouvrir les Réglages"
     },
@@ -130,7 +135,9 @@
       "start": "Démarrer",
       "stop": "Arrêter",
       "openPort": "Ouvrir la trappe",
-      "closePort": "Fermer la trappe"
+      "closePort": "Fermer la trappe",
+      "unlockCable": "Déverrouiller la prise",
+      "unlockCableHint": "Libère le verrou du câble de charge pour pouvoir le débrancher."
     },
     "access": {
       "title": "Accès",

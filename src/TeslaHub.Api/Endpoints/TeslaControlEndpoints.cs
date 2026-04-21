@@ -61,10 +61,11 @@ public static class TeslaControlEndpoints
         //   4 rear-center, 5 rear-right, 6 rear-right-back,
         //   7 third-row-left, 8 third-row-right.
         // Levels 0..3 (Off / Low / Med / High).
+        // The proxy reads `seat_position` and `level` (settingForHeatSeatPosition).
         group.MapPost("/{vehicleId:int}/climate/seat-heater",
             (int vehicleId, SeatHeaterBody body, TeslaCommandService cmd, CancellationToken ct) =>
                 Run(cmd.SendSignedCommandAsync(vehicleId, "remote_seat_heater_request",
-                    new { heater = body.Position, level = body.Level }, ct)));
+                    new { seat_position = body.Position, level = body.Level }, ct)));
 
         group.MapPost("/{vehicleId:int}/climate/steering-wheel-heater",
             (int vehicleId, ToggleBody body, TeslaCommandService cmd, CancellationToken ct) =>
