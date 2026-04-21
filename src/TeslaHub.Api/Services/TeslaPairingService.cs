@@ -133,10 +133,33 @@ public sealed class TeslaPairingService
                     }
                 }
 
-                var freshVins = fresh.Select(v => v.Vin).ToHashSet();
-                var stale = existing.Where(e => !freshVins.Contains(e.Vin)).ToList();
-                if (stale.Count > 0)
-                    _db.Set<TeslaVehicle>().RemoveRange(stale);
+                // Defensive: ONLY stale-delete vehicles when Tesla
+                // returned a non-empty list. An empty response is much
+                // more likely to be a transient hiccup (rate limit,
+                // partial outage, broken token between two refreshes)
+                // than a legitimate "the user no longer owns any car",
+                // and silently nuking the previously-synced + paired
+                // vehicles wipes the user's KeyPaired flags + capabilities
+                // cache for nothing. The next successful sync will catch
+                // any genuinely removed VIN.
+                if (fresh.Count > 0)
+                {
+                    var freshVins = fresh.Select(v => v.Vin).ToHashSet();
+                    var stale = existing.Where(e => !freshVins.Contains(e.Vin)).ToList();
+                    if (stale.Count > 0)
+                    {
+                        _db.Set<TeslaVehicle>().RemoveRange(stale);
+                        _logger.LogInformation(
+                            "Removed {Count} stale vehicle(s) from account {AccountId} ({Email}): {Vins}",
+                            stale.Count, live.Id, live.Email, string.Join(", ", stale.Select(v => v.Vin)));
+                    }
+                }
+                else if (existing.Count > 0)
+                {
+                    _logger.LogWarning(
+                        "Tesla returned 0 vehicles for account {AccountId} ({Email}) — keeping the {Count} existing entry/entries instead of deleting them. This usually means a transient API hiccup; vehicles will be cleaned up on the next sync if Tesla still reports nothing.",
+                        live.Id, live.Email, existing.Count);
+                }
 
                 await _db.SaveChangesAsync(cancellationToken);
                 _logger.LogInformation(

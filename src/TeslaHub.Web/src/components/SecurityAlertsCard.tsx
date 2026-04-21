@@ -326,7 +326,14 @@ export default function SecurityAlertsCard() {
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div>
                     <div className={sectionTitleClass}>{t('securityAlerts.connectedPanel.account')}</div>
-                    <div className="text-[#e0e0e0] mt-1 break-all">{acc.fullName || acc.email || '—'}</div>
+                    {/* Tesla only returns email/profile claims when the
+                        OAuth scope explicitly asks for them, which is not
+                        the default in older TeslaHub installs. Fall back
+                        to a stable label so multi-account UIs at least
+                        distinguish the entries. */}
+                    <div className="text-[#e0e0e0] mt-1 break-all">
+                      {acc.fullName || acc.email || t('securityAlerts.connectedPanel.unnamedAccount', { id: acc.id || '?' })}
+                    </div>
                     {acc.email && acc.fullName && (
                       <div className={`${subTextClass} break-all`}>{acc.email}</div>
                     )}

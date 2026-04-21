@@ -857,7 +857,8 @@
       "confirmDisconnect": "Disconnect Tesla account? You will need to sign in again to receive alerts.",
       "refreshHint": "Force an immediate refresh of this account's Tesla tokens.",
       "addAccount": "Connect another Tesla account",
-      "addAccountHint": "Typical use case: a couple sharing a TeslaHub instance where each spouse owns their own car. Open TeslaHub on the other person's phone and tap this button so Tesla auto-logs them in with THEIR account. Each vehicle will then be contacted with the right owner token."
+      "addAccountHint": "Typical use case: a couple sharing a TeslaHub instance where each spouse owns their own car. Open TeslaHub on the other person's phone and tap this button so Tesla auto-logs them in with THEIR account. Each vehicle will then be contacted with the right owner token.",
+      "unnamedAccount": "Tesla account #{{id}}"
     },
     "developerApp": {
       "title": "0. Create your Tesla developer app",

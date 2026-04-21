@@ -857,7 +857,8 @@
       "confirmDisconnect": "Déconnecter le compte Tesla ? Vous devrez vous reconnecter pour recevoir des alertes.",
       "refreshHint": "Forcer immédiatement le rafraîchissement des jetons Tesla de ce compte.",
       "addAccount": "Connecter un autre compte Tesla",
-      "addAccountHint": "Cas typique : un couple partageant une instance TeslaHub où chaque conjoint possède sa propre voiture. Ouvrez TeslaHub sur le téléphone de l'autre personne et tapez ce bouton — Tesla se connectera automatiquement avec SON compte. Chaque véhicule sera alors contacté avec le bon token propriétaire."
+      "addAccountHint": "Cas typique : un couple partageant une instance TeslaHub où chaque conjoint possède sa propre voiture. Ouvrez TeslaHub sur le téléphone de l'autre personne et tapez ce bouton — Tesla se connectera automatiquement avec SON compte. Chaque véhicule sera alors contacté avec le bon token propriétaire.",
+      "unnamedAccount": "Compte Tesla n°{{id}}"
     },
     "developerApp": {
       "title": "0. Créer votre app Tesla developer",
