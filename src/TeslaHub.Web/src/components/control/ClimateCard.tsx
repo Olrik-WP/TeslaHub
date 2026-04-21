@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ControlCard from './ControlCard';
 import ControlButton from './ControlButton';
 import SeatHeaterRow from './SeatHeaterRow';
-import { useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
+import { capabilitiesLoaded, useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
 import type { VehicleStatus } from '../../api/queries';
 import { copTempToInt, keeperModeToInt, readClimate } from './stateParsers';
 
@@ -52,7 +52,7 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
   const max = climate.max_avail_temp ?? MAX_TEMP_DEFAULT;
 
   const startStop = useControlMutation(vehicleId, isOn ? 'climate/stop' : 'climate/start');
-  const setTemps = useControlMutation<{ driverTemp: number; passengerTemp: number }>(vehicleId, 'climate/temps');
+  const setTemps = useControlMutation<{ driverTemp: number; passengerTemp: number }>(vehicleId, 'climate/temps', { silent: true });
   const precondition = useControlMutation<{ on: boolean }>(vehicleId, 'climate/precondition');
   const steeringWheel = useControlMutation<{ on: boolean }>(vehicleId, 'climate/steering-wheel-heater');
   const keeper = useControlMutation<{ mode: number }>(vehicleId, 'climate/keeper');
@@ -87,7 +87,7 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
         <button
           type="button"
           onClick={() => adjustDriver(-STEP)}
-          disabled={!online || setTemps.isPending}
+          disabled={setTemps.isPending}
           className="h-14 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-[#e0e0e0] text-2xl active:bg-[#222] disabled:opacity-50"
         >−</button>
         <div className="flex flex-col items-center">
@@ -99,7 +99,7 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
         <button
           type="button"
           onClick={() => adjustDriver(+STEP)}
-          disabled={!online || setTemps.isPending}
+          disabled={setTemps.isPending}
           className="h-14 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-[#e0e0e0] text-2xl active:bg-[#222] disabled:opacity-50"
         >+</button>
       </div>
@@ -112,7 +112,7 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
           state={isOn ? 'on' : 'off'}
           loading={startStop.isPending}
           wakingHint={startStop.wakingHint}
-          disabled={!online}
+          disabled={false}
           fullWidth
           size="lg"
           icon={isOn ? <PowerIcon /> : <PowerIcon off />}
@@ -135,7 +135,7 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
           <button
             type="button"
             onClick={() => adjustPassenger(-STEP)}
-            disabled={sync || !online || setTemps.isPending}
+            disabled={sync || setTemps.isPending}
             className="h-9 rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] text-[#9ca3af] text-base active:bg-[#222] disabled:opacity-40"
           >−</button>
           <div className="flex flex-col items-center">
@@ -145,7 +145,7 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
           <button
             type="button"
             onClick={() => adjustPassenger(+STEP)}
-            disabled={sync || !online || setTemps.isPending}
+            disabled={sync || setTemps.isPending}
             className="h-9 rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] text-[#9ca3af] text-base active:bg-[#222] disabled:opacity-40"
           >+</button>
         </div>
@@ -171,7 +171,7 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
           state={isPreconditioning ? 'warning' : 'neutral'}
           loading={precondition.isPending}
           wakingHint={precondition.wakingHint}
-          disabled={!online}
+          disabled={false}
           icon={<FlameIcon />}
         />
         <ControlButton
@@ -180,7 +180,7 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
           state={steeringHot ? 'warning' : 'neutral'}
           loading={steeringWheel.isPending}
           wakingHint={steeringWheel.wakingHint}
-          disabled={!online}
+          disabled={false}
           icon={<WheelIcon />}
         />
         <ControlButton
@@ -189,31 +189,41 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
           state={climate.bioweapon_mode ? 'info' : 'neutral'}
           loading={bioweapon.isPending}
           wakingHint={bioweapon.wakingHint}
-          disabled={!online || climate.bioweapon_mode == null}
+          disabled={climate.bioweapon_mode == null}
           icon={<ShieldIcon />}
           title={t('control.climate.bioweaponHint')}
         />
       </div>
 
-      {/* Seat heaters — only show those the car actually has */}
+      {/* Seat heaters. Front pair always shown — every Tesla has them.
+          Rear seats: shown by default (every modern Tesla has them);
+          only hidden if vehicle_config explicitly says rear_seat_heaters=0.
+          Third row: hidden by default (rare Model X/S 7-seater option). */}
+      {(() => {
+        const capsKnown = capabilitiesLoaded(capabilities);
+        const showRear = !capsKnown || capabilities.hasRearSeatHeaters;
+        const showThirdRow = capsKnown && capabilities.hasThirdRow;
+        return (
       <div className="mt-3 pt-3 border-t border-[#2a2a2a] space-y-2">
         <p className="text-[11px] text-[#6b7280] uppercase tracking-wide">{t('control.climate.seatHeaters')}</p>
         <SeatHeaterRow vehicleId={vehicleId} position={0} currentLevel={climate.seat_heater_left} label={t('control.climate.seat.frontLeft')} />
         <SeatHeaterRow vehicleId={vehicleId} position={1} currentLevel={climate.seat_heater_right} label={t('control.climate.seat.frontRight')} />
-        {capabilities.hasRearSeatHeaters && (
+        {showRear && (
           <>
             <SeatHeaterRow vehicleId={vehicleId} position={2} currentLevel={climate.seat_heater_rear_left} label={t('control.climate.seat.rearLeft')} />
             <SeatHeaterRow vehicleId={vehicleId} position={4} currentLevel={climate.seat_heater_rear_center} label={t('control.climate.seat.rearCenter')} />
             <SeatHeaterRow vehicleId={vehicleId} position={5} currentLevel={climate.seat_heater_rear_right} label={t('control.climate.seat.rearRight')} />
           </>
         )}
-        {capabilities.hasThirdRow && (
+        {showThirdRow && (
           <>
             <SeatHeaterRow vehicleId={vehicleId} position={7} currentLevel={climate.seat_heater_third_row_left} label={t('control.climate.seat.thirdRowLeft')} />
             <SeatHeaterRow vehicleId={vehicleId} position={8} currentLevel={climate.seat_heater_third_row_right} label={t('control.climate.seat.thirdRowRight')} />
           </>
         )}
       </div>
+        );
+      })()}
 
       {/* Keeper mode */}
       <div className="mt-3 pt-3 border-t border-[#2a2a2a]">
@@ -224,7 +234,7 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
               key={mode}
               type="button"
               onClick={() => keeper.mutate({ mode })}
-              disabled={!online || keeper.isPending}
+              disabled={keeper.isPending}
               className={[
                 'py-2 rounded-lg border text-[11px]',
                 mode === keeperInt
@@ -251,7 +261,7 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
               key={opt.label}
               type="button"
               onClick={() => copToggle.mutate({ on: opt.on, fanOnly: opt.fanOnly })}
-              disabled={!online || copToggle.isPending}
+              disabled={copToggle.isPending}
               className={[
                 'py-2 rounded-lg border text-[11px]',
                 opt.active
@@ -273,7 +283,7 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
               key={opt.level}
               type="button"
               onClick={() => copTemp.mutate({ level: opt.level })}
-              disabled={!online || !copOn || copTemp.isPending}
+              disabled={!copOn || copTemp.isPending}
               className={[
                 'py-2 rounded-lg border text-[11px]',
                 copLevel === opt.level && copOn

@@ -71,7 +71,7 @@ export default function SoftwareCard({ vehicleId, snapshot, online }: Props) {
                   state="warning"
                   loading={schedule.isPending && (schedule.variables as { offsetSec?: number } | undefined)?.offsetSec === opt.offset}
                   wakingHint={schedule.wakingHint}
-                  disabled={!online}
+                  disabled={false}
                 />
               ))}
             </div>
@@ -79,7 +79,7 @@ export default function SoftwareCard({ vehicleId, snapshot, online }: Props) {
               label={t('control.software.cancel')}
               onClick={() => setConfirmCancel(true)}
               state="danger"
-              disabled={!online}
+              disabled={false}
               fullWidth
               size="sm"
             />

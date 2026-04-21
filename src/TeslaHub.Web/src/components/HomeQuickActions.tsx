@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import ControlButton, { type ControlButtonState } from './control/ControlButton';
-import { useControlAvailability, useControlMutation } from '../hooks/useVehicleControl';
+import { capabilitiesLoaded, useControlAvailability, useControlMutation } from '../hooks/useVehicleControl';
 import type { VehicleStatus } from '../api/queries';
 
 interface Props {
@@ -55,6 +55,9 @@ export default function HomeQuickActions({ vehicle }: Props) {
   const trunkOpen = vehicle.trunkOpen ?? false;
   const windowsOpen = vehicle.windowsOpen ?? false;
   const caps = teslaVehicle.capabilities;
+  // Show frunk/trunk chips by default (every modern Tesla actuates
+  // both lids). Only hide when vehicle_config explicitly says false.
+  const showTrunks = !capabilitiesLoaded(caps) || caps.canActuateTrunks;
 
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 mt-3">
@@ -84,7 +87,7 @@ export default function HomeQuickActions({ vehicle }: Props) {
           wakingHint={sentry.wakingHint}
           icon={<EyeGlyph />}
         />
-        {caps.canActuateTrunks && (
+        {showTrunks && (
           <ControlButton
             label={t('home.quickActions.frunk')}
             state={frunkOpen ? 'warning' : 'neutral'}
@@ -94,7 +97,7 @@ export default function HomeQuickActions({ vehicle }: Props) {
             icon={<TrunkGlyph front />}
           />
         )}
-        {caps.canActuateTrunks && (
+        {showTrunks && (
           <ControlButton
             label={t('home.quickActions.trunk')}
             state={trunkOpen ? 'warning' : 'neutral'}

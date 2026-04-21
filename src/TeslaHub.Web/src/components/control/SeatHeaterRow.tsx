@@ -18,7 +18,7 @@ interface Props {
  */
 export default function SeatHeaterRow({ vehicleId, currentLevel, position, label }: Props) {
   const { t } = useTranslation();
-  const mutation = useControlMutation<{ position: number; level: number }>(vehicleId, 'climate/seat-heater');
+  const mutation = useControlMutation<{ position: number; level: number }>(vehicleId, 'climate/seat-heater', { silent: true });
 
   const setLevel = (level: number) => mutation.mutate({ position, level });
   const active = (mutation.variables as { level?: number } | undefined)?.level ?? currentLevel ?? 0;

@@ -9,6 +9,7 @@ import { getSettings } from './api/queries';
 import BottomNav from './components/BottomNav';
 import CarSelector from './components/CarSelector';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ControlFeedbackProvider } from './components/ControlFeedback';
 import { STALE_TIME } from './constants/theme';
 
 const Login = lazy(() => import('./pages/Login'));
@@ -132,43 +133,45 @@ function AppLayout() {
   }, []);
 
   return (
-    <div className="min-h-[calc(100dvh-env(safe-area-inset-top))] bg-[#0a0a0a] flex flex-col">
-      {cars && cars.length > 1 && (
-        <CarSelector
-          cars={cars}
-          selectedId={selectedCarId}
-          onChange={handleCarChange}
-        />
-      )}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]">
-        <ErrorBoundary>
-          <Suspense fallback={<div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>}>
-            <Routes>
-              <Route path="/" element={<Home carId={selectedCarId} />} />
-              <Route path="/charging" element={<Charging carId={selectedCarId} />} />
-              <Route path="/trips" element={<Trips carId={selectedCarId} />} />
-              <Route path="/map" element={<MapPage carId={selectedCarId} />} />
-              <Route path="/costs" element={<Costs carId={selectedCarId} />} />
-              <Route path="/charging-stats" element={<ChargingStats carId={selectedCarId} />} />
-              <Route path="/vampire" element={<VampireDrain carId={selectedCarId} />} />
-              <Route path="/battery" element={<Battery carId={selectedCarId} />} />
-              <Route path="/efficiency" element={<Efficiency carId={selectedCarId} />} />
-              <Route path="/mileage" element={<Mileage carId={selectedCarId} />} />
-              <Route path="/updates" element={<Updates carId={selectedCarId} />} />
-              <Route path="/states" element={<States carId={selectedCarId} />} />
-              <Route path="/statistics" element={<Statistics carId={selectedCarId} />} />
-              <Route path="/database" element={<DatabaseInfo carId={selectedCarId} />} />
-              <Route path="/locations" element={<Locations carId={selectedCarId} />} />
-              <Route path="/trip" element={<Trip carId={selectedCarId} />} />
-              <Route path="/dashboard" element={<Dashboard carId={selectedCarId} />} />
-              <Route path="/control" element={<Control carId={selectedCarId} />} />
-              <Route path="/settings" element={<Settings carId={selectedCarId} />} />
-            </Routes>
-          </Suspense>
-        </ErrorBoundary>
+    <ControlFeedbackProvider>
+      <div className="min-h-[calc(100dvh-env(safe-area-inset-top))] bg-[#0a0a0a] flex flex-col">
+        {cars && cars.length > 1 && (
+          <CarSelector
+            cars={cars}
+            selectedId={selectedCarId}
+            onChange={handleCarChange}
+          />
+        )}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]">
+          <ErrorBoundary>
+            <Suspense fallback={<div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>}>
+              <Routes>
+                <Route path="/" element={<Home carId={selectedCarId} />} />
+                <Route path="/charging" element={<Charging carId={selectedCarId} />} />
+                <Route path="/trips" element={<Trips carId={selectedCarId} />} />
+                <Route path="/map" element={<MapPage carId={selectedCarId} />} />
+                <Route path="/costs" element={<Costs carId={selectedCarId} />} />
+                <Route path="/charging-stats" element={<ChargingStats carId={selectedCarId} />} />
+                <Route path="/vampire" element={<VampireDrain carId={selectedCarId} />} />
+                <Route path="/battery" element={<Battery carId={selectedCarId} />} />
+                <Route path="/efficiency" element={<Efficiency carId={selectedCarId} />} />
+                <Route path="/mileage" element={<Mileage carId={selectedCarId} />} />
+                <Route path="/updates" element={<Updates carId={selectedCarId} />} />
+                <Route path="/states" element={<States carId={selectedCarId} />} />
+                <Route path="/statistics" element={<Statistics carId={selectedCarId} />} />
+                <Route path="/database" element={<DatabaseInfo carId={selectedCarId} />} />
+                <Route path="/locations" element={<Locations carId={selectedCarId} />} />
+                <Route path="/trip" element={<Trip carId={selectedCarId} />} />
+                <Route path="/dashboard" element={<Dashboard carId={selectedCarId} />} />
+                <Route path="/control" element={<Control carId={selectedCarId} />} />
+                <Route path="/settings" element={<Settings carId={selectedCarId} />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
+        </div>
+        <BottomNav carId={selectedCarId} />
       </div>
-      <BottomNav carId={selectedCarId} />
-    </div>
+    </ControlFeedbackProvider>
   );
 }
 

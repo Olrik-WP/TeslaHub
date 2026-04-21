@@ -62,7 +62,10 @@
     },
     "feedback": {
       "sending": "Sending…",
-      "waking": "Waking your Tesla…"
+      "waking": "Waking your Tesla…",
+      "sent": "Command sent.",
+      "wokeNote": "(woken up first)",
+      "error": "Command failed."
     },
     "setup": {
       "configure": {

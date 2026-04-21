@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
+import { useControlFeedback } from '../components/ControlFeedback';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,6 +25,27 @@ export interface VehicleCapabilities {
   hasRearSeatHeaters: boolean;
   hasThirdRow: boolean;
   hasSunRoof: boolean;
+}
+
+/**
+ * True once we've successfully fetched vehicle_config at least once
+ * (carType is the canonical sentinel — Tesla always returns it). When
+ * false, we have NEVER seen the car's options (sleeping car never
+ * woken since first sync) and should be permissive about which
+ * controls to surface, instead of masking them and confusing the user.
+ */
+export function capabilitiesLoaded(caps: VehicleCapabilities | undefined): boolean {
+  return !!caps?.carType;
+}
+
+/**
+ * "Show this control unless we're sure the car doesn't have it."
+ * Used for features that virtually every modern Tesla has
+ * (motorized charge port, actuated trunks, front seat heaters).
+ * Strict capability checks belong on rare features (third-row seats).
+ */
+export function presumeSupported(caps: VehicleCapabilities | undefined, value: boolean): boolean {
+  return !capabilitiesLoaded(caps) || value;
 }
 
 export interface ControlVehicle {
@@ -123,9 +146,16 @@ export function useControlMutation<TBody = void>(
   options?: {
     invalidate?: QueryKey[];
     onSettled?: () => void;
+    /** Optional override for the success toast text. Defaults to a generic "command sent". */
+    successText?: string;
+    /** Suppress the global toast entirely (used by tight-loop mutations like temp +/-). */
+    silent?: boolean;
   },
 ) {
   const qc = useQueryClient();
+  const feedback = useControlFeedback();
+  const { t } = useTranslation();
+
   const mutation = useMutation<CommandResponse, Error, TBody>({
     mutationFn: async (body: TBody) => {
       if (!vehicleId) throw new Error('No vehicle selected');
@@ -135,11 +165,18 @@ export function useControlMutation<TBody = void>(
       }
       return api<CommandResponse>(`/tesla-control/${vehicleId}/${pathSuffix}`, init);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       if (vehicleId) {
         qc.invalidateQueries({ queryKey: ['vehicleControlState', vehicleId] });
       }
       options?.invalidate?.forEach((qk) => qc.invalidateQueries({ queryKey: qk }));
+      if (options?.silent) return;
+      const txt = options?.successText ?? t('control.feedback.sent');
+      feedback.show('success', data.wokeUp ? `${txt} ${t('control.feedback.wokeNote')}` : txt);
+    },
+    onError: (err) => {
+      if (options?.silent) return;
+      feedback.show('error', err.message || t('control.feedback.error'));
     },
     onSettled: options?.onSettled,
   });
@@ -150,9 +187,12 @@ export function useControlMutation<TBody = void>(
       setWakingHint(false);
       return;
     }
-    const handle = setTimeout(() => setWakingHint(true), 4000);
+    const handle = setTimeout(() => {
+      setWakingHint(true);
+      if (!options?.silent) feedback.show('waking', t('control.feedback.waking'));
+    }, 4000);
     return () => clearTimeout(handle);
-  }, [mutation.isPending]);
+  }, [mutation.isPending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { ...mutation, wakingHint };
 }

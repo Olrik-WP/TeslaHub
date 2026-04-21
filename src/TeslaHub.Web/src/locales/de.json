@@ -62,7 +62,10 @@
     },
     "feedback": {
       "sending": "Senden…",
-      "waking": "Tesla wird geweckt…"
+      "waking": "Tesla wird geweckt…",
+      "sent": "Befehl gesendet.",
+      "wokeNote": "(Fahrzeug wurde geweckt)",
+      "error": "Befehl fehlgeschlagen."
     },
     "setup": {
       "configure": {

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import ControlCard from './ControlCard';
 import ControlButton from './ControlButton';
-import { useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
+import { capabilitiesLoaded, useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
 import type { VehicleStatus } from '../../api/queries';
 import { readVehicle } from './stateParsers';
 
@@ -35,7 +35,10 @@ export default function OpeningsCard({ vehicleId, snapshot, vehicleStatus, capab
   const trunkOpen = (v.rt ?? 0) > 0;
   const windowsOpen = [v.fd_window, v.fp_window, v.rd_window, v.rp_window].some((w) => (w ?? 0) > 0);
 
-  if (!capabilities.canActuateTrunks) {
+  // Show the openings card unless we explicitly know the car has no
+  // actuated trunks. Treat "capabilities never loaded" (sleeping car)
+  // as "probably supported" — every Model 3/Y/S/X actuates both lids.
+  if (capabilitiesLoaded(capabilities) && !capabilities.canActuateTrunks) {
     return null;
   }
 
@@ -48,7 +51,7 @@ export default function OpeningsCard({ vehicleId, snapshot, vehicleStatus, capab
           state={frunkOpen ? 'warning' : 'neutral'}
           loading={trunk.isPending && (trunk.variables as { which?: string } | undefined)?.which === 'front'}
           wakingHint={trunk.wakingHint}
-          disabled={!online}
+          disabled={false}
           icon={<TrunkIcon front />}
         />
         <ControlButton
@@ -57,7 +60,7 @@ export default function OpeningsCard({ vehicleId, snapshot, vehicleStatus, capab
           state={trunkOpen ? 'warning' : 'neutral'}
           loading={trunk.isPending && (trunk.variables as { which?: string } | undefined)?.which === 'rear'}
           wakingHint={trunk.wakingHint}
-          disabled={!online}
+          disabled={false}
           icon={<TrunkIcon />}
         />
         <ControlButton
@@ -66,7 +69,7 @@ export default function OpeningsCard({ vehicleId, snapshot, vehicleStatus, capab
           state={windowsOpen ? 'warning' : 'neutral'}
           loading={window.isPending && (window.variables as { command?: string } | undefined)?.command === 'vent'}
           wakingHint={window.wakingHint}
-          disabled={!online}
+          disabled={false}
           icon={<WindowIcon />}
         />
         <ControlButton
@@ -74,7 +77,7 @@ export default function OpeningsCard({ vehicleId, snapshot, vehicleStatus, capab
           onClick={() => window.mutate({ command: 'close' })}
           loading={window.isPending && (window.variables as { command?: string } | undefined)?.command === 'close'}
           wakingHint={window.wakingHint}
-          disabled={!online}
+          disabled={false}
           icon={<WindowIcon closed />}
         />
       </div>

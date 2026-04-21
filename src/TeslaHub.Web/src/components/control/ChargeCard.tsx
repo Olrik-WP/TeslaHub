@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import ControlCard from './ControlCard';
 import ControlButton from './ControlButton';
-import { useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
+import { presumeSupported, useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
 import type { VehicleStatus } from '../../api/queries';
 import { readCharge } from './stateParsers';
 
@@ -46,8 +46,8 @@ export default function ChargeCard({ vehicleId, snapshot, vehicleStatus, capabil
   useEffect(() => { setAmps(ampsServer); }, [ampsServer]);
 
   const startStop = useControlMutation(vehicleId, isCharging ? 'charge/stop' : 'charge/start');
-  const setLimitMut = useControlMutation<{ percent: number }>(vehicleId, 'charge/limit');
-  const setAmpsMut = useControlMutation<{ amps: number }>(vehicleId, 'charge/amps');
+  const setLimitMut = useControlMutation<{ percent: number }>(vehicleId, 'charge/limit', { silent: true });
+  const setAmpsMut = useControlMutation<{ amps: number }>(vehicleId, 'charge/amps', { silent: true });
   const portDoor = useControlMutation<{ on: boolean }>(vehicleId, 'charge/port-door');
 
   // Debounced send to avoid hammering Tesla while user drags.
@@ -105,7 +105,7 @@ export default function ChargeCard({ vehicleId, snapshot, vehicleStatus, capabil
           min={charge.charge_limit_soc_min ?? 50}
           max={charge.charge_limit_soc_max ?? 100}
           value={limit}
-          disabled={!online}
+          disabled={false}
           onChange={(e) => setLimit(Number(e.target.value))}
           className="w-full accent-[#e31937]"
         />
@@ -123,25 +123,31 @@ export default function ChargeCard({ vehicleId, snapshot, vehicleStatus, capabil
             min={1}
             max={maxAmps}
             value={amps}
-            disabled={!online}
+            disabled={false}
             onChange={(e) => setAmps(Number(e.target.value))}
             className="w-full accent-[#e31937]"
           />
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className={`grid ${capabilities.motorizedChargePort ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+      {/* Action buttons. Charge port button is shown by default unless
+          we've explicitly learned the car has no motorised port — every
+          modern Tesla has one and we don't want to hide the control just
+          because vehicle_data hasn't been read yet (sleeping car). */}
+      {(() => {
+        const showPort = presumeSupported(capabilities, capabilities.motorizedChargePort);
+        return (
+      <div className={`grid ${showPort ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
         <ControlButton
           label={isCharging ? t('control.charge.stop') : t('control.charge.start')}
           onClick={() => startStop.mutate(undefined as never)}
           state={isCharging ? 'on' : 'neutral'}
           loading={startStop.isPending}
           wakingHint={startStop.wakingHint}
-          disabled={!online || !isPlugged}
+          disabled={!isPlugged}
           icon={<BoltIcon />}
         />
-        {capabilities.motorizedChargePort && (
+        {showPort && (
           <ControlButton
             label={
               isPlugged
@@ -154,12 +160,14 @@ export default function ChargeCard({ vehicleId, snapshot, vehicleStatus, capabil
             state={isPlugged ? 'info' : charge.charge_port_door_open ? 'warning' : 'neutral'}
             loading={portDoor.isPending}
             wakingHint={portDoor.wakingHint}
-            disabled={!online}
+            disabled={false}
             icon={<PortIcon />}
             title={isPlugged ? t('control.charge.unlockCableHint') : undefined}
           />
         )}
       </div>
+        );
+      })()}
     </ControlCard>
   );
 }

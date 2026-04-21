@@ -546,10 +546,21 @@ public sealed class TeslaCommandService
         reason is not null && (
             reason.Contains("vehicle unavailable", StringComparison.OrdinalIgnoreCase) ||
             reason.Contains("vehicle is asleep", StringComparison.OrdinalIgnoreCase) ||
-            reason.Contains("offline", StringComparison.OrdinalIgnoreCase));
+            reason.Contains("vehicle is offline", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("offline or asleep", StringComparison.OrdinalIgnoreCase));
 
-    private static CommandFailureKind ClassifyHttpFailure(System.Net.HttpStatusCode status, string body) =>
-        (int)status switch
+    private static CommandFailureKind ClassifyHttpFailure(System.Net.HttpStatusCode status, string body)
+    {
+        // Tesla's signed proxy returns 500 with the body
+        //   {"response":null,"error":"vehicle unavailable: vehicle is offline or asleep","error_description":""}
+        // when the car is sleeping. The naive (int)status switch would
+        // map 500 to Transport (no retry), so the wake_up + retry path
+        // would never fire. Sniff the body first so we surface this as
+        // VehicleUnreachable, which ShouldRetryAfterWake handles.
+        if (LooksLikeAsleep(body))
+            return CommandFailureKind.VehicleUnreachable;
+
+        return (int)status switch
         {
             400 => CommandFailureKind.InvalidRequest,
             401 or 403 => CommandFailureKind.Unauthorized,
@@ -559,6 +570,7 @@ public sealed class TeslaCommandService
             _ when (int)status >= 500 => CommandFailureKind.Transport,
             _ => CommandFailureKind.Rejected,
         };
+    }
 
     private static string BuildHttpErrorDetail(System.Net.HttpStatusCode status, string body, CommandFailureKind kind)
     {

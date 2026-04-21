@@ -37,17 +37,17 @@ export default function MediaCard({ vehicleId, online }: Props) {
   return (
     <ControlCard title={t('control.media.title')} icon={ICON}>
       <div className="grid grid-cols-3 gap-2 mb-2">
-        <ControlButton label={t('control.media.prev')} onClick={() => prev.mutate(undefined as never)} loading={prev.isPending} disabled={!online} icon={<SkipIcon back />} />
-        <ControlButton label={t('control.media.play')} onClick={() => play.mutate(undefined as never)} loading={play.isPending} disabled={!online} icon={<PlayIcon />} />
-        <ControlButton label={t('control.media.next')} onClick={() => next.mutate(undefined as never)} loading={next.isPending} disabled={!online} icon={<SkipIcon />} />
+        <ControlButton label={t('control.media.prev')} onClick={() => prev.mutate(undefined as never)} loading={prev.isPending} disabled={false} icon={<SkipIcon back />} />
+        <ControlButton label={t('control.media.play')} onClick={() => play.mutate(undefined as never)} loading={play.isPending} disabled={false} icon={<PlayIcon />} />
+        <ControlButton label={t('control.media.next')} onClick={() => next.mutate(undefined as never)} loading={next.isPending} disabled={false} icon={<SkipIcon />} />
       </div>
       <div className="grid grid-cols-2 gap-2 mb-2">
-        <ControlButton label={t('control.media.volumeDown')} onClick={() => volDn.mutate(undefined as never)} loading={volDn.isPending} disabled={!online} icon={<VolIcon down />} />
-        <ControlButton label={t('control.media.volumeUp')} onClick={() => volUp.mutate(undefined as never)} loading={volUp.isPending} disabled={!online} icon={<VolIcon />} />
+        <ControlButton label={t('control.media.volumeDown')} onClick={() => volDn.mutate(undefined as never)} loading={volDn.isPending} disabled={false} icon={<VolIcon down />} />
+        <ControlButton label={t('control.media.volumeUp')} onClick={() => volUp.mutate(undefined as never)} loading={volUp.isPending} disabled={false} icon={<VolIcon />} />
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <ControlButton label={t('control.media.prevFav')} onClick={() => prevFav.mutate(undefined as never)} loading={prevFav.isPending} disabled={!online} size="sm" icon={<StarIcon />} />
-        <ControlButton label={t('control.media.nextFav')} onClick={() => nextFav.mutate(undefined as never)} loading={nextFav.isPending} disabled={!online} size="sm" icon={<StarIcon />} />
+        <ControlButton label={t('control.media.prevFav')} onClick={() => prevFav.mutate(undefined as never)} loading={prevFav.isPending} disabled={false} size="sm" icon={<StarIcon />} />
+        <ControlButton label={t('control.media.nextFav')} onClick={() => nextFav.mutate(undefined as never)} loading={nextFav.isPending} disabled={false} size="sm" icon={<StarIcon />} />
       </div>
     </ControlCard>
   );

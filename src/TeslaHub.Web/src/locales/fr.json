@@ -62,7 +62,10 @@
     },
     "feedback": {
       "sending": "Envoi…",
-      "waking": "Réveil de la voiture…"
+      "waking": "Réveil de la voiture…",
+      "sent": "Commande envoyée.",
+      "wokeNote": "(voiture réveillée)",
+      "error": "Échec de la commande."
     },
     "setup": {
       "configure": {

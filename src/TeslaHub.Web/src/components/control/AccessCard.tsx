@@ -81,7 +81,7 @@ export default function AccessCard({ vehicleId, snapshot, vehicleStatus, online 
             state={isLocked ? 'on' : 'neutral'}
             loading={lock.isPending}
             wakingHint={lock.wakingHint}
-            disabled={!online}
+            disabled={false}
             icon={<LockIcon />}
           />
           <ControlButton
@@ -90,7 +90,7 @@ export default function AccessCard({ vehicleId, snapshot, vehicleStatus, online 
             state={!isLocked ? 'danger' : 'neutral'}
             loading={unlock.isPending}
             wakingHint={unlock.wakingHint}
-            disabled={!online}
+            disabled={false}
             icon={<UnlockIcon />}
           />
           <ControlButton
@@ -99,7 +99,7 @@ export default function AccessCard({ vehicleId, snapshot, vehicleStatus, online 
             state={sentryOn ? 'info' : 'neutral'}
             loading={sentry.isPending}
             wakingHint={sentry.wakingHint}
-            disabled={!online}
+            disabled={false}
             icon={<EyeIcon />}
           />
           <ControlButton
@@ -107,7 +107,7 @@ export default function AccessCard({ vehicleId, snapshot, vehicleStatus, online 
             onClick={() => flash.mutate(undefined as never)}
             loading={flash.isPending}
             wakingHint={flash.wakingHint}
-            disabled={!online}
+            disabled={false}
             icon={<HeadlightIcon />}
           />
           <ControlButton
@@ -115,14 +115,14 @@ export default function AccessCard({ vehicleId, snapshot, vehicleStatus, online 
             onClick={() => honk.mutate(undefined as never)}
             loading={honk.isPending}
             wakingHint={honk.wakingHint}
-            disabled={!online}
+            disabled={false}
             icon={<HornIcon />}
           />
           <ControlButton
             label={t('control.access.valet')}
             onClick={() => { setPinError(null); setValetPinOpen(true); }}
             state={valetOn ? 'warning' : 'neutral'}
-            disabled={!online}
+            disabled={false}
             icon={<ValetIcon />}
           />
         </div>
@@ -141,7 +141,7 @@ export default function AccessCard({ vehicleId, snapshot, vehicleStatus, online 
               label={speedActive ? t('control.access.speedLimit.deactivate') : t('control.access.speedLimit.activate')}
               onClick={() => { setPinError(null); setSpeedPinOpen(true); }}
               state={speedActive ? 'warning' : 'neutral'}
-              disabled={!online}
+              disabled={false}
               size="sm"
             />
           </div>
