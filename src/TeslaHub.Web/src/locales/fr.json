@@ -52,6 +52,8 @@
     "loading": "Chargement du véhicule…",
     "wake": "Réveiller",
     "refresh": "Rafraîchir",
+    "refresh.in": "Mise à jour dans {{seconds}}s…",
+    "refresh.inFlight": "Lecture de l'état du véhicule…",
     "asleepHint": "Le véhicule est en veille — touchez un bouton pour le réveiller avant d'envoyer une commande.",
     "staleHint": "Le véhicule est en veille — les valeurs affichées proviennent du cache TeslaMate local. Certains réglages avancés (surchauffe habitacle, sièges chauffants, biodéfense, voiturier, mise à jour) ne seront visibles qu'après réveil.",
     "state": {
@@ -99,7 +101,8 @@
       "sync": "Sync",
       "inside": "Intérieur",
       "outside": "Extérieur",
-      "precondition": "Précond.",
+      "precondition": "Dégivrage",
+      "preconditionHint": "Mode \"Dégivrage du véhicule\" Tesla : pousse la clim au maximum + dégivre le pare-brise. Même bouton que dans l'app voiture.",
       "steeringWheel": "Volant",
       "bioweapon": "Biodéfense",
       "bioweaponHint": "Mode défense biologique (Model S/X uniquement)",
@@ -120,6 +123,12 @@
         "on": "Garder",
         "dog": "Animal",
         "camp": "Camping"
+      },
+      "keeperHint": {
+        "off": "La climatisation s'arrête comme d'habitude lorsque vous garez et verrouillez la voiture.",
+        "on": "Maintient la climatisation active après verrouillage et même sans personne à bord (pas d'arrêt auto).",
+        "dog": "Mode Animal — maintient l'habitacle à environ 21°C et affiche un message rassurant pour les passants.",
+        "camp": "Mode Camping — maintient la climatisation, l'audio et l'alimentation USB toute la nuit."
       },
       "copTitle": "Protection surchauffe habitacle",
       "cop": {
@@ -154,6 +163,7 @@
       "speedLimit.activate": "Activer",
       "speedLimit.deactivate": "Désactiver",
       "speedLimit.pinHint": "Saisissez votre code PIN à 4 chiffres de limite de vitesse Tesla.",
+      "speedLimitInactive": "non active",
       "valet.enable": "Activer le mode voiturier",
       "valet.disable": "Désactiver le mode voiturier",
       "valet.pinHint": "Saisissez le code PIN à 4 chiffres pour activer ou désactiver le mode voiturier."

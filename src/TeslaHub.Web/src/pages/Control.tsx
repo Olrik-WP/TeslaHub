@@ -14,6 +14,7 @@ import AccessCard from '../components/control/AccessCard';
 import OpeningsCard from '../components/control/OpeningsCard';
 import MediaCard from '../components/control/MediaCard';
 import SoftwareCard from '../components/control/SoftwareCard';
+import RefreshIndicator from '../components/RefreshIndicator';
 
 interface Props {
   carId: number | undefined;
@@ -158,6 +159,10 @@ export default function Control({ carId }: Props) {
       {stateLoading && !snapshot && (
         <p className="text-sm text-[#9ca3af] mb-3">{t('control.loading')}</p>
       )}
+
+      {/* Post-command countdown — sits between header and cards so it's
+          the very first thing the user sees after a tap. */}
+      <RefreshIndicator vehicleId={vehicleId} className="mb-3" />
 
       {/* Stale-state banner: when the car is asleep/offline we deliberately
           skip vehicle_data (anti vampire-drain). The cards then hydrate

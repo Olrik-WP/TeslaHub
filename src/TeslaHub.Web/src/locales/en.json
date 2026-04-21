@@ -52,6 +52,8 @@
     "loading": "Loading vehicle…",
     "wake": "Wake",
     "refresh": "Refresh",
+    "refresh.in": "Updating in {{seconds}}s…",
+    "refresh.inFlight": "Reading fresh vehicle state…",
     "asleepHint": "Vehicle is asleep — tap a button to wake it before sending a command.",
     "staleHint": "Vehicle is asleep — values shown come from your local TeslaMate cache. Some advanced settings (cabin overheat, seat heaters, bioweapon, valet, software update) won't be visible until you wake the car.",
     "state": {
@@ -99,7 +101,8 @@
       "sync": "Sync",
       "inside": "Inside",
       "outside": "Outside",
-      "precondition": "Precondition",
+      "precondition": "Defrost",
+      "preconditionHint": "Tesla's \"Defrost\" mode: blasts the climate to max heat + windshield defrost. Same button as the in-car app.",
       "steeringWheel": "Steering wheel",
       "bioweapon": "Bioweapon",
       "bioweaponHint": "Bioweapon defense mode (Model S/X only)",
@@ -120,6 +123,12 @@
         "on": "Keep",
         "dog": "Dog",
         "camp": "Camp"
+      },
+      "keeperHint": {
+        "off": "Climate stops as usual when you park and lock the car.",
+        "on": "Keeps the climate running after lock + nobody inside (no auto-shutoff).",
+        "dog": "Pet mode — keeps the cabin around 21°C and shows a reassuring message on the screen for passers-by.",
+        "camp": "Camp mode — keeps climate, audio and USB power running through the night."
       },
       "copTitle": "Cabin overheat protection",
       "cop": {
@@ -154,6 +163,7 @@
       "speedLimit.activate": "Activate",
       "speedLimit.deactivate": "Deactivate",
       "speedLimit.pinHint": "Enter your 4-digit Tesla speed limit PIN.",
+      "speedLimitInactive": "not active",
       "valet.enable": "Enable valet mode",
       "valet.disable": "Disable valet mode",
       "valet.pinHint": "Enter the 4-digit PIN to set or clear valet mode."

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import ControlButton, { type ControlButtonState } from './control/ControlButton';
 import { capabilitiesLoaded, useControlAvailability, useControlMutation } from '../hooks/useVehicleControl';
+import RefreshIndicator from './RefreshIndicator';
 import type { VehicleStatus } from '../api/queries';
 
 interface Props {
@@ -61,6 +62,10 @@ export default function HomeQuickActions({ vehicle }: Props) {
 
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 mt-3">
+      {/* Post-command countdown / refreshing indicator. Invisible when
+          no command is pending. Lets the user know fresh state is
+          inbound rather than thinking the page is frozen. */}
+      <RefreshIndicator vehicleId={vehicleId} compact className="mb-2" />
       <div className="flex items-center justify-between mb-2">
         <span className="text-[11px] uppercase tracking-wide text-[#6b7280]">
           {t('home.quickActions.title')}

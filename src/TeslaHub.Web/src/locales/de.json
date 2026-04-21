@@ -52,6 +52,8 @@
     "loading": "Fahrzeug wird geladen…",
     "wake": "Aufwecken",
     "refresh": "Aktualisieren",
+    "refresh.in": "Aktualisierung in {{seconds}}s…",
+    "refresh.inFlight": "Fahrzeugstatus wird gelesen…",
     "asleepHint": "Das Fahrzeug schläft — tippen Sie auf eine Taste, um es vor dem Senden eines Befehls aufzuwecken.",
     "staleHint": "Das Fahrzeug schläft — die angezeigten Werte stammen aus dem lokalen TeslaMate-Cache. Einige erweiterte Einstellungen (Innenraum-Überhitzungsschutz, Sitzheizung, Biowaffenmodus, Valet, Software-Update) sind erst nach dem Wecken sichtbar.",
     "state": {
@@ -99,7 +101,8 @@
       "sync": "Sync",
       "inside": "Innen",
       "outside": "Außen",
-      "precondition": "Vorklim.",
+      "precondition": "Enteisen",
+      "preconditionHint": "Tesla \"Fahrzeug enteisen\"-Modus: dreht die Klimaanlage auf Maximum und enteist die Windschutzscheibe. Gleicher Knopf wie in der Fahrzeug-App.",
       "steeringWheel": "Lenkrad",
       "bioweapon": "Biowaffenmodus",
       "bioweaponHint": "Biowaffen-Verteidigungsmodus (nur Model S/X)",
@@ -120,6 +123,12 @@
         "on": "Halten",
         "dog": "Hund",
         "camp": "Camping"
+      },
+      "keeperHint": {
+        "off": "Die Klimaanlage stoppt wie gewohnt, sobald das Fahrzeug geparkt und verriegelt wird.",
+        "on": "Hält die Klimaanlage nach dem Verriegeln auch ohne Insassen aktiv (keine automatische Abschaltung).",
+        "dog": "Hundemodus — hält den Innenraum bei rund 21°C und zeigt eine beruhigende Nachricht auf dem Bildschirm für Passanten.",
+        "camp": "Campingmodus — Klimaanlage, Audio und USB-Stromversorgung bleiben die ganze Nacht aktiv."
       },
       "copTitle": "Innenraum-Überhitzungsschutz",
       "cop": {
@@ -154,6 +163,7 @@
       "speedLimit.activate": "Aktivieren",
       "speedLimit.deactivate": "Deaktivieren",
       "speedLimit.pinHint": "Geben Sie Ihren 4-stelligen Tesla-Tempolimit-PIN ein.",
+      "speedLimitInactive": "nicht aktiv",
       "valet.enable": "Valet-Modus aktivieren",
       "valet.disable": "Valet-Modus deaktivieren",
       "valet.pinHint": "Geben Sie den 4-stelligen PIN zum Aktivieren oder Deaktivieren des Valet-Modus ein."

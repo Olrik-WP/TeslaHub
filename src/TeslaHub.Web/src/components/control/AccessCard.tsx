@@ -5,6 +5,7 @@ import ControlButton from './ControlButton';
 import PinPad from './PinPad';
 import { useControlMutation, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
 import type { VehicleStatus } from '../../api/queries';
+import { useUnits } from '../../hooks/useUnits';
 import { readVehicle } from './stateParsers';
 
 interface Props {
@@ -26,8 +27,11 @@ const ICON = (
  * Only the two PIN-protected actions open a modal — everything else
  * is one-tap with optimistic colouring.
  */
+const MPH_TO_KMH = 1.609344;
+
 export default function AccessCard({ vehicleId, snapshot, vehicleStatus, online }: Props) {
   const { t } = useTranslation();
+  const u = useUnits();
   const v = readVehicle(snapshot, vehicleStatus);
 
   const lock = useControlMutation(vehicleId, 'access/lock');
@@ -128,15 +132,23 @@ export default function AccessCard({ vehicleId, snapshot, vehicleStatus, online 
         </div>
 
         <div className="mt-3 pt-3 border-t border-[#2a2a2a]">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-[#9ca3af]">
-              {t('control.access.speedLimit')}
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs text-[#9ca3af]">{t('control.access.speedLimit')}</span>
               {v.speed_limit_mode?.current_limit_mph != null && (
-                <span className="text-[#6b7280] ml-2">
-                  {v.speed_limit_mode.current_limit_mph} mph
+                <span className="text-[11px] text-[#6b7280] truncate">
+                  {/* Tesla always returns the limit in mph regardless of
+                      locale; convert to km/h on display when the user
+                      is in metric. The "(not active)" suffix matters
+                      because Tesla still returns the last configured
+                      value even after deactivation. */}
+                  {u.distanceUnit === 'mi'
+                    ? `${Math.round(v.speed_limit_mode.current_limit_mph)} mph`
+                    : `${Math.round(v.speed_limit_mode.current_limit_mph * MPH_TO_KMH)} km/h`}
+                  {!speedActive && ` · ${t('control.access.speedLimitInactive')}`}
                 </span>
               )}
-            </span>
+            </div>
             <ControlButton
               label={speedActive ? t('control.access.speedLimit.deactivate') : t('control.access.speedLimit.activate')}
               onClick={() => { setPinError(null); setSpeedPinOpen(true); }}

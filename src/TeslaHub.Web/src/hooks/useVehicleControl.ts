@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
@@ -130,6 +130,116 @@ export function useRefreshVehicleState() {
 }
 
 /**
+ * Module-level debounced force refresh. After ANY successful command
+ * we ask the backend to re-read vehicle_data with force=true so the
+ * 30s server cache is bypassed and the UI sees the fresh state.
+ * Debounced per vehicleId so a burst of taps (e.g. seat heater rows,
+ * temperature stepper) only triggers a single refresh at the end.
+ *
+ * 5-second delay because Tesla itself takes ~3-5s to propagate the
+ * effect of a command back to its read API; refreshing earlier would
+ * still see the old value.
+ *
+ * No vampire drain risk: we keep let_sleep=true on the read, and the
+ * car was just woken anyway to receive the command — Tesla will let
+ * it sleep again after ~10-15min of inactivity, exactly as designed.
+ */
+const refreshTimers = new Map<number, ReturnType<typeof setTimeout>>();
+const POST_COMMAND_REFRESH_DELAY_MS = 5_000;
+
+// Tiny pub/sub so components (RefreshIndicator under the Home SVG and
+// at the top of Control) can render a "Updating in 4s…" countdown
+// while a force-refresh is pending. Keyed by vehicleId.
+type RefreshState = { dueAt: number | null; refreshing: boolean };
+const refreshState = new Map<number, RefreshState>();
+const refreshListeners = new Set<() => void>();
+
+function notifyRefreshListeners() {
+  refreshListeners.forEach((fn) => fn());
+}
+
+function setRefreshState(vehicleId: number, state: RefreshState) {
+  refreshState.set(vehicleId, state);
+  notifyRefreshListeners();
+}
+
+function clearRefreshState(vehicleId: number) {
+  refreshState.delete(vehicleId);
+  notifyRefreshListeners();
+}
+
+function scheduleForceRefresh(qc: QueryClient, vehicleId: number) {
+  const existing = refreshTimers.get(vehicleId);
+  if (existing) clearTimeout(existing);
+  setRefreshState(vehicleId, {
+    dueAt: Date.now() + POST_COMMAND_REFRESH_DELAY_MS,
+    refreshing: false,
+  });
+  const timer = setTimeout(async () => {
+    refreshTimers.delete(vehicleId);
+    setRefreshState(vehicleId, { dueAt: null, refreshing: true });
+    try {
+      const data = await api<VehicleStateSnapshot>(
+        `/tesla-control/${vehicleId}/state?force=true`,
+      );
+      qc.setQueryData(['vehicleControlState', vehicleId], data);
+      // Also nudge the TeslaMate-fed VehicleStatus query so the SVG
+      // and Home chips re-poll TeslaMate's MQTT cache. TeslaMate may
+      // not have the fresh value yet (it polls owner-api on its own
+      // schedule), but at least we don't keep a stale React cache.
+      qc.invalidateQueries({ queryKey: ['vehicle'] });
+    } catch {
+      // Force-refresh is best-effort; if Tesla is rate-limiting or the
+      // car went offline again we just leave the previous snapshot.
+    } finally {
+      // Keep "refreshing" visible for ~1s so the indicator gives a
+      // tiny "done" pulse instead of disappearing instantly.
+      setTimeout(() => clearRefreshState(vehicleId), 1_000);
+    }
+  }, POST_COMMAND_REFRESH_DELAY_MS);
+  refreshTimers.set(vehicleId, timer);
+}
+
+/**
+ * Subscribes to the post-command refresh state for a given vehicle.
+ * Returns secondsUntil (countdown in s, null when no refresh pending)
+ * and isRefreshing (true while the actual force-fetch is in flight).
+ *
+ * Powers the small RefreshIndicator banner under the Home SVG and on
+ * the Control page so the user knows fresh values are inbound and
+ * doesn't think the page is stuck.
+ */
+export function useRefreshCountdown(vehicleId: number | undefined) {
+  const [, force] = useState(0);
+
+  // Subscribe to module-level updates (state map changes).
+  useEffect(() => {
+    const fn = () => force((n) => n + 1);
+    refreshListeners.add(fn);
+    return () => { refreshListeners.delete(fn); };
+  }, []);
+
+  // Re-render every second while a countdown is active so the
+  // "Updating in Xs…" label ticks down smoothly.
+  useEffect(() => {
+    if (!vehicleId) return;
+    const state = refreshState.get(vehicleId);
+    if (!state || state.dueAt === null) return;
+    const tick = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(tick);
+  });
+
+  if (!vehicleId) return { secondsUntil: null, isRefreshing: false };
+  const state = refreshState.get(vehicleId);
+  if (!state) return { secondsUntil: null, isRefreshing: false };
+  if (state.refreshing) return { secondsUntil: null, isRefreshing: true };
+  if (state.dueAt === null) return { secondsUntil: null, isRefreshing: false };
+
+  const remaining = Math.max(0, Math.ceil((state.dueAt - Date.now()) / 1000));
+  return { secondsUntil: remaining, isRefreshing: false };
+}
+
+/**
  * Generic command mutation factory. Caller passes the path (relative to
  * /tesla-control/{id}) and the body. Handles:
  *   - the standard CommandResponse / RFC7807 problem JSON shapes
@@ -167,7 +277,13 @@ export function useControlMutation<TBody = void>(
     },
     onSuccess: (data) => {
       if (vehicleId) {
+        // Immediate invalidate keeps react-query happy + lets a fresh
+        // mount fetch through, but the backend's 30s cache means it
+        // would still return the stale snapshot. The debounced
+        // force-refresh below bypasses that cache 5s later, after
+        // Tesla has propagated the command's effect.
         qc.invalidateQueries({ queryKey: ['vehicleControlState', vehicleId] });
+        scheduleForceRefresh(qc, vehicleId);
       }
       options?.invalidate?.forEach((qk) => qc.invalidateQueries({ queryKey: qk }));
       if (options?.silent) return;

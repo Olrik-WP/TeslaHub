@@ -5,6 +5,7 @@ import ControlButton from './ControlButton';
 import SeatHeaterRow from './SeatHeaterRow';
 import { capabilitiesLoaded, useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
 import type { VehicleStatus } from '../../api/queries';
+import { useUnits } from '../../hooks/useUnits';
 import { copTempToInt, keeperModeToInt, readClimate } from './stateParsers';
 
 interface Props {
@@ -32,14 +33,19 @@ const ICON = (
  */
 export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabilities, online }: Props) {
   const { t } = useTranslation();
+  const u = useUnits();
   const climate = readClimate(snapshot, vehicleStatus);
 
+  // Tesla's Fleet API exchange is ALWAYS in Celsius for set_temps and
+  // for the read fields driver_temp_setting / passenger_temp_setting.
+  // The user's locale (°C / °F) only affects display + the +/− step.
+  // We keep canonical state in Celsius and convert at the boundaries.
   const isOn = climate.is_climate_on ?? climate.is_auto_conditioning_on ?? false;
   const driverServer = climate.driver_temp_setting ?? 22;
   const passengerServer = climate.passenger_temp_setting ?? driverServer;
 
   // Local optimistic state for the temperature stepper. Snaps back to
-  // server-side value whenever the snapshot updates.
+  // server-side value whenever the snapshot updates. Stored in °C.
   const [driver, setDriver] = useState(driverServer);
   const [passenger, setPassenger] = useState(passengerServer);
   const [sync, setSync] = useState(driverServer === passengerServer);
@@ -50,6 +56,13 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
 
   const min = climate.min_avail_temp ?? MIN_TEMP_DEFAULT;
   const max = climate.max_avail_temp ?? MAX_TEMP_DEFAULT;
+  // Display step — 1°F resolution looks nicer than the awkward 0.5°F
+  // that 0.5°C maps to (would yield 71.6, 72.5, 73.4 etc.).
+  const displayStep = u.tempUnit === '°F' ? 1 : STEP;
+  const fmt = (celsius: number) => {
+    const v = u.convertTemp(celsius);
+    return v == null ? '—' : (u.tempUnit === '°F' ? v.toFixed(0) : v.toFixed(1));
+  };
 
   const startStop = useControlMutation(vehicleId, isOn ? 'climate/stop' : 'climate/start');
   const setTemps = useControlMutation<{ driverTemp: number; passengerTemp: number }>(vehicleId, 'climate/temps', { silent: true });
@@ -60,15 +73,20 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
   const copTemp = useControlMutation<{ level: number }>(vehicleId, 'climate/cabin-overheat-temp');
   const bioweapon = useControlMutation<{ on: boolean }>(vehicleId, 'climate/bioweapon');
 
+  // Step expressed in the canonical unit (°C). When the user is in °F
+  // we step by ~0.55 °C so each tap moves the displayed value by 1 °F.
+  const stepCelsius = u.tempUnit === '°F' ? 5 / 9 : STEP;
   const adjustDriver = (delta: number) => {
-    const next = Math.max(min, Math.min(max, +(driver + delta).toFixed(1)));
+    const sign = Math.sign(delta);
+    const next = Math.max(min, Math.min(max, +(driver + sign * stepCelsius).toFixed(2)));
     setDriver(next);
     const passengerNext = sync ? next : passenger;
     setPassenger(passengerNext);
     setTemps.mutate({ driverTemp: next, passengerTemp: passengerNext });
   };
   const adjustPassenger = (delta: number) => {
-    const next = Math.max(min, Math.min(max, +(passenger + delta).toFixed(1)));
+    const sign = Math.sign(delta);
+    const next = Math.max(min, Math.min(max, +(passenger + sign * stepCelsius).toFixed(2)));
     setPassenger(next);
     setTemps.mutate({ driverTemp: driver, passengerTemp: next });
   };
@@ -86,19 +104,19 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
       <div className="grid grid-cols-3 items-center gap-2 my-2">
         <button
           type="button"
-          onClick={() => adjustDriver(-STEP)}
+          onClick={() => adjustDriver(-displayStep)}
           disabled={setTemps.isPending}
           className="h-14 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-[#e0e0e0] text-2xl active:bg-[#222] disabled:opacity-50"
         >−</button>
         <div className="flex flex-col items-center">
-          <span className="text-3xl font-semibold text-[#e0e0e0]">{driver.toFixed(1)}°</span>
+          <span className="text-3xl font-semibold text-[#e0e0e0]">{fmt(driver)}{u.tempUnit}</span>
           <span className="text-[10px] text-[#6b7280] uppercase tracking-wide">
             {t('control.climate.driver')}
           </span>
         </div>
         <button
           type="button"
-          onClick={() => adjustDriver(+STEP)}
+          onClick={() => adjustDriver(+displayStep)}
           disabled={setTemps.isPending}
           className="h-14 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-[#e0e0e0] text-2xl active:bg-[#222] disabled:opacity-50"
         >+</button>
@@ -134,17 +152,17 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
         <div className="flex-1 grid grid-cols-3 items-center gap-2">
           <button
             type="button"
-            onClick={() => adjustPassenger(-STEP)}
+            onClick={() => adjustPassenger(-displayStep)}
             disabled={sync || setTemps.isPending}
             className="h-9 rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] text-[#9ca3af] text-base active:bg-[#222] disabled:opacity-40"
           >−</button>
           <div className="flex flex-col items-center">
-            <span className="text-base font-medium text-[#e0e0e0]">{passenger.toFixed(1)}°</span>
+            <span className="text-base font-medium text-[#e0e0e0]">{fmt(passenger)}{u.tempUnit}</span>
             <span className="text-[10px] text-[#6b7280] uppercase">{t('control.climate.passenger')}</span>
           </div>
           <button
             type="button"
-            onClick={() => adjustPassenger(+STEP)}
+            onClick={() => adjustPassenger(+displayStep)}
             disabled={sync || setTemps.isPending}
             className="h-9 rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] text-[#9ca3af] text-base active:bg-[#222] disabled:opacity-40"
           >+</button>
@@ -155,10 +173,10 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
       {(climate.inside_temp != null || climate.outside_temp != null) && (
         <div className="flex justify-between text-[11px] text-[#6b7280] mt-3 pt-3 border-t border-[#2a2a2a]">
           {climate.inside_temp != null && (
-            <span>{t('control.climate.inside')}: {climate.inside_temp.toFixed(1)}°</span>
+            <span>{t('control.climate.inside')}: {fmt(climate.inside_temp)}{u.tempUnit}</span>
           )}
           {climate.outside_temp != null && (
-            <span>{t('control.climate.outside')}: {climate.outside_temp.toFixed(1)}°</span>
+            <span>{t('control.climate.outside')}: {fmt(climate.outside_temp)}{u.tempUnit}</span>
           )}
         </div>
       )}
@@ -173,6 +191,7 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
           wakingHint={precondition.wakingHint}
           disabled={false}
           icon={<FlameIcon />}
+          title={t('control.climate.preconditionHint')}
         />
         <ControlButton
           label={t('control.climate.steeringWheel')}
@@ -225,27 +244,39 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
         );
       })()}
 
-      {/* Keeper mode */}
+      {/* Keeper mode (Tesla climate_keeper_mode):
+          0 Off — climate stops as usual when the car parks
+          1 Keep — climate stays on after lock + nobody inside
+          2 Dog — keeps cabin ~21°C with on-screen "owner returning" message
+          3 Camp — climate + audio + USB power kept on overnight */}
       <div className="mt-3 pt-3 border-t border-[#2a2a2a]">
         <p className="text-[11px] text-[#6b7280] uppercase tracking-wide mb-2">{t('control.climate.keeperMode')}</p>
         <div className="grid grid-cols-4 gap-2">
-          {[0, 1, 2, 3].map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => keeper.mutate({ mode })}
-              disabled={keeper.isPending}
-              className={[
-                'py-2 rounded-lg border text-[11px]',
-                mode === keeperInt
-                  ? 'bg-[#3b82f6]/15 border-[#3b82f6]/40 text-[#3b82f6]'
-                  : 'bg-[#1a1a1a] border-[#2a2a2a] text-[#9ca3af]',
-              ].join(' ')}
-            >
-              {t(`control.climate.keeper.${['off', 'on', 'dog', 'camp'][mode]}`)}
-            </button>
-          ))}
+          {[0, 1, 2, 3].map((mode) => {
+            const key = ['off', 'on', 'dog', 'camp'][mode];
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => keeper.mutate({ mode })}
+                disabled={keeper.isPending}
+                title={t(`control.climate.keeperHint.${key}`)}
+                className={[
+                  'py-2 rounded-lg border text-[11px]',
+                  mode === keeperInt
+                    ? 'bg-[#3b82f6]/15 border-[#3b82f6]/40 text-[#3b82f6]'
+                    : 'bg-[#1a1a1a] border-[#2a2a2a] text-[#9ca3af]',
+                ].join(' ')}
+              >
+                {t(`control.climate.keeper.${key}`)}
+              </button>
+            );
+          })}
         </div>
+        {/* Active mode description shown inline so it's not buried in a hover tooltip on touch screens */}
+        <p className="text-[10px] text-[#6b7280] mt-2 leading-snug">
+          {t(`control.climate.keeperHint.${['off', 'on', 'dog', 'camp'][keeperInt] ?? 'off'}`)}
+        </p>
       </div>
 
       {/* Cabin overheat protection */}
