@@ -447,7 +447,15 @@
     "hideRoute": "Fahrten ausblenden",
     "routeOn": "Fahrten",
     "routeOff": "Fahrten",
-    "routeHidden": "Fahrten ausgeblendet"
+    "routeHidden": "Fahrten ausgeblendet",
+    "search": {
+      "open": "Adresse suchen",
+      "placeholder": "Stadt oder Adresse suchen…",
+      "close": "Suche schließen",
+      "noResults": "Keine Ergebnisse",
+      "searching": "Suche…",
+      "hint": "Mindestens 3 Zeichen eingeben"
+    }
   },
   "settings": {
     "title": "Einstellungen",

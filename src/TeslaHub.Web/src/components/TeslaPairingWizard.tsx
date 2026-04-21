@@ -116,7 +116,16 @@ export default function TeslaPairingWizard() {
   const markPairedMutation = useMutation({
     mutationFn: ({ id, paired }: { id: number; paired: boolean }) =>
       api(`/tesla-pairing/vehicles/${id}/paired`, { method: 'POST', body: JSON.stringify({ paired }) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teslaPairingStatus'] }),
+    onSuccess: () => {
+      // The wizard's own list is keyed on teslaPairingStatus, but the
+      // KeyPaired flag we just flipped also drives the multi-account
+      // dedup in BottomNav / Control / HomeQuickActions (they read
+      // controlAvailability). Invalidate both so the user sees the
+      // Control link reappear (or disappear) without having to reload
+      // the page.
+      queryClient.invalidateQueries({ queryKey: ['teslaPairingStatus'] });
+      queryClient.invalidateQueries({ queryKey: ['controlAvailability'] });
+    },
   });
 
   const configureTelemetryMutation = useMutation({

@@ -447,7 +447,15 @@
     "hideRoute": "Masquer les trajets",
     "routeOn": "Trajets",
     "routeOff": "Trajets",
-    "routeHidden": "Trajets masqués"
+    "routeHidden": "Trajets masqués",
+    "search": {
+      "open": "Rechercher une adresse",
+      "placeholder": "Rechercher une ville, une adresse…",
+      "close": "Fermer la recherche",
+      "noResults": "Aucun résultat",
+      "searching": "Recherche…",
+      "hint": "Tapez au moins 3 caractères"
+    }
   },
   "settings": {
     "title": "Paramètres",

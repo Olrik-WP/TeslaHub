@@ -447,7 +447,15 @@
     "hideRoute": "Hide trips",
     "routeOn": "Trips",
     "routeOff": "Trips",
-    "routeHidden": "Trips hidden"
+    "routeHidden": "Trips hidden",
+    "search": {
+      "open": "Search address",
+      "placeholder": "Search a city, address…",
+      "close": "Close search",
+      "noResults": "No results",
+      "searching": "Searching…",
+      "hint": "Type at least 3 characters"
+    }
   },
   "settings": {
     "title": "Settings",

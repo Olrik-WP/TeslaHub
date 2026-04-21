@@ -12,6 +12,7 @@ import {
 } from '../api/queries';
 import { api } from '../api/client';
 import MapLibreMap, { type LivePosition } from '../components/MapLibreMap';
+import MapSearchBar from '../components/MapSearchBar';
 import SendToCarPanel from '../components/SendToCarPanel';
 import { useLiveStream } from '../hooks/useLiveStream';
 import { useVehicleStatus } from '../hooks/useVehicle';
@@ -319,6 +320,18 @@ export default function MapPage({ carId }: Props) {
     [],
   );
 
+  // Standalone map search (always available, independent of send mode).
+  // Unlike the SendToCar variant we *don't* drop a destination pin —
+  // searching just moves the camera so the user can browse the area
+  // (chargers, route, etc.). Send-to-car flow still works through its
+  // own panel when explicitly opened.
+  const handleMapSearchSelect = useCallback(
+    (latitude: number, longitude: number) => {
+      setFlyToCoords({ latitude, longitude, zoom: 14 });
+    },
+    [],
+  );
+
   const vehiclePosition = useMemo(() => {
     if (livePosition?.latitude != null && livePosition?.longitude != null) {
       return { latitude: livePosition.latitude, longitude: livePosition.longitude };
@@ -346,12 +359,13 @@ export default function MapPage({ carId }: Props) {
         </div>
       ) : (
         <>
-          {/* Range selector (scrollable on mobile) + always-visible live toggle */}
-          <div className="flex items-stretch gap-2 p-2 bg-[#0a0a0a]">
-            <div
-              className="flex gap-1 flex-1 min-w-0 overflow-x-auto -mx-1 px-1 [&::-webkit-scrollbar]:hidden"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-            >
+          {/* Toolbar wraps onto multiple rows when needed (mobile) instead
+              of hiding "Custom" behind a horizontal scroll. The range
+              buttons stay grouped together so they always wrap as a
+              block; action buttons (live / route / chargers / send)
+              flow on the right and wrap naturally underneath. */}
+          <div className="flex flex-wrap items-stretch gap-2 p-2 bg-[#0a0a0a]">
+            <div className="flex gap-1 flex-wrap">
               {RANGE_OPTIONS.map((opt) => (
                 <button
                   key={opt.key}
@@ -521,6 +535,11 @@ export default function MapPage({ carId }: Props) {
           onSendChargerToCar={handleSendChargerToCar}
           flyTo={flyToCoords}
         />
+
+        {/* Always-on address search overlay. Independent of send-mode —
+            picking a result just flies the camera. The user can still
+            switch to send-mode afterwards to drop a destination pin. */}
+        <MapSearchBar near={vehiclePosition} onSelect={handleMapSearchSelect} />
 
         {sendMode && (
           <SendToCarPanel

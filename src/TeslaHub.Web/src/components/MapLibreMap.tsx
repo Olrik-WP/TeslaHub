@@ -931,9 +931,10 @@ export default function MapLibreMap({
 
       {/* OCM warning banner. Shown when the upstream call returned 401/403/429
           so the user understands why the layer is empty. The most common case
-          is "missing-key": OCM started rejecting keyless requests in 2024. */}
+          is "missing-key": OCM started rejecting keyless requests in 2024.
+          Pushed below the search-bar overlay (top-2) so the two don't stack. */}
       {showPublicChargers && chargersWarning && (
-        <div className="absolute top-2 left-2 right-2 z-20 mx-auto max-w-md bg-[#0a0a0a]/95 backdrop-blur-sm border border-[#f59e0b]/60 rounded-lg px-3 py-2 text-xs text-white shadow-lg">
+        <div className="absolute top-14 left-2 right-2 z-20 mx-auto max-w-md bg-[#0a0a0a]/95 backdrop-blur-sm border border-[#f59e0b]/60 rounded-lg px-3 py-2 text-xs text-white shadow-lg">
           <div className="flex items-start gap-2">
             <span aria-hidden="true" className="text-[#f59e0b] text-base leading-none">⚠</span>
             <div className="flex-1 min-w-0">
