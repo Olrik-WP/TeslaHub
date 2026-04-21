@@ -349,9 +349,18 @@ export default function TeslaPairingWizard() {
                     {v.vin}
                     {v.model ? ` · ${v.model}` : ''}
                   </div>
-                  {v.accountEmail && (
+                  {/* Owner identification — crucial for multi-account installs
+                      because every shared vehicle appears once per Tesla
+                      account (a couple sharing both cars typically sees 4
+                      entries, 2 per car). Email is the natural label, but
+                      Tesla doesn't return it without the email scope, so we
+                      fall back to "Tesla account #N" so the user can match
+                      each row with the corresponding card above. */}
+                  {(v.accountEmail || v.accountId != null) && (
                     <div className="text-[10px] text-[#6b7280] truncate italic">
-                      {t('securityAlerts.wizard.step3.ownerLabel')}: {v.accountEmail}
+                      {t('securityAlerts.wizard.step3.ownerLabel')}:{' '}
+                      {v.accountEmail
+                        || t('securityAlerts.connectedPanel.unnamedAccount', { id: v.accountId })}
                     </div>
                   )}
                 </div>
