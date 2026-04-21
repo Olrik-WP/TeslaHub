@@ -205,7 +205,7 @@ export default function TeslaPairingWizard() {
             </ul>
             <a
               className="text-xs text-[#e0a47e] underline hover:text-[#ffc499] inline-block"
-              href="https://github.com/Olrik-WP/TeslaHub#security-alerts-optional"
+              href="https://github.com/Olrik-WP/TeslaHub#tesla-fleet-api-integration-optional"
               target="_blank"
               rel="noreferrer"
             >

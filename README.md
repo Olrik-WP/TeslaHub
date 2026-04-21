@@ -62,7 +62,7 @@ Optionally, TeslaHub also connects to TeslaMate's MQTT broker to receive **live 
 - A running [TeslaMate](https://docs.teslamate.org/docs/installation/docker) installation with Docker Compose
 - Docker and Docker Compose v2+
 
-### Step 1 — Add TeslaHub variables to your `.env`
+### Phase A · Step 1 — Add TeslaHub variables to your `.env`
 
 In the same directory as your TeslaMate `docker-compose.yml`, add these variables to your `.env` file:
 
@@ -102,7 +102,7 @@ MQTT_PORT=1883
 
 **If you don't use a `.env` file**, add the variables directly in the `environment:` section of each service (see Step 2).
 
-### Step 2 — Add TeslaHub services to your `docker-compose.yml`
+### Phase A · Step 2 — Add TeslaHub services to your `docker-compose.yml`
 
 Add the following services to your **existing** TeslaMate `docker-compose.yml`:
 
@@ -166,7 +166,7 @@ Add the following services to your **existing** TeslaMate `docker-compose.yml`:
 
 > **Without `.env` file?** Replace variables like `${TM_DB_PASS}` with their actual values directly in the YAML.
 
-### Step 3 — Start
+### Phase A · Step 3 — Start
 
 ```bash
 docker compose up -d
@@ -359,7 +359,19 @@ TeslaHub never relies on a shared backend. Each TeslaHub installation registers 
 
 Everything stays on **your** server. No third-party cloud, no shared client_id, no relayed messages.
 
-### Step 1 — Create your Tesla developer app (5 min, free)
+### How everything fits together (read this first)
+
+The setup splits into 3 phases. Sentry alerts (Phase C bonus) is the only optional bit — Vehicle Control + Send-to-car only need Phases A + B + the in-app wizard steps 1–3.
+
+| Phase | Where | What |
+|---|---|---|
+| **A — Server side, one-time** | SSH on your host | DNS records, Caddy reverse-proxy, `.env` filled, `docker-compose.yml` with the TeslaHub services, `docker compose up -d` so every container is **UP**. Covered by [Installation](#installation). |
+| **B — Tesla developer app, one-time** | `developer.tesla.com` + your `.env` | Create the developer app, copy `client_id` / `client_secret` / `redirect_uri` into `.env`, restart the API. **Steps 1–4 below.** |
+| **C — In-app wizard** | TeslaHub → Settings → Tesla integration | Connect your Tesla OAuth account, then run the 4 wizard buttons in order: **Phase C · Step 1** Generate the partner key — **Phase C · Step 2** Register your domain — **Phase C · Step 3** Pair each vehicle (QR code → Tesla mobile app → approve on the car) — **Phase C · Step 4** Configure telemetry (only needed for Sentry alerts; the Control page + Send-to-car already work after Step 3). |
+
+The wizard inside Settings → Tesla integration shows a yellow **"Stop — read this before clicking"** panel that lists the exact host-side prerequisites for each of the 4 buttons. If a button fails with a cryptic Tesla error, **start there** — it's almost always one of the prerequisites that wasn't met yet.
+
+### Phase B · Step 1 — Create your Tesla developer app (5 min, free)
 
 > 💡 The same instructions are also displayed inside TeslaHub: open **Settings → Tesla integration** and follow the embedded "0. Create your Tesla developer app" guide. Each value has a one-click copy button.
 
@@ -376,7 +388,7 @@ Everything stays on **your** server. No third-party cloud, no shared client_id, 
 
 > 💳 **Tesla now requires a billing-enabled account.** During the registration flow Tesla will ask you to add a payment method — this is mandatory even for personal use. The good news: Tesla offers a **$10/month free credit** on Fleet API consumption. A typical TeslaHub setup (1–2 vehicles, Sentry events only) consumes **well under $1/month**, so you stay inside the free tier and nothing is actually billed. You can also set a hard monthly cap in the Tesla developer portal if you want belt-and-braces protection.
 
-### Step 2 — Add the variables to your `.env`
+### Phase B · Step 2 — Add the variables to your `.env`
 
 ```env
 # Optional — Security Alerts (Tesla Fleet API)
@@ -396,7 +408,7 @@ TESLA_AUDIENCE=https://fleet-api.prd.eu.vn.cloud.tesla.com
 SECURITY_ALERTS_ENABLED=true
 ```
 
-### Step 3 — Wire them into your `teslahub-api` service
+### Phase B · Step 3 — Wire them into your `teslahub-api` service
 
 Add the new variables to the `environment:` block of `teslahub-api` in your `docker-compose.yml`:
 
@@ -413,7 +425,7 @@ Add the new variables to the `environment:` block of `teslahub-api` in your `doc
 
 If you leave the variables empty, the feature simply stays inactive — TeslaHub continues to work as before.
 
-### Step 4 — Restart and connect
+### Phase B · Step 4 — Restart and connect
 
 ```bash
 docker compose up -d teslahub-api
@@ -423,18 +435,21 @@ Open TeslaHub → **Settings** → scroll to the **Security Alerts** card → cl
 
 > Until you complete this step, the Home page shows a small dismissible banner reminding you that Security Alerts can be set up. The banner disappears automatically as soon as your Tesla account is connected.
 
-### Pairing your vehicles (after Tesla OAuth)
+### Phase C — In-app wizard (after Tesla OAuth)
 
-Once your Tesla account is connected, the Settings card unfolds a 3-step wizard:
+Once your Tesla account is connected, the **Settings → Tesla integration** card unfolds the 4-button wizard. The first 3 buttons are mandatory; the 4th is only needed if you want Sentry / break-in alerts.
 
-1. **Generate the public key for your domain.** TeslaHub creates an EC P-256 keypair, encrypts the private key at rest with AES-GCM, and exposes the public key (PEM, `SubjectPublicKeyInfo`) at `https://<your-domain>/.well-known/appspecific/com.tesla.3p.public-key.pem`. The wizard provides a clickable test link so you can confirm Tesla can fetch it.
+**Phase C · Step 1 — Generate the public key for your domain.** TeslaHub creates an EC P-256 keypair, encrypts the private key at rest with AES-GCM, and exposes the public key (PEM, `SubjectPublicKeyInfo`) at `https://<your-domain>/.well-known/appspecific/com.tesla.3p.public-key.pem`. The wizard provides a clickable test link so you can confirm Tesla can fetch it.
 
    > **About the Chrome warning when you click the test link.** New domains containing the word "tesla" are routinely flagged by **Google Safe Browsing** as suspected phishing for a few weeks. You may see a red full-page warning ("Dangerous site"). This is **not** a TLS / certificate problem — your Caddy cert is fine. It's purely Chrome being conservative. Two ways to confirm the endpoint actually works:
    >
    > - **From a terminal:** `curl -v https://teslahub.yourdomain.com/.well-known/appspecific/com.tesla.3p.public-key.pem` — you should get a `-----BEGIN PUBLIC KEY-----` block. Tesla itself fetches the URL with a Go HTTP client that does not consult Safe Browsing, so the call from Tesla will succeed even while Chrome is still warning humans.
    > - **In Chrome:** click *Details* → *Visit this unsafe site*. Chrome will then download or display the PEM. If your browser offers to download the file (rather than render it), open it with a text editor — that's a good sign, it means Caddy is serving the right `.pem` MIME type and not the React SPA.
-2. **Register your domain with Tesla** as a third-party partner. TeslaHub calls `POST /api/1/partner_accounts` on your behalf using your account's access token. Tesla pulls your public key from the `.well-known` URL above to confirm.
-3. **Pair each vehicle.** TeslaHub generates a QR code pointing to `https://tesla.com/_ak/<your-domain>`. Scan it with your iPhone, the Tesla mobile app opens and asks you to approve TeslaHub's virtual key for the selected vehicle. Repeat for each car. Click *I've approved* in TeslaHub once done.
+**Phase C · Step 2 — Register your domain with Tesla** as a third-party partner. TeslaHub calls `POST /api/1/partner_accounts` on your behalf using your account's access token. Tesla pulls your public key from the `.well-known` URL above to confirm.
+
+**Phase C · Step 3 — Pair each vehicle.** TeslaHub generates a QR code pointing to `https://tesla.com/_ak/<your-domain>`. Scan it with your iPhone, the Tesla mobile app opens and asks you to approve TeslaHub's virtual key for the selected vehicle. Repeat for each car. Click *I've approved* in TeslaHub once done.
+
+> ✅ **At this point Vehicle Control + Send-to-car are fully operational.** The next step (telemetry) is only needed for Sentry / break-in push notifications. See [§ Telemetry & Sentry alerts](#tell-tesla-to-start-streaming) below — it corresponds to **Phase C · Step 4** in the wizard.
 
 **Caddy snippet** for the well-known endpoint:
 

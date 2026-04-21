@@ -72,7 +72,7 @@
     "setup": {
       "configure": {
         "title": "Fleet API not configured",
-        "body": "Set up your Tesla developer credentials in Settings to enable remote control."
+        "body": "Open Settings → Tesla integration to start the in-app wizard. The README walks you through Phase A (server prep), Phase B (Tesla developer app + .env) and Phase C (this wizard)."
       },
       "connect": {
         "title": "Tesla account not connected",
@@ -84,11 +84,11 @@
       },
       "pairKey": {
         "title": "Pair the virtual key",
-        "body": "{{name}} cannot accept commands until the TeslaHub virtual key is paired from the Tesla mobile app."
+        "body": "{{name}} cannot accept commands until the TeslaHub virtual key is paired from the Tesla mobile app — run Phase C · Step 3 of the wizard in Settings → Tesla integration."
       },
       "vinMismatch": {
         "title": "Vehicle not found in Fleet API",
-        "body": "{{name}} is in TeslaMate but is not synced as a Fleet API vehicle yet. Open Settings → Tesla integration and re-sync your vehicles, then pair the virtual key for this car."
+        "body": "{{name}} is in TeslaMate but is not synced as a Fleet API vehicle yet. Open Settings → Tesla integration, re-sync your vehicles, then pair the virtual key for this car (Phase C · Step 3)."
       },
       "goToSettings": "Open Settings"
     },
@@ -834,10 +834,10 @@
       "disconnectFailed": "Disconnect failed."
     },
     "notConfigured": {
-      "intro": "To enable real-time Tesla Sentry alerts, register a Tesla developer app and configure these environment variables on this TeslaHub instance:",
+      "intro": "To unlock the Vehicle Control page, Send-to-car destinations and Sentry alerts, register a Tesla developer app and configure these environment variables on this TeslaHub instance (Phase B of the setup):",
       "redirectHint": "must end with",
-      "guideLink": "Open the full Security Alerts setup guide",
-      "guideHint": "in the TeslaHub README for the step-by-step walkthrough."
+      "guideLink": "Open the full Tesla Fleet API setup guide",
+      "guideHint": "in the TeslaHub README for the Phase A / B / C walkthrough."
     },
     "notConnected": {
       "intro": "Sign in with the Tesla account that owns the vehicles you want to monitor. Tokens are encrypted at rest with AES-GCM and never leave your TeslaHub instance.",
@@ -869,8 +869,8 @@
       "unnamedAccount": "Tesla account #{{id}}"
     },
     "developerApp": {
-      "title": "0. Create your Tesla developer app",
-      "intro": "Before everything else, you need a Tesla Fleet API client_id and client_secret. They identify this TeslaHub instance to Tesla. The whole process is free and takes about five minutes.",
+      "title": "Phase B — Create your Tesla developer app",
+      "intro": "Before you can run the wizard below, you need a Tesla Fleet API client_id and client_secret (this is Phase B of the setup, see the README). They identify this TeslaHub instance to Tesla. The whole process is free and takes about five minutes — once done, paste the values into your .env, restart the API, then come back here for Phase C (the wizard).",
       "step1": "Open <link>developer.tesla.com</link>, click <b>Sign in</b> and use your existing Tesla account credentials.",
       "step2": "From the left menu, go to <b>Apps</b>, then click <b>Create New App</b>.",
       "step3": "Fill in the form with the values below — click the copy buttons to avoid typos.",
@@ -890,22 +890,22 @@
     },
     "wizard": {
       "title": "Vehicle pairing wizard",
-      "intro": "Once your Tesla account is connected, follow these steps to authorize this TeslaHub instance to receive telemetry from your vehicles.",
+      "intro": "This is Phase C of the setup. Phase A (server: DNS, Caddy, docker compose up -d) and Phase B (Tesla developer app + .env) must already be done — see the README for those. Buttons 1–3 below light up Vehicle Control and Send-to-car. Button 4 is only needed for Sentry / break-in alerts.",
       "prereqWarning": {
         "title": "Stop — read this before clicking the buttons below",
         "body": "Each step expects host-side preparation done BEFORE you click. The wizard does not check any of this for you. Going through the buttons in order without the prerequisites in place will fail with cryptic Tesla errors (502, redirect_uri_mismatch, permission denied, etc.).",
-        "step1Title": "Before step 1 (generate key)",
-        "step1Items": "Public DNS for teslahub.<your domain> resolves to your server | Reverse proxy forwards /.well-known/appspecific/* to teslahub-api (not the React SPA)",
-        "step2Title": "Before step 2 (register partner)",
+        "step1Title": "Before Phase C · Step 1 (generate key)",
+        "step1Items": "Public DNS for teslahub.<your domain> resolves to your server | Reverse proxy serves https://teslahub.<your domain> with a valid TLS cert (a curl on /.well-known/appspecific/com.tesla.3p.public-key.pem must return a -----BEGIN PUBLIC KEY----- block — works out of the box with the standard reverse_proxy localhost:4002 one-liner)",
+        "step2Title": "Before Phase C · Step 2 (register partner)",
         "step2Items": "Step 1 done | The public-key URL above returns a -----BEGIN PUBLIC KEY----- block when fetched with curl from any external machine",
-        "step3Title": "Before step 3 (pair vehicles)",
+        "step3Title": "Before Phase C · Step 3 (pair vehicles)",
         "step3Items": "Step 2 done | iPhone with the Tesla mobile app installed and signed in to the Tesla account that owns the cars",
-        "step4Title": "Before step 4 (configure telemetry)",
+        "step4Title": "Before Phase C · Step 4 (configure telemetry)",
         "step4Items": "DNS-only record for telemetry.<your domain> on Cloudflare (grey cloud, NOT proxied) | Port 8443/tcp forwarded from your router to your server | Caddy obtained a Let's Encrypt cert for telemetry.<your domain> AND made it readable by uid 65532 | fleet-telemetry-src and vehicle-command-src cloned and built | fleet-telemetry/config.json filled with your real domain | fleet-telemetry, tesla-http-proxy-init and tesla-http-proxy containers all UP | Telegram bot token in .env AND at least one recipient added below who has sent /start to your bot | Private key exported to the key-vault volume (orange button below)",
-        "linkLabel": "Open the full Security Alerts setup guide →"
+        "linkLabel": "Open the full Tesla Fleet API setup guide on GitHub →"
       },
       "step1": {
-        "title": "1. Generate the public key for your domain",
+        "title": "Phase C · Step 1 — Generate the public key for your domain",
         "intro": "TeslaHub creates an EC P-256 keypair and exposes the public key at a fixed well-known URL on your domain. The private key is encrypted at rest with AES-GCM and never leaves the database.",
         "domainLabel": "Public domain",
         "domainPlaceholder": "teslahub.yourdomain.com",
@@ -918,14 +918,14 @@
         "publicKeyTestLink": "Test the public key endpoint"
       },
       "step2": {
-        "title": "2. Register your domain with Tesla",
+        "title": "Phase C · Step 2 — Register your domain with Tesla",
         "intro": "Tells Tesla that your domain hosts a partner application. Tesla fetches the public key from your .well-known endpoint to confirm.",
         "register": "Register partner domain",
         "registering": "Registering…",
         "reregister": "Re-register"
       },
       "step3": {
-        "title": "3. Pair each vehicle with TeslaHub",
+        "title": "Phase C · Step 3 — Pair each vehicle with TeslaHub",
         "sync": "Sync vehicles from Tesla",
         "syncing": "Syncing…",
         "qrIntro": "Scan this QR code with your iPhone (or open the link below in your phone's browser):",
@@ -939,11 +939,11 @@
         "unmark": "Unmark"
       },
       "step4": {
-        "title": "4. Tell Tesla to start streaming telemetry",
+        "title": "Phase C · Step 4 — Tell Tesla to start streaming telemetry (only needed for Sentry alerts)",
         "intro": "Once your fleet-telemetry container is running and reachable on telemetry.yourdomain.com (see README), click below. TeslaHub calls Tesla's /fleet_telemetry_config for every paired vehicle. The call is signed by your tesla-http-proxy sidecar with the partner private key.",
         "configure": "Configure telemetry for all paired vehicles",
         "configuring": "Configuring…",
-        "needPaired": "Pair at least one vehicle in step 3 first.",
+        "needPaired": "Pair at least one vehicle in Phase C · Step 3 first.",
         "configured": "configured",
         "exportKeyTitle": "Before configuring: export the partner private key",
         "exportKeyHint": "Tesla now requires fleet_telemetry_config to be signed by your partner private key. Click below once to write the key (decrypted) to the shared key-vault Docker volume so the tesla-http-proxy container can sign the request.",
@@ -999,7 +999,7 @@
     "homeTeaser": {
       "title": "Real-time Sentry alerts available",
       "body": "TeslaHub can send you instant Telegram notifications when Tesla Sentry detects activity around your car. The feature is fully self-hosted — no third-party service required.",
-      "cta": "Set it up in Settings → Security Alerts",
+      "cta": "Set it up in Settings → Tesla integration",
       "dismiss": "Dismiss"
     }
   },
@@ -1041,18 +1041,18 @@
       "confirmHint": "The car displays a \"Start navigation\" prompt — accept it to begin."
     },
     "guard": {
-      "openSettings": "Open Settings → Security Alerts",
+      "openSettings": "Open Settings → Tesla integration",
       "notConfigured": {
         "title": "Tesla Fleet API not configured",
-        "body": "This feature relies on the same Tesla Fleet API setup as the Sentry alerts — a complex integration (Tesla developer app, OAuth, QR-code pairing, reverse proxy). Follow the full guide in Settings → Security Alerts, then come back here."
+        "body": "This feature shares the same Fleet API setup as the rest of the Tesla integration — Phase A (server prep), Phase B (Tesla developer app + .env) and Phase C (in-app wizard). Open Settings → Tesla integration to start the wizard, and consult the README for Phases A and B."
       },
       "notConnected": {
         "title": "Tesla account not connected",
-        "body": "Fleet API is configured but no Tesla account is currently connected. Sign in from Settings → Security Alerts."
+        "body": "Fleet API is configured but no Tesla account is currently connected. Sign in from Settings → Tesla integration."
       },
       "noPaired": {
         "title": "No paired vehicle",
-        "body": "None of your vehicles is paired with the TeslaHub virtual key. The QR-code pairing is mandatory to send any command to a car. Start the wizard from Settings → Security Alerts (step 3)."
+        "body": "None of your vehicles is paired with the TeslaHub virtual key. The QR-code pairing is mandatory to send any command to a car. Run Phase C · Step 3 of the wizard in Settings → Tesla integration."
       }
     }
   }
