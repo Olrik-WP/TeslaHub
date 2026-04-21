@@ -261,7 +261,7 @@ All three share the same setup, the same OAuth flow, and the same paired virtual
 >
 > The "100% self-hosted, zero third party" philosophy is the upside: nothing is shared, nothing leaves your box, no SaaS subscription. The downside is that **everything Tesla, your ISP, your DNS provider, and Caddy normally hide from a paying customer is now your problem**. Several of the steps below have non-obvious failure modes (mTLS perms, Tesla API requiring a signing proxy, snake_case JSON, partner vs user OAuth tokens, Telegram bots needing a `/start`, etc.). The [Troubleshooting](#troubleshooting) section at the end lists every gotcha encountered while bringing this stack up so you can shortcut your own debugging.
 >
-> If you only want core dashboard + map + history features, **leave Security Alerts disabled** — TeslaHub works fully without it. You can come back any time later.
+> If you only want core dashboard + map + history features, **leave the Tesla Fleet API integration disabled** — TeslaHub works fully without it. You can come back any time later.
 
 ### What you get
 
@@ -343,7 +343,7 @@ Verified against `teslamotors/vehicle-command/pkg/proxy/command.go`:
 
 A single `TeslaCommandService` owns this routing table. The *Send to car* feature uses the same wake-and-retry plumbing (no duplicated logic).
 
-> If you don't enable Security Alerts / Fleet API, none of these features are exposed in the UI. The Control link disappears from the navigation, the Home quick-actions strip stays hidden, and TeslaHub keeps working as a TeslaMate dashboard.
+> If you don't enable the Tesla Fleet API integration, none of these features are exposed in the UI. The Control link disappears from the navigation, the Home quick-actions strip stays hidden, and TeslaHub keeps working as a TeslaMate dashboard.
 
 ### Philosophy: 100% self-hosted, zero third party
 
@@ -391,7 +391,7 @@ The wizard inside Settings → Tesla integration shows a yellow **"Stop — read
 ### Phase B · Step 2 — Add the variables to your `.env`
 
 ```env
-# Optional — Security Alerts (Tesla Fleet API)
+# Optional — Tesla Fleet API (Vehicle Control, Send-to-car, Sentry alerts)
 TESLA_CLIENT_ID=your_tesla_client_id
 TESLA_CLIENT_SECRET=your_tesla_client_secret
 TESLA_REDIRECT_URI=https://teslahub.yourdomain.com/api/tesla-oauth/callback
@@ -431,9 +431,9 @@ If you leave the variables empty, the feature simply stays inactive — TeslaHub
 docker compose up -d teslahub-api
 ```
 
-Open TeslaHub → **Settings** → scroll to the **Security Alerts** card → click **Connect Tesla account**. You will be redirected to `auth.tesla.com`, sign in, and return to TeslaHub. Your Tesla tokens are now stored encrypted with AES-GCM in your local `teslahub` PostgreSQL database and refreshed automatically every ~30 minutes.
+Open TeslaHub → **Settings → Tesla integration** → click **Connect Tesla account**. You will be redirected to `auth.tesla.com`, sign in, and return to TeslaHub. Your Tesla tokens are now stored encrypted with AES-GCM in your local `teslahub` PostgreSQL database and refreshed automatically every ~30 minutes.
 
-> Until you complete this step, the Home page shows a small dismissible banner reminding you that Security Alerts can be set up. The banner disappears automatically as soon as your Tesla account is connected.
+> Until you complete this step, the Home page shows a small dismissible banner reminding you that the Tesla Fleet API integration can be set up. The banner disappears automatically as soon as your Tesla account is connected.
 
 ### Phase C — In-app wizard (after Tesla OAuth)
 
@@ -460,7 +460,7 @@ curl -sS https://teslahub.yourdomain.com/.well-known/appspecific/com.tesla.3p.pu
 # → -----BEGIN PUBLIC KEY-----
 ```
 
-Only if your outer reverse proxy **bypasses** the inner Caddy (e.g. it lives in the same Docker network as the API container and forwards directly to `teslahub-api:8080`), you need the 3-route variant — see [Block to use when Security Alerts are enabled](#block-to-use-when-security-alerts-are-enabled).
+Only if your outer reverse proxy **bypasses** the inner Caddy (e.g. it lives in the same Docker network as the API container and forwards directly to `teslahub-api:8080`), you need the 3-route variant — see [Block to use when the Tesla Fleet API is enabled](#block-to-use-when-the-tesla-fleet-api-is-enabled).
 
 ### Telemetry stack (self-hosted Fleet Telemetry server + signing proxy)
 
@@ -603,7 +603,7 @@ Paste this and replace `telemetry.yourdomain.com` with your real sub-domain:
 #### .env additions
 
 ```env
-# Optional — Security Alerts telemetry stack
+# Optional — Telemetry stack for Sentry / break-in alerts
 TELEMETRY_DOMAIN=telemetry.yourdomain.com
 TELEMETRY_PORT=8443
 
@@ -779,7 +779,7 @@ The final piece is delivery. TeslaHub speaks directly to `api.telegram.org` — 
 #### Add the bot token to your `.env`
 
 ```env
-# Optional — Telegram bot for security alerts
+# Optional — Telegram bot for Sentry / break-in alerts
 TELEGRAM_BOT_TOKEN=123456789:ABCdef...
 ```
 
@@ -860,7 +860,7 @@ Because it requires a public domain name and a Tesla developer app, which is mor
 
 ### Troubleshooting
 
-Bringing the Security Alerts stack online involves quite a few moving pieces (Tesla developer app, OAuth, public DNS, Let's Encrypt, two locally-built Tesla Go services, MQTT, Telegram). This section captures every error that came up during real-world bring-up and the fix that resolved it. If you hit something not listed here, open an issue with the relevant container logs.
+Bringing the Tesla Fleet API stack online involves quite a few moving pieces (Tesla developer app, OAuth, public DNS, Let's Encrypt, two locally-built Tesla Go services, MQTT, Telegram). This section captures every error that came up during real-world bring-up and the fix that resolved it. If you hit something not listed here, open an issue with the relevant container logs.
 
 #### Setup wizard / Tesla API
 
@@ -952,7 +952,7 @@ telemetry.yourdomain.com {
 }
 ```
 
-#### Block to use when Security Alerts are enabled
+#### Block to use when the Tesla Fleet API is enabled
 
 > **Most users don't need this section.** The recommended block above works for every feature, including Sentry alerts. Only follow this if you've already published the API container's port (`4001`) directly on the host and want your outer Caddy to bypass the inner Caddy — typically because you don't want any reverse-proxy hop inside the `teslahub-web` container.
 
@@ -1001,7 +1001,7 @@ docker compose pull teslahub-init teslahub-api teslahub-web
 docker compose up -d teslahub-init teslahub-api teslahub-web
 ```
 
-Or use the update script (recommended — also handles `fleet-telemetry` + `tesla-http-proxy` rebuilds when Security Alerts are enabled):
+Or use the update script (recommended — also handles `fleet-telemetry` + `tesla-http-proxy` rebuilds when the Tesla Fleet API is enabled):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Olrik-WP/TeslaHub/main/update.sh -o update.sh
@@ -1016,7 +1016,7 @@ Options:
 
 Your data is safe — TeslaHub data lives in the PostgreSQL volume. Only the application containers are replaced.
 
-### Updating the Tesla services (Security Alerts)
+### Updating the Tesla services (Fleet Telemetry + HTTP proxy)
 
 `fleet-telemetry` and `tesla-http-proxy` are built locally from Tesla's source repos because Tesla does not publish images. **Watchtower (and any image-based updater) cannot update them automatically** — they have a `build:` directive in compose, not an `image:` reference. To pick up upstream Tesla fixes, run:
 
