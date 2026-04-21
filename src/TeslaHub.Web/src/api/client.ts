@@ -96,12 +96,22 @@ async function extractErrorMessage(res: Response): Promise<string> {
       if (error) return error;
     } else {
       const text = (await res.text()).trim();
-      if (text) return text;
+      // Reject HTML responses (Cloudflare 502 / nginx upstream errors etc.)
+      // — they would dump the entire HTML page into our toast banner
+      // otherwise. Keep a short readable status line instead.
+      const looksLikeHtml = contentType.includes('text/html')
+        || /^\s*<!doctype/i.test(text)
+        || /^\s*<html/i.test(text);
+      if (text && !looksLikeHtml) return truncate(text, 240);
     }
   } catch {
     // ignore body parsing failures, fall back to status line
   }
   return `API error: ${res.status} ${res.statusText}`;
+}
+
+function truncate(value: string, max: number) {
+  return value.length <= max ? value : value.slice(0, max) + '…';
 }
 
 export async function login(username: string, password: string) {

@@ -191,6 +191,9 @@ public record TeslaOAuthStatusDto
 {
     public bool Configured { get; init; }
     public bool Connected { get; init; }
+
+    // Legacy single-account fields describe the most recently updated
+    // account. Kept for backward compatibility with older clients.
     public string? Email { get; init; }
     public string? FullName { get; init; }
     public DateTime? ConnectedAt { get; init; }
@@ -199,6 +202,28 @@ public record TeslaOAuthStatusDto
     public int RefreshFailureCount { get; init; }
     public string? LastRefreshError { get; init; }
     public string[] Scopes { get; init; } = [];
+    public int VehicleCount { get; init; }
+
+    /// <summary>
+    /// Full list of connected Tesla accounts. TeslaHub supports linking
+    /// several Tesla identities (typically a couple sharing one car
+    /// park) so each vehicle is reached with the OAuth token of its
+    /// actual owner, which is the only way Tesla lets signed commands
+    /// succeed for non-owner-shared vehicles.
+    /// </summary>
+    public TeslaAccountSummaryDto[] Accounts { get; init; } = [];
+}
+
+public record TeslaAccountSummaryDto
+{
+    public int Id { get; init; }
+    public string? Email { get; init; }
+    public string? FullName { get; init; }
+    public DateTime ConnectedAt { get; init; }
+    public DateTime AccessTokenExpiresAt { get; init; }
+    public DateTime? LastRefreshAt { get; init; }
+    public int RefreshFailureCount { get; init; }
+    public string? LastRefreshError { get; init; }
     public int VehicleCount { get; init; }
 }
 
@@ -216,6 +241,15 @@ public record TeslaVehicleDto
     public string? Model { get; init; }
     public bool TelemetryConfigured { get; init; }
     public bool KeyPaired { get; init; }
+
+    /// <summary>
+    /// Owner account id + email. Populated so the wizard can group
+    /// vehicles by their owning Tesla identity (useful on multi-account
+    /// installs: "Kitt belongs to you@example.com, Nyx belongs to
+    /// wife@example.com"). null on pre-multi-account clients.
+    /// </summary>
+    public int? AccountId { get; init; }
+    public string? AccountEmail { get; init; }
 }
 
 /// <summary>

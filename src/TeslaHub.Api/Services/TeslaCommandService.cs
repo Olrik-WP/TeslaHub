@@ -281,6 +281,31 @@ public sealed class TeslaCommandService
                     "Tesla command {Command} returned {StatusCode} for vehicle {VehicleId} ({Vin}): {Body}",
                     command, response.StatusCode, vehicle.Id, vehicle.Vin, Truncate(body, 500));
                 var kind = ClassifyHttpFailure(response.StatusCode, body);
+
+                // If Tesla just told us the virtual key is not paired with
+                // this VIN, persist the truth back to TeslaHub.KeyPaired so
+                // the SPA hides the Control link / shows the "Pair the key"
+                // banner. This is a self-healing cleanup for cases where
+                // KeyPaired was optimistically set true (e.g. multi-car
+                // accounts where pairing was only completed on one VIN).
+                if (kind == CommandFailureKind.KeyNotPaired && vehicle.KeyPaired)
+                {
+                    vehicle.KeyPaired = false;
+                    vehicle.UpdatedAt = DateTime.UtcNow;
+                    try
+                    {
+                        await _db.SaveChangesAsync(cancellationToken);
+                        _logger.LogWarning(
+                            "Cleared KeyPaired flag on vehicle {VehicleId} ({Vin}) — Tesla says the public key is not paired.",
+                            vehicle.Id, vehicle.Vin);
+                    }
+                    catch (Exception persistEx)
+                    {
+                        _logger.LogWarning(persistEx,
+                            "Failed to persist KeyPaired=false on vehicle {VehicleId}", vehicle.Id);
+                    }
+                }
+
                 return CommandResult.Fail(kind, BuildHttpErrorDetail(response.StatusCode, body, kind));
             }
 
@@ -549,16 +574,31 @@ public sealed class TeslaCommandService
             reason.Contains("vehicle is offline", StringComparison.OrdinalIgnoreCase) ||
             reason.Contains("offline or asleep", StringComparison.OrdinalIgnoreCase));
 
+    // Tesla wraps "your virtual key isn't paired with this VIN" in an
+    // HTTP 500 with this exact phrasing (verified against logs):
+    //   "vehicle rejected request: your public key has not been paired with the vehicle"
+    // We use this both to map the failure kind AND to flip
+    // TeslaVehicle.KeyPaired back to false so the UI hides Control until
+    // the user pairs the key from the Tesla mobile app.
+    private static bool LooksLikeKeyNotPaired(string? reason) =>
+        reason is not null && (
+            reason.Contains("public key has not been paired", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("key has not been paired", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("vehicle key not paired", StringComparison.OrdinalIgnoreCase));
+
     private static CommandFailureKind ClassifyHttpFailure(System.Net.HttpStatusCode status, string body)
     {
-        // Tesla's signed proxy returns 500 with the body
-        //   {"response":null,"error":"vehicle unavailable: vehicle is offline or asleep","error_description":""}
-        // when the car is sleeping. The naive (int)status switch would
-        // map 500 to Transport (no retry), so the wake_up + retry path
-        // would never fire. Sniff the body first so we surface this as
-        // VehicleUnreachable, which ShouldRetryAfterWake handles.
+        // Body-based detection takes priority over the HTTP status —
+        // Tesla wraps two very different conditions in a generic
+        // HTTP 500, and only the body tells them apart:
+        //   * "vehicle unavailable: ... offline or asleep"  → VehicleUnreachable (retry after wake)
+        //   * "vehicle rejected request: your public key has not been paired with the vehicle" → KeyNotPaired
+        // The naive (int)status switch would put both in Transport
+        // (no retry, generic error) and lose the actionable signal.
         if (LooksLikeAsleep(body))
             return CommandFailureKind.VehicleUnreachable;
+        if (LooksLikeKeyNotPaired(body))
+            return CommandFailureKind.KeyNotPaired;
 
         return (int)status switch
         {
@@ -579,6 +619,8 @@ public sealed class TeslaCommandService
         {
             CommandFailureKind.Unauthorized =>
                 "Tesla refused the request. Reconnect your Tesla account in Settings.",
+            CommandFailureKind.KeyNotPaired =>
+                "The TeslaHub virtual key is not paired with this vehicle. Open the Tesla mobile app on this car and pair the key, then refresh.",
             CommandFailureKind.VehicleUnreachable =>
                 "The vehicle did not respond in time. It may be offline — try again in a moment.",
             CommandFailureKind.RateLimited =>

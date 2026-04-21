@@ -854,7 +854,10 @@
       "refreshing": "Rafraîchissement…",
       "disconnect": "Déconnecter",
       "disconnecting": "Déconnexion…",
-      "confirmDisconnect": "Déconnecter le compte Tesla ? Vous devrez vous reconnecter pour recevoir des alertes."
+      "confirmDisconnect": "Déconnecter le compte Tesla ? Vous devrez vous reconnecter pour recevoir des alertes.",
+      "refreshHint": "Forcer immédiatement le rafraîchissement des jetons Tesla de ce compte.",
+      "addAccount": "Connecter un autre compte Tesla",
+      "addAccountHint": "Cas typique : un couple partageant une instance TeslaHub où chaque conjoint possède sa propre voiture. Ouvrez TeslaHub sur le téléphone de l'autre personne et tapez ce bouton — Tesla se connectera automatiquement avec SON compte. Chaque véhicule sera alors contacté avec le bon token propriétaire."
     },
     "developerApp": {
       "title": "0. Créer votre app Tesla developer",
@@ -918,6 +921,8 @@
         "syncing": "Synchronisation…",
         "qrIntro": "Scannez ce QR code avec votre iPhone (ou ouvrez le lien ci-dessous depuis votre téléphone) :",
         "qrHint": "L'app Tesla mobile vous demandera d'approuver la clé virtuelle de TeslaHub pour le véhicule sélectionné. Répétez pour chaque voiture à surveiller. Une fois approuvé, cliquez sur J'ai approuvé à côté du véhicule correspondant.",
+        "sharedVehicleWarning": "Attention : les véhicules partagés avec vous en mode Conducteur (pas Propriétaire) apparaissent dans cette liste et acceptent Envoyer-vers-la-voiture, mais les commandes signées (verrouillage, clim, klaxon, frunk…) nécessitent que le PROPRIÉTAIRE appaire la clé depuis SON téléphone. Si un bouton échoue avec « clé non appairée », c'est ça — TeslaHub marquera automatiquement le véhicule comme non appairé à la première commande échouée.",
+        "ownerLabel": "Propriétaire",
         "noVehicles": "Aucun véhicule synchronisé. Cliquez sur Synchroniser les véhicules ci-dessus.",
         "paired": "apparié",
         "notPaired": "non apparié",

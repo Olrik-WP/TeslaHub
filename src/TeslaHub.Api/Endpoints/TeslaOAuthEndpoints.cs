@@ -81,6 +81,23 @@ public static class TeslaOAuthEndpoints
             return Results.Ok(new { disconnected = true });
         }).RequireAuthorization();
 
+        // Multi-account management. Returns the list of every Tesla
+        // identity currently linked to this TeslaHub instance.
+        group.MapGet("/accounts", async (TeslaOAuthService oauth, CancellationToken ct) =>
+        {
+            var accounts = await oauth.ListAccountsAsync(ct);
+            return Results.Ok(accounts);
+        }).RequireAuthorization();
+
+        // Disconnect a specific Tesla account by its internal id. Useful
+        // when several accounts are linked (typically a couple) so the
+        // user can remove just one without nuking the other.
+        group.MapDelete("/accounts/{id:int}", async (int id, TeslaOAuthService oauth, CancellationToken ct) =>
+        {
+            var ok = await oauth.DisconnectAsync(id, ct);
+            return ok ? Results.Ok(new { disconnected = true }) : Results.NotFound();
+        }).RequireAuthorization();
+
         group.MapPost("/refresh", async (TeslaOAuthService oauth, CancellationToken ct) =>
         {
             var account = await oauth.GetCurrentAccountAsync(ct);

@@ -12,6 +12,11 @@ type TeslaVehicle = {
   model?: string | null;
   telemetryConfigured: boolean;
   keyPaired: boolean;
+  // Multi-account installs: identifies which Tesla account this row
+  // belongs to. Displayed under the car name so the user knows which
+  // spouse/owner needs to pair the key from their phone.
+  accountId?: number | null;
+  accountEmail?: string | null;
 };
 
 type TeslaPairingStatus = {
@@ -314,6 +319,19 @@ export default function TeslaPairingWizard() {
           </div>
         )}
 
+        {/* Warning for the shared-vehicle case: when a Tesla account is
+            shared with you as "Driver" (not "Owner"), the in-car
+            approval screen never appears because Tesla restricts virtual
+            key pairing to the owning account. The vehicle still shows
+            up in the list and "Send to car" still works (unsigned), but
+            every signed command (lock, climate, horn, …) will fail
+            until the actual owner pairs the key from THEIR phone. */}
+        {vehicles.length > 1 && (
+          <div className="text-[11px] leading-snug text-[#f59e0b] bg-[#f59e0b]/10 border border-[#f59e0b]/30 rounded p-2">
+            {t('securityAlerts.wizard.step3.sharedVehicleWarning')}
+          </div>
+        )}
+
         {vehicles.length === 0 && (
           <p className={subTextClass}>{t('securityAlerts.wizard.step3.noVehicles')}</p>
         )}
@@ -331,6 +349,11 @@ export default function TeslaPairingWizard() {
                     {v.vin}
                     {v.model ? ` · ${v.model}` : ''}
                   </div>
+                  {v.accountEmail && (
+                    <div className="text-[10px] text-[#6b7280] truncate italic">
+                      {t('securityAlerts.wizard.step3.ownerLabel')}: {v.accountEmail}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <StatusPill

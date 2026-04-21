@@ -24,10 +24,15 @@ export default function HomeQuickActions({ vehicle }: Props) {
   const { t } = useTranslation();
   const { data: availability } = useControlAvailability();
 
+  // Multi-account: prefer the paired entry if the same VIN appears
+  // under two Tesla accounts (owner + driver-shared). Only the owner
+  // entry can accept signed commands.
   const teslaVehicle = useMemo(() => {
     if (!availability?.vehicles?.length) return undefined;
     if (!vehicle?.vin) return undefined;
-    return availability.vehicles.find((v) => v.vin === vehicle.vin);
+    const matches = availability.vehicles.filter((v) => v.vin === vehicle.vin);
+    if (matches.length === 0) return undefined;
+    return matches.find((v) => v.keyPaired) ?? matches[0];
   }, [availability, vehicle?.vin]);
 
   // All hooks MUST run before any early return: React's rules of hooks.

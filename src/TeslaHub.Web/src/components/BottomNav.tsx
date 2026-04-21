@@ -85,17 +85,22 @@ export default function BottomNav({ carId }: BottomNavProps = {}) {
   // Control is offered only when Fleet API is configured AND the
   // currently-selected car has the virtual key paired. We match by VIN
   // because TeslaMate carId and TeslaHub TeslaVehicle.Id are different
-  // identifiers from different databases. Multi-car safety: never fall
-  // back to vehicles[0] — on accounts where only some cars are paired,
-  // that would expose the Control link for a car that cannot accept
-  // commands.
+  // identifiers from different databases.
+  //
+  // Multi-account aware: the same VIN may appear under two different
+  // TeslaAccounts (owner + shared-as-driver). We check whether ANY of
+  // the matching rows has keyPaired=true — the owner row is the one
+  // that can accept signed commands.
+  //
+  // Multi-car safety: never fall back to vehicles[0] — on accounts
+  // where only some cars are paired, that would expose the Control
+  // link for a car that cannot accept commands.
   const showControl = useMemo(() => {
     if (!availability?.configured || !availability.connected) return false;
     if (!availability.vehicles?.length) return false;
     const vin = vehicleStatus?.vin;
     if (!vin) return false;
-    const match = availability.vehicles.find((v) => v.vin === vin);
-    return !!match?.keyPaired;
+    return availability.vehicles.some((v) => v.vin === vin && v.keyPaired);
   }, [availability, vehicleStatus?.vin]);
 
   // primary = home, [control, map], dashboard, charging, trips. When the

@@ -36,16 +36,25 @@ export default function Control({ carId }: Props) {
 
   // Map TeslaMate carId → TeslaHub TeslaVehicle.Id by VIN. We need the
   // Fleet-side id (paired key + Fleet vehicle_id), not the TeslaMate one.
+  //
+  // Multi-account aware: the same VIN can legitimately appear TWICE
+  // in the Fleet list when a car is both owned by one account (paired)
+  // and shared as Driver with another account (not paired — see the
+  // Tesla docs limitation on third-party virtual keys). Prefer the
+  // paired row so every command is routed through the actual owner's
+  // OAuth token.
+  //
   // Multi-car safety: if the selected TeslaMate car's VIN does NOT match
   // any Fleet vehicle, return undefined and surface a setup banner —
   // never silently fall back to vehicles[0], which would route commands
-  // to the wrong car on multi-vehicle accounts where only some are
-  // paired with the TeslaHub virtual key.
+  // to the wrong car.
   const teslaVehicle = useMemo(() => {
     if (!availability?.vehicles?.length) return undefined;
     const vin = vehicleStatus?.vin;
     if (!vin) return undefined;
-    return availability.vehicles.find((v) => v.vin === vin);
+    const matches = availability.vehicles.filter((v) => v.vin === vin);
+    if (matches.length === 0) return undefined;
+    return matches.find((v) => v.keyPaired) ?? matches[0];
   }, [availability, vehicleStatus?.vin]);
 
   const vinMismatch = !!availability?.vehicles?.length

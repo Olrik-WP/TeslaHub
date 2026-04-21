@@ -180,30 +180,81 @@ public sealed class TeslaOAuthService
         if (!IsConfigured)
             return new TeslaOAuthStatusDto { Configured = false, Connected = false };
 
-        var account = await _db.Set<TeslaAccount>()
+        var accounts = await _db.Set<TeslaAccount>()
             .OrderByDescending(a => a.UpdatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
 
-        if (account is null)
-            return new TeslaOAuthStatusDto { Configured = true, Connected = false };
+        if (accounts.Count == 0)
+            return new TeslaOAuthStatusDto { Configured = true, Connected = false, Accounts = [] };
 
-        var vehicleCount = await _db.Set<TeslaVehicle>().CountAsync(v => v.TeslaAccountId == account.Id, cancellationToken);
+        // Legacy top-level fields still describe the most recent account so
+        // pre-multi-account clients keep working. The new Accounts array
+        // carries the full list; new clients read it to show every linked
+        // Tesla identity (e.g. couple sharing one TeslaHub instance).
+        var primary = accounts[0];
+        var vehicleCountByAccount = await _db.Set<TeslaVehicle>()
+            .GroupBy(v => v.TeslaAccountId)
+            .Select(g => new { AccountId = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        var byId = vehicleCountByAccount.ToDictionary(x => x.AccountId, x => x.Count);
 
         return new TeslaOAuthStatusDto
         {
             Configured = true,
             Connected = true,
-            Email = account.Email,
-            FullName = account.FullName,
-            ConnectedAt = account.CreatedAt,
-            AccessTokenExpiresAt = account.AccessTokenExpiresAt,
-            LastRefreshAt = account.LastRefreshAt,
-            RefreshFailureCount = account.RefreshFailureCount,
-            LastRefreshError = account.LastRefreshError,
-            Scopes = (account.Scopes ?? string.Empty)
+            Email = primary.Email,
+            FullName = primary.FullName,
+            ConnectedAt = primary.CreatedAt,
+            AccessTokenExpiresAt = primary.AccessTokenExpiresAt,
+            LastRefreshAt = primary.LastRefreshAt,
+            RefreshFailureCount = primary.RefreshFailureCount,
+            LastRefreshError = primary.LastRefreshError,
+            Scopes = (primary.Scopes ?? string.Empty)
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-            VehicleCount = vehicleCount,
+            VehicleCount = byId.TryGetValue(primary.Id, out var cnt) ? cnt : 0,
+            Accounts = accounts.Select(a => new TeslaAccountSummaryDto
+            {
+                Id = a.Id,
+                Email = a.Email,
+                FullName = a.FullName,
+                ConnectedAt = a.CreatedAt,
+                AccessTokenExpiresAt = a.AccessTokenExpiresAt,
+                LastRefreshAt = a.LastRefreshAt,
+                RefreshFailureCount = a.RefreshFailureCount,
+                LastRefreshError = a.LastRefreshError,
+                VehicleCount = byId.TryGetValue(a.Id, out var c) ? c : 0,
+            }).ToArray(),
         };
+    }
+
+    /// <summary>
+    /// Lists every connected Tesla account (for the Settings page
+    /// multi-account management UI). Never returns the secret fields —
+    /// the caller is trusted to be an authenticated TeslaHub admin.
+    /// </summary>
+    public async Task<List<TeslaAccountSummaryDto>> ListAccountsAsync(CancellationToken cancellationToken = default)
+    {
+        var accounts = await _db.Set<TeslaAccount>()
+            .OrderByDescending(a => a.UpdatedAt)
+            .ToListAsync(cancellationToken);
+
+        var vehicleCountByAccount = await _db.Set<TeslaVehicle>()
+            .GroupBy(v => v.TeslaAccountId)
+            .Select(g => new { AccountId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.AccountId, x => x.Count, cancellationToken);
+
+        return accounts.Select(a => new TeslaAccountSummaryDto
+        {
+            Id = a.Id,
+            Email = a.Email,
+            FullName = a.FullName,
+            ConnectedAt = a.CreatedAt,
+            AccessTokenExpiresAt = a.AccessTokenExpiresAt,
+            LastRefreshAt = a.LastRefreshAt,
+            RefreshFailureCount = a.RefreshFailureCount,
+            LastRefreshError = a.LastRefreshError,
+            VehicleCount = vehicleCountByAccount.TryGetValue(a.Id, out var c) ? c : 0,
+        }).ToList();
     }
 
     // ── Internals ────────────────────────────────────────────────────────────

@@ -854,7 +854,10 @@
       "refreshing": "Aktualisierung…",
       "disconnect": "Trennen",
       "disconnecting": "Trennung läuft…",
-      "confirmDisconnect": "Tesla-Konto trennen? Sie müssen sich erneut anmelden, um Benachrichtigungen zu erhalten."
+      "confirmDisconnect": "Tesla-Konto trennen? Sie müssen sich erneut anmelden, um Benachrichtigungen zu erhalten.",
+      "refreshHint": "Erzwingt sofort die Aktualisierung der Tesla-Tokens dieses Kontos.",
+      "addAccount": "Weiteres Tesla-Konto verbinden",
+      "addAccountHint": "Typischer Anwendungsfall: ein Paar teilt sich eine TeslaHub-Instanz, wobei jeder Partner sein eigenes Fahrzeug besitzt. Öffnen Sie TeslaHub auf dem Telefon der anderen Person und tippen Sie diese Schaltfläche — Tesla meldet sich automatisch mit IHREM Konto an. Jedes Fahrzeug wird dann mit dem richtigen Besitzer-Token kontaktiert."
     },
     "developerApp": {
       "title": "0. Tesla-Developer-App erstellen",
@@ -918,6 +921,8 @@
         "syncing": "Synchronisierung…",
         "qrIntro": "Scannen Sie diesen QR-Code mit Ihrem iPhone (oder öffnen Sie den Link unten im Browser Ihres Telefons):",
         "qrHint": "Die Tesla-Mobile-App fordert Sie auf, den virtuellen Schlüssel von TeslaHub für das ausgewählte Fahrzeug zu genehmigen. Wiederholen Sie dies für jedes Auto. Nach Genehmigung klicken Sie auf Genehmigt neben dem Fahrzeug.",
+        "sharedVehicleWarning": "Hinweis: Mit Ihnen als Fahrer (nicht Besitzer) geteilte Fahrzeuge erscheinen in dieser Liste und akzeptieren Send-to-car, aber signierte Befehle (Verriegelung, Klima, Hupe, Frunk…) erfordern, dass der EIGENTÜMER den Schlüssel von SEINEM Telefon koppelt. Wenn ein Button mit „Schlüssel nicht gekoppelt“ scheitert, dann deshalb — TeslaHub markiert das Fahrzeug beim ersten fehlgeschlagenen Befehl automatisch als nicht gekoppelt.",
+        "ownerLabel": "Besitzer",
         "noVehicles": "Noch keine Fahrzeuge synchronisiert. Klicken Sie oben auf Fahrzeuge synchronisieren.",
         "paired": "gekoppelt",
         "notPaired": "nicht gekoppelt",

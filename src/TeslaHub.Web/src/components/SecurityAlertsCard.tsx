@@ -5,9 +5,23 @@ import { api } from '../api/client';
 import TeslaPairingWizard from './TeslaPairingWizard';
 import TeslaDeveloperAppGuide from './TeslaDeveloperAppGuide';
 
+type TeslaAccountSummary = {
+  id: number;
+  email?: string | null;
+  fullName?: string | null;
+  connectedAt?: string | null;
+  accessTokenExpiresAt?: string | null;
+  lastRefreshAt?: string | null;
+  refreshFailureCount: number;
+  lastRefreshError?: string | null;
+  vehicleCount: number;
+};
+
 type TeslaOAuthStatus = {
   configured: boolean;
   connected: boolean;
+  // Legacy single-account fields — describe the most recently updated
+  // account. Kept readable so older clients keep working.
   email?: string | null;
   fullName?: string | null;
   connectedAt?: string | null;
@@ -17,6 +31,10 @@ type TeslaOAuthStatus = {
   lastRefreshError?: string | null;
   scopes: string[];
   vehicleCount: number;
+  // New multi-account array. Present in all responses from current
+  // TeslaHub builds; may be absent/empty on older backends (we fall
+  // back to the legacy fields then).
+  accounts?: TeslaAccountSummary[];
 };
 
 type LoginPayload = { authorizeUrl: string; state: string };
@@ -102,9 +120,27 @@ export default function SecurityAlertsCard() {
     },
   });
 
-  const expiresLabel = useMemo(() => {
-    if (!status?.accessTokenExpiresAt) return null;
-    const expiresAt = new Date(status.accessTokenExpiresAt).getTime();
+  // Multi-account: disconnect one specific Tesla identity without
+  // touching the others. The backend exposes DELETE /accounts/{id}
+  // which is paired by TeslaAccount.Id (not the Tesla user id).
+  const disconnectOneMutation = useMutation({
+    mutationFn: (accountId: number) =>
+      api(`/tesla-oauth/accounts/${accountId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      setFeedback({ ok: true, text: t('securityAlerts.feedback.disconnected') });
+      queryClient.invalidateQueries({ queryKey: ['teslaOAuthStatus'] });
+    },
+    onError: (error: Error) => {
+      setFeedback({ ok: false, text: error.message || t('securityAlerts.feedback.disconnectFailed') });
+    },
+  });
+
+  // Humanised "expires in 42 min / 3 h / 5 d" helper. Reused for each
+  // account in the connected list so the label reflects that specific
+  // account's token lifetime.
+  const expiresLabelFor = (at?: string | null): string | null => {
+    if (!at) return null;
+    const expiresAt = new Date(at).getTime();
     const diffMs = expiresAt - Date.now();
     if (diffMs <= 0) return t('securityAlerts.connectedPanel.expired');
     const minutes = Math.round(diffMs / 60_000);
@@ -123,7 +159,27 @@ export default function SecurityAlertsCard() {
     return t('securityAlerts.connectedPanel.expiresIn', {
       value: t('securityAlerts.connectedPanel.days', { count: days }),
     });
-  }, [status?.accessTokenExpiresAt, t]);
+  };
+
+  // Build the list of accounts to render. Prefer the new `accounts`
+  // array (multi-account backend); fall back to a one-element list
+  // synthesised from the legacy top-level fields for compatibility.
+  const accounts: TeslaAccountSummary[] = useMemo(() => {
+    if (!status) return [];
+    if (status.accounts && status.accounts.length > 0) return status.accounts;
+    if (!status.connected) return [];
+    return [{
+      id: 0,
+      email: status.email ?? null,
+      fullName: status.fullName ?? null,
+      connectedAt: status.connectedAt ?? null,
+      accessTokenExpiresAt: status.accessTokenExpiresAt ?? null,
+      lastRefreshAt: status.lastRefreshAt ?? null,
+      refreshFailureCount: status.refreshFailureCount,
+      lastRefreshError: status.lastRefreshError ?? null,
+      vehicleCount: status.vehicleCount,
+    }];
+  }, [status]);
 
   if (isLoading) {
     return (
@@ -258,40 +314,81 @@ export default function SecurityAlertsCard() {
 
       {connected && status && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div>
-              <div className={sectionTitleClass}>{t('securityAlerts.connectedPanel.account')}</div>
-              <div className="text-[#e0e0e0] mt-1 break-all">{status.fullName || status.email || '—'}</div>
-              {status.email && status.fullName && (
-                <div className={`${subTextClass} break-all`}>{status.email}</div>
-              )}
-            </div>
-            <div>
-              <div className={sectionTitleClass}>{t('securityAlerts.connectedPanel.vehicles')}</div>
-              <div className="text-[#e0e0e0] mt-1">{status.vehicleCount}</div>
-              <div className={subTextClass}>{t('securityAlerts.connectedPanel.vehiclesHint')}</div>
-            </div>
-            <div>
-              <div className={sectionTitleClass}>{t('securityAlerts.connectedPanel.accessToken')}</div>
-              <div className="text-[#e0e0e0] mt-1">{expiresLabel ?? '—'}</div>
-              <div className={subTextClass}>{formatDateTime(status.accessTokenExpiresAt)}</div>
-            </div>
-            <div>
-              <div className={sectionTitleClass}>{t('securityAlerts.connectedPanel.lastRefresh')}</div>
-              <div className="text-[#e0e0e0] mt-1">{formatDateTime(status.lastRefreshAt)}</div>
-              {status.refreshFailureCount > 0 && (
-                <div className="text-[#f0a7a7]">
-                  {t('securityAlerts.connectedPanel.failedAttempts', { count: status.refreshFailureCount })}
+          {/* One card per connected Tesla identity. Multi-account is the
+              norm now (couples sharing one TeslaHub) so we render a list
+              even for a single account to keep the UI consistent. */}
+          <div className="space-y-3">
+            {accounts.map((acc) => (
+              <div
+                key={acc.id}
+                className="border border-[#2a2a2a] rounded-lg p-3 space-y-3 bg-[#0f0f0f]"
+              >
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <div className={sectionTitleClass}>{t('securityAlerts.connectedPanel.account')}</div>
+                    <div className="text-[#e0e0e0] mt-1 break-all">{acc.fullName || acc.email || '—'}</div>
+                    {acc.email && acc.fullName && (
+                      <div className={`${subTextClass} break-all`}>{acc.email}</div>
+                    )}
+                  </div>
+                  <div>
+                    <div className={sectionTitleClass}>{t('securityAlerts.connectedPanel.vehicles')}</div>
+                    <div className="text-[#e0e0e0] mt-1">{acc.vehicleCount}</div>
+                    <div className={subTextClass}>{t('securityAlerts.connectedPanel.vehiclesHint')}</div>
+                  </div>
+                  <div>
+                    <div className={sectionTitleClass}>{t('securityAlerts.connectedPanel.accessToken')}</div>
+                    <div className="text-[#e0e0e0] mt-1">{expiresLabelFor(acc.accessTokenExpiresAt) ?? '—'}</div>
+                    <div className={subTextClass}>{formatDateTime(acc.accessTokenExpiresAt)}</div>
+                  </div>
+                  <div>
+                    <div className={sectionTitleClass}>{t('securityAlerts.connectedPanel.lastRefresh')}</div>
+                    <div className="text-[#e0e0e0] mt-1">{formatDateTime(acc.lastRefreshAt)}</div>
+                    {acc.refreshFailureCount > 0 && (
+                      <div className="text-[#f0a7a7]">
+                        {t('securityAlerts.connectedPanel.failedAttempts', { count: acc.refreshFailureCount })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
 
-          {status.lastRefreshError && (
-            <div className="text-xs px-3 py-2 rounded bg-[#3d1a1a] text-[#f0a7a7] break-all">
-              {t('securityAlerts.connectedPanel.lastError', { detail: status.lastRefreshError })}
-            </div>
-          )}
+                {acc.lastRefreshError && (
+                  <div className="text-xs px-3 py-2 rounded bg-[#3d1a1a] text-[#f0a7a7] break-all">
+                    {t('securityAlerts.connectedPanel.lastError', { detail: acc.lastRefreshError })}
+                  </div>
+                )}
+
+                {/* Per-account actions: refresh tokens / disconnect just
+                    this identity. If the account comes from the legacy
+                    fallback (id === 0) we use the old endpoints. */}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className={buttonSecondary}
+                    disabled={refreshMutation.isPending}
+                    onClick={() => refreshMutation.mutate()}
+                    title={t('securityAlerts.connectedPanel.refreshHint')}
+                  >
+                    {refreshMutation.isPending
+                      ? t('securityAlerts.connectedPanel.refreshing')
+                      : t('securityAlerts.connectedPanel.refresh')}
+                  </button>
+                  <button
+                    className={buttonSecondary}
+                    disabled={disconnectMutation.isPending || disconnectOneMutation.isPending}
+                    onClick={() => {
+                      if (!window.confirm(t('securityAlerts.connectedPanel.confirmDisconnect'))) return;
+                      if (acc.id === 0) disconnectMutation.mutate();
+                      else disconnectOneMutation.mutate(acc.id);
+                    }}
+                  >
+                    {(disconnectMutation.isPending || disconnectOneMutation.isPending)
+                      ? t('securityAlerts.connectedPanel.disconnecting')
+                      : t('securityAlerts.connectedPanel.disconnect')}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
 
           {status.scopes.length > 0 && (
             <div>
@@ -306,29 +403,25 @@ export default function SecurityAlertsCard() {
             </div>
           )}
 
-          <div className="flex flex-wrap gap-2">
+          {/* "Add another Tesla account" — typical use case: a couple
+              sharing a TeslaHub instance where each spouse owns their
+              own car. The OAuth flow opens Tesla auth in the current
+              browser, which normally auto-uses whoever is logged in on
+              the device (so this button is best tapped from the other
+              spouse's phone). */}
+          <div>
             <button
-              className={buttonSecondary}
-              disabled={refreshMutation.isPending}
-              onClick={() => refreshMutation.mutate()}
+              className={buttonPrimary}
+              disabled={loginMutation.isPending}
+              onClick={() => loginMutation.mutate()}
             >
-              {refreshMutation.isPending
-                ? t('securityAlerts.connectedPanel.refreshing')
-                : t('securityAlerts.connectedPanel.refresh')}
+              {loginMutation.isPending
+                ? t('securityAlerts.notConnected.redirecting')
+                : t('securityAlerts.connectedPanel.addAccount')}
             </button>
-            <button
-              className={buttonSecondary}
-              disabled={disconnectMutation.isPending}
-              onClick={() => {
-                if (window.confirm(t('securityAlerts.connectedPanel.confirmDisconnect'))) {
-                  disconnectMutation.mutate();
-                }
-              }}
-            >
-              {disconnectMutation.isPending
-                ? t('securityAlerts.connectedPanel.disconnecting')
-                : t('securityAlerts.connectedPanel.disconnect')}
-            </button>
+            <p className={`${subTextClass} mt-1`}>
+              {t('securityAlerts.connectedPanel.addAccountHint')}
+            </p>
           </div>
 
           <TeslaPairingWizard />

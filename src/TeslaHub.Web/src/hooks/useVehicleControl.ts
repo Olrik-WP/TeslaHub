@@ -291,6 +291,12 @@ export function useControlMutation<TBody = void>(
       feedback.show('success', data.wokeUp ? `${txt} ${t('control.feedback.wokeNote')}` : txt);
     },
     onError: (err) => {
+      // Re-check availability whenever any command fails. The most
+      // common reason we'd want to is "KeyNotPaired" — the backend
+      // self-heals TeslaVehicle.KeyPaired=false on detection, so a
+      // refresh of /availability makes Control hide / show the
+      // "Pair the key" banner without the user having to reload.
+      qc.invalidateQueries({ queryKey: ['controlAvailability'] });
       if (options?.silent) return;
       feedback.show('error', err.message || t('control.feedback.error'));
     },

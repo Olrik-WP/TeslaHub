@@ -854,7 +854,10 @@
       "refreshing": "Refreshing…",
       "disconnect": "Disconnect",
       "disconnecting": "Disconnecting…",
-      "confirmDisconnect": "Disconnect Tesla account? You will need to sign in again to receive alerts."
+      "confirmDisconnect": "Disconnect Tesla account? You will need to sign in again to receive alerts.",
+      "refreshHint": "Force an immediate refresh of this account's Tesla tokens.",
+      "addAccount": "Connect another Tesla account",
+      "addAccountHint": "Typical use case: a couple sharing a TeslaHub instance where each spouse owns their own car. Open TeslaHub on the other person's phone and tap this button so Tesla auto-logs them in with THEIR account. Each vehicle will then be contacted with the right owner token."
     },
     "developerApp": {
       "title": "0. Create your Tesla developer app",
@@ -918,6 +921,8 @@
         "syncing": "Syncing…",
         "qrIntro": "Scan this QR code with your iPhone (or open the link below in your phone's browser):",
         "qrHint": "The Tesla mobile app will prompt you to approve TeslaHub's virtual key for the selected vehicle. Repeat this for every car you want to monitor. Once approved, click I've approved next to the matching vehicle.",
+        "sharedVehicleWarning": "Heads up: vehicles shared with you as a Driver (not Owner) will appear in this list and accept Send-to-car, but signed commands (lock, climate, horn, frunk…) require the OWNER to pair the key from THEIR phone. If a button keeps failing with \"key not paired\", that's why — TeslaHub will mark the vehicle as not paired automatically on the first failed command.",
+        "ownerLabel": "Owner",
         "noVehicles": "No vehicles synced yet. Click Sync vehicles from Tesla above.",
         "paired": "paired",
         "notPaired": "not paired",
