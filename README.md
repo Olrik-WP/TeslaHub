@@ -436,15 +436,16 @@ Once your Tesla account is connected, the Settings card unfolds a 3-step wizard:
 2. **Register your domain with Tesla** as a third-party partner. TeslaHub calls `POST /api/1/partner_accounts` on your behalf using your account's access token. Tesla pulls your public key from the `.well-known` URL above to confirm.
 3. **Pair each vehicle.** TeslaHub generates a QR code pointing to `https://tesla.com/_ak/<your-domain>`. Scan it with your iPhone, the Tesla mobile app opens and asks you to approve TeslaHub's virtual key for the selected vehicle. Repeat for each car. Click *I've approved* in TeslaHub once done.
 
-**Caddy snippet** for the well-known endpoint (already covered if your existing reverse-proxy block sends `/api/*` and the `/.well-known/*` path to `teslahub-api`). Example:
+**Caddy snippet** for the well-known endpoint:
 
-```caddyfile
-teslahub.yourdomain.com {
-    reverse_proxy /.well-known/appspecific/* teslahub-api:8080
-    reverse_proxy /api/*                     teslahub-api:8080
-    reverse_proxy /                          teslahub-web:80
-}
+If your reverse proxy uses the **standard one-liner** (`reverse_proxy localhost:4002` or equivalent), nothing to do — the Caddy embedded inside the `teslahub-web` image already dispatches `/api/*` and `/.well-known/appspecific/*` to `teslahub-api`. A simple curl confirms it works:
+
+```bash
+curl -sS https://teslahub.yourdomain.com/.well-known/appspecific/com.tesla.3p.public-key.pem | head -1
+# → -----BEGIN PUBLIC KEY-----
 ```
+
+Only if your outer reverse proxy **bypasses** the inner Caddy (e.g. it lives in the same Docker network as the API container and forwards directly to `teslahub-api:8080`), you need the 3-route variant — see [Block to use when Security Alerts are enabled](#block-to-use-when-security-alerts-are-enabled).
 
 ### Telemetry stack (self-hosted Fleet Telemetry server + signing proxy)
 
@@ -480,7 +481,7 @@ telemetry.yourdomain.com {
 }
 ```
 
-While you are editing the Caddyfile, double-check that your `teslahub.yourdomain.com` block forwards `/.well-known/appspecific/*` and `/api/*` to the API container — Tesla fetches your partner public key from `/.well-known/appspecific/com.tesla.3p.public-key.pem`, and a SPA fallback would return the React app instead of the PEM.
+While you are editing the Caddyfile, sanity-check that Tesla can fetch your partner public key from `https://teslahub.yourdomain.com/.well-known/appspecific/com.tesla.3p.public-key.pem` — a `curl -sS` should return a line starting with `-----BEGIN PUBLIC KEY-----`. If it returns the React app's HTML instead, you are running an **outdated `teslahub-web` image** that did not yet route `/.well-known/appspecific/*` internally — pull the latest image (`docker compose pull teslahub-web && docker compose up -d teslahub-web`) and the curl should immediately succeed.
 
 Reload Caddy:
 
@@ -850,7 +851,7 @@ Bringing the Security Alerts stack online involves quite a few moving pieces (Te
 
 | Symptom | Root cause | Fix |
 |---|---|---|
-| **`/.well-known/appspecific/com.tesla.3p.public-key.pem` returns the React app instead of a `.pem` file** | Tesla expects this exact path to serve your partner public key. The internal Caddyfile inside `teslahub-web` falls back to `index.html` for any unknown path. | Already fixed in the published `deltawp/teslahub-web` image (PR #13). Make sure your **outer** Caddy block also forwards `/.well-known/appspecific/*` to the API container alongside `/api/*`. |
+| **`/.well-known/appspecific/com.tesla.3p.public-key.pem` returns the React app instead of a `.pem` file** | Tesla expects this exact path to serve your partner public key. The internal Caddyfile inside `teslahub-web` used to fall back to `index.html` for that path. | Already fixed in the published `deltawp/teslahub-web` image (PR #13) — the inner Caddy now routes `/.well-known/appspecific/*` to the API container itself. Just `docker compose pull teslahub-web && docker compose up -d teslahub-web`. Your outer Caddy can stay on the simple `reverse_proxy localhost:4002` one-liner; you don't need to add a per-path rule. |
 | **Chrome shows a red "Dangerous site" warning when clicking the public-key test link** | Google Safe Browsing flags brand-new domains containing the word "tesla" as suspected phishing. It is *not* a TLS issue. | Cosmetic. Tesla's own server-to-server fetch ignores Safe Browsing. Confirm the endpoint with `curl -v https://teslahub.yourdomain.com/.well-known/appspecific/com.tesla.3p.public-key.pem` from any shell — you should see a `-----BEGIN PUBLIC KEY-----` block. To bypass in Chrome itself: *Details* → *Visit this unsafe site*. The warning fades once your domain accumulates browsing reputation. |
 | **Tesla refuses the developer-app form with a vague validation error on the App Name** | App names are global on `developer.tesla.com`. Common names like `TeslaHub Self-Hosted` are already registered by other users. | Use any unique name (e.g. `TeslaHub <yourname>` or `<yourname> Tesla Companion`). The name is purely cosmetic and never shown to the OAuth user. |
 | **OAuth callback returns `redirect_uri_mismatch`** | `TESLA_REDIRECT_URI` in your `.env` does not match exactly what is registered in the Tesla developer app — most often a missing/extra trailing slash, or `http://` vs `https://`. | Make the two strings byte-for-byte identical. The recommended form is `https://teslahub.yourdomain.com/api/tesla-oauth/callback` with no trailing slash. |
@@ -912,7 +913,7 @@ TeslaHub listens on `127.0.0.1` only. To expose it over HTTPS, use a reverse pro
 
 ### Caddy (recommended)
 
-#### Minimal block (no Security Alerts)
+#### Recommended block (works for everything — dashboard, Send-to-car, Vehicle Control, Sentry alerts)
 
 ```caddyfile
 teslahub.yourdomain.com {
@@ -920,11 +921,25 @@ teslahub.yourdomain.com {
 }
 ```
 
+This **single one-liner is enough** for every TeslaHub feature, including Tesla Fleet API. The Caddy embedded inside the `teslahub-web` Docker image already dispatches `/api/*` and `/.well-known/appspecific/*` to the API container — your outer Caddy just forwards everything to it on port 4002.
+
 Caddy handles TLS certificates automatically. Reload with `sudo systemctl reload caddy` (systemd) or `caddy reload` (manual).
+
+If you also enable Fleet Telemetry (Sentry alerts), add the cert-only block for the telemetry sub-domain:
+
+```caddyfile
+# Caddy never serves traffic on this sub-domain — its only job is to
+# obtain and renew the Let's Encrypt cert that fleet-telemetry reads
+# from disk. See "Tesla Fleet API integration (optional)" → "Telemetry stack".
+telemetry.yourdomain.com {
+    encode gzip zstd
+    respond 404
+}
+```
 
 #### Block to use when Security Alerts are enabled
 
-If you plan to use the **Security Alerts** feature, the bare snippet above will break Tesla's `/.well-known/appspecific/...` fetch (it would return the React SPA). Use this expanded block instead — it routes the API + the well-known path to the API container and everything else to the web container:
+> **Most users don't need this section.** The recommended block above works for every feature, including Sentry alerts. Only follow this if you've already published the API container's port (`4001`) directly on the host and want your outer Caddy to bypass the inner Caddy — typically because you don't want any reverse-proxy hop inside the `teslahub-web` container.
 
 ```caddyfile
 teslahub.yourdomain.com {
@@ -935,14 +950,6 @@ teslahub.yourdomain.com {
     reverse_proxy /api/*                     localhost:4001
     # Everything else = the React SPA.
     reverse_proxy                            localhost:4002
-}
-
-# Telemetry sub-domain. Caddy never serves traffic here — its only job
-# is to obtain and renew the Let's Encrypt cert that fleet-telemetry
-# reads from disk. See "Tesla Fleet API integration (optional)" → "Telemetry stack".
-telemetry.yourdomain.com {
-    encode gzip zstd
-    respond 404
 }
 ```
 
@@ -1031,11 +1038,17 @@ The provided `update.sh` script does this for you when `SECURITY_ALERTS_ENABLED=
 | `MQTT_USER` | *(empty)* | MQTT username (if broker requires auth) |
 | `MQTT_PASSWORD` | *(empty)* | MQTT password |
 | `MQTT_NAMESPACE` | *(empty)* | TeslaMate MQTT namespace (if configured) |
-| `TESLA_CLIENT_ID` / `TESLA_CLIENT_SECRET` / `TESLA_REDIRECT_URI` | *(optional)* | Tesla developer app credentials, required for the *Control* page, *Send to car*, and Security Alerts. See [Tesla Fleet API integration](#tesla-fleet-api-integration-optional). |
+| `TESLA_CLIENT_ID` / `TESLA_CLIENT_SECRET` / `TESLA_REDIRECT_URI` | *(optional)* | Tesla developer app credentials, required for the **Control** page, **Send to car**, and **Sentry alerts**. See [Tesla Fleet API integration](#tesla-fleet-api-integration-optional). |
 | `TESLA_AUDIENCE` | EU Fleet API | `https://fleet-api.prd.eu.vn.cloud.tesla.com` (EU) or `https://fleet-api.prd.na.vn.cloud.tesla.com` (NA/AP). |
+| `TESLA_SCOPES` | `openid offline_access vehicle_device_data vehicle_cmds` | Override the OAuth scopes requested from Tesla. The default unlocks every TeslaHub feature; only change if you know exactly what you're doing. |
 | `TESLA_COMMAND_PROXY_URL` | *(empty)* | URL of the local `tesla-http-proxy` container (e.g. `https://tesla-http-proxy:4443`). Required to send any signed Fleet command (climate, charging, locks, OTA, …). Without it, only the unsigned `wake_up` and `share` calls work. |
-| `SECURITY_ALERTS_ENABLED` | `false` | Master switch for the Fleet Telemetry consumer (Sentry / break-in alerts). The *Control* page and *Send to car* work even when this is `false`, as long as the Tesla app + virtual key are paired. |
+| `SECURITY_ALERTS_ENABLED` | `false` | Master switch for the Fleet Telemetry consumer (Sentry / break-in alerts). The **Control** page and **Send to car** work even when this is `false`, as long as the Tesla app + virtual key are paired. |
+| `TELEMETRY_DOMAIN` | *(required to enable telemetry)* | Public domain Tesla streams to (e.g. `telemetry.yourdomain.com`). Must have a Let's Encrypt cert obtained by Caddy, and an inbound port forward to TCP `8443`. See [Telemetry stack](#telemetry-stack-self-hosted-fleet-telemetry-server--signing-proxy). |
+| `TELEMETRY_PORT` | `8443` | Port the `fleet-telemetry` container listens on (TLS direct, no Caddy in front). Tesla connects to `<TELEMETRY_DOMAIN>:<TELEMETRY_PORT>`. |
+| `TELEMETRY_CA_PATH` | `/certs/<TELEMETRY_DOMAIN>/<TELEMETRY_DOMAIN>.crt` | Override the in-container path to the Let's Encrypt certificate the API ships to Tesla via `fleet_telemetry_config`. The default works with the standard Caddy certs mount; only set this if you store the cert somewhere else inside the container. |
 | `TELEMETRY_MQTT_HOST` / `TELEMETRY_MQTT_PORT` / `TELEMETRY_MQTT_USER` / `TELEMETRY_MQTT_PASSWORD` / `TELEMETRY_MQTT_TOPIC_BASE` | *(falls back to `MQTT_*`)* | Where the Fleet Telemetry consumer subscribes. Use these only if Fleet Telemetry publishes to a separate broker than TeslaMate. |
+| `CADDY_CERTS_PATH` | `/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory` | Host path to Caddy's certificate directory, mounted read-only into `teslahub-api`, `fleet-telemetry` and `tesla-http-proxy`. Adjust if you use Caddy via Snap (`/var/snap/caddy/...`), inside Docker (`/data/caddy/...`), or any other layout. |
+| `TELEGRAM_BOT_TOKEN` | *(optional)* | Bot token from [@BotFather](https://t.me/BotFather), required to send Sentry / break-in notifications. The actual recipient chat IDs are managed in **Settings → Tesla integration → Notification recipients**, not via env vars. |
 | `TZ` | `Europe/Paris` | Timezone |
 
 ---
