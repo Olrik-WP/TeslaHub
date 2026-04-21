@@ -233,15 +233,29 @@ public sealed class TeslaCommandService
     {
         var token = _oauth.DecryptAccessToken(account);
 
-        var endpointBase = signed && !string.IsNullOrWhiteSpace(_proxyBaseUrl)
+        var useProxy = signed && !string.IsNullOrWhiteSpace(_proxyBaseUrl);
+
+        var endpointBase = useProxy
             ? _proxyBaseUrl!.TrimEnd('/')
             : account.Audience.TrimEnd('/');
+
+        // The signed tesla-http-proxy REQUIRES a 17-character VIN in the
+        // command path (it uses it to look up the in-vehicle session
+        // keys). Fleet API ID is rejected with HTTP 404. The proxy
+        // source (pkg/proxy/proxy.go ~ line 315) is explicit about it.
+        // The plain Fleet REST API accepts either VIN or numeric id, but
+        // since VIN works in both cases we use it whenever we route to
+        // the proxy and keep the numeric id for direct REST (it matches
+        // what TeslaShareService and the wake/status code already use).
+        var vehicleSegment = useProxy
+            ? vehicle.Vin
+            : vehicle.TeslaVehicleId.ToString();
 
         // Some commands are not under /command/* (wake_up, share is, but
         // the endpoint may be passed in already-formed). Accept both.
         var path = command.StartsWith("/", StringComparison.Ordinal)
             ? command
-            : $"/api/1/vehicles/{vehicle.TeslaVehicleId}/command/{command}";
+            : $"/api/1/vehicles/{vehicleSegment}/command/{command}";
 
         var url = endpointBase + path;
         using var http = new HttpRequestMessage(HttpMethod.Post, url);
