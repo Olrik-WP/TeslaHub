@@ -30,8 +30,8 @@ TeslaHub reads your existing TeslaMate data (read-only) and provides a touch-fir
 - Cost analytics by location, month, and period
 - Multi-car support
 - Internationalization (English / French / German)
-- **Optional, but the headline feature**: a full **Vehicle Control** page that goes well beyond the official Tesla app's 4 quick-action shortcuts — climate (temps + dual-zone + seat heaters per available seat + dog/camp/keep modes + cabin overheat), charging (start/stop, limit slider, amps slider, port door, cable unlock), access (lock, sentry, horn, lights, valet PIN, speed-limit PIN), openings (frunk, trunk, vent/close windows), media (play, next/prev, favorites, volume), software updates (schedule 1m/1h/6h or cancel), with auto wake-up, dynamic state colours, capability-aware UI and zero polling (vampire-drain safe). See [Vehicle Control](#vehicle-control-page-optional).
-- **Optional** real-time Sentry / break-in alerts via Tesla Fleet Telemetry — see [Security Alerts](#security-alerts-optional)
+- **Optional, but the headline feature**: a full **Vehicle Control** page that goes well beyond the official Tesla app's 4 quick-action shortcuts — climate (temps + dual-zone + seat heaters per available seat + dog/camp/keep modes + cabin overheat), charging (start/stop, limit slider, amps slider, port door, cable unlock), access (lock, sentry, horn, lights, valet PIN, speed-limit PIN), openings (frunk, trunk, vent/close windows), media (play, next/prev, favorites, volume), software updates (schedule 1m/1h/6h or cancel), with auto wake-up, dynamic state colours, capability-aware UI and zero polling (vampire-drain safe). See [Vehicle Control](#vehicle-control-page).
+- **Optional** real-time Sentry / break-in alerts via Tesla Fleet Telemetry — see [Tesla Fleet API integration](#tesla-fleet-api-integration-optional)
 - **Multi-account aware**: link multiple Tesla identities to the same TeslaHub instance (typical use case: a couple where each spouse owns their own car). Every command is routed with the right owner's OAuth token automatically.
 
 TeslaMate remains your telemetry source. TeslaHub is the UX layer.
@@ -245,9 +245,15 @@ When MQTT is not connected, TeslaHub shows a subtle indicator and hides the body
 
 ---
 
-## Security Alerts (optional)
+## Tesla Fleet API integration (optional)
 
-TeslaHub can optionally connect to your Tesla account via the official **Tesla Fleet API** to deliver real-time security features that go beyond what TeslaMate can capture — most importantly the `SentryModeStateAware` event raised when Sentry detects activity around the vehicle, and break-in detection. Alerts are pushed to Telegram in seconds.
+TeslaHub can optionally connect to your Tesla account via the official **Tesla Fleet API** to unlock three big features:
+
+1. The full **Vehicle Control** page — climate, charging, locks, sentry, frunk/trunk, windows, seat heaters, OTA, valet, speed limit, media… way beyond the official Tesla app's 4 quick-action shortcuts.
+2. **Send-to-car** destinations from the map (works on any car shared with you, even without virtual-key pairing).
+3. Real-time **Sentry / break-in alerts** pushed to Telegram (`SentryModeStateAware` event + locked-car-door-opens detection).
+
+All three share the same setup, the same OAuth flow, and the same paired virtual key. Configure the wizard once, all three light up at the same time.
 
 > ⚠️ **Advanced users only — read this before you start.**
 >
@@ -259,17 +265,17 @@ TeslaHub can optionally connect to your Tesla account via the official **Tesla F
 
 ### What you get
 
-- 🚨 Instant Telegram notification when Tesla Sentry detects activity (`SentryModeStateAware` / `Panic`).
-- 🔓 Break-in detection (vehicle locked but a door / trunk / frunk opens).
+- 🎛 **Vehicle Control page** — the headline feature. Climate (target temps + dual-zone + seat heaters per available seat + Off/Keep/Dog/Camp modes + cabin overheat protection), charging (start/stop, limit slider, amps slider, port door, cable unlock), access (lock, sentry, horn, lights, valet PIN, speed-limit PIN), openings (frunk, trunk, vent/close windows), media (play, next/prev, favorites, volume), software updates (schedule 1m/1h/6h or cancel). Auto wake-up + dynamic state colours + capability-aware UI + zero polling (vampire-drain safe). See [Vehicle Control](#vehicle-control-page).
+- 🗺️ **Send a destination to your car from the TeslaHub map.** Long-press / tap any spot on the map (or search an address) → click *Send to car*. The destination shows up on the vehicle's central screen as a "Start navigation" prompt. **Sleeping cars are woken up automatically** (TeslaHub fires Tesla's plain-REST `POST /api/1/vehicles/{id}/wake_up`, polls `/vehicles/{id}` with a progressive back-off 2s → 3s → 5s until `state="online"`, capped at 60s — typical wait 5–15s on good cellular). You can tick **multiple cars at once** to broadcast the same destination to your whole fleet in one click — each is woken independently and in parallel.
+- 🚨 **Instant Telegram notification** when Tesla Sentry detects activity (`SentryModeStateAware` / `Panic`).
+- 🔓 **Break-in detection** (vehicle locked but a door / trunk / frunk opens).
 - 👥 Per-recipient routing: multiple Telegram chats can be configured, each subscribed to specific vehicles, with Sentry and break-in toggles per (recipient, vehicle) pair.
 - 📜 Last 500 alerts kept in PostgreSQL with delivery status.
-- 🗺️ **Send a destination to your car from the TeslaHub map.** Long-press / tap any spot on the map (or search an address) → click *Send to car*. The destination shows up on the vehicle's central screen as a "Start navigation" prompt.
-  - **Sleeping cars are woken up automatically.** TeslaHub fires Tesla's plain-REST `POST /api/1/vehicles/{id}/wake_up` (this endpoint is the only Fleet API command that does *not* go through `tesla-http-proxy` — by Tesla design, since a sleeping car cannot authenticate signed commands), then polls `/vehicles/{id}` with a progressive back-off (2s → 3s → 5s) until `state="online"`, capped at 60s as per Tesla's official best-practice doc. The destination is then sent over the same path as a fully-awake car. Typical wait when the car was asleep on good cellular: **5–15s**.
-  - You can tick **multiple cars at once** in the panel to broadcast the same destination to your whole fleet in one click. Each is woken independently and in parallel.
-  - **No vampire drain.** A `wake_up` is issued only on explicit user action (a click); TeslaHub never wakes cars in the background or polls them on a schedule for live data — Fleet Telemetry handles that *push*-side. Tesla puts the car back to sleep on its own after ~10–15 min of inactivity. A handful of intentional wake-ups per day costs less than 1% SoC and stays well inside Tesla's $10/month free Fleet API tier.
+- 👨‍👩‍👧 **Multi-account aware**: link several Tesla identities (typical use case: a couple where each spouse owns their own car). Every command is routed with the right owner's OAuth token automatically. See [Multi-account support](#multi-account-support-couples--shared-teslahub).
+- 🛡 **No vampire drain by design**. TeslaHub never wakes cars in the background or polls `vehicle_data` on a schedule — Fleet Telemetry handles that *push*-side. Wakes happen only on explicit user actions (a click). Tesla puts the car back to sleep on its own after ~10–15 min of inactivity. A handful of intentional wake-ups per day costs less than 1% SoC and stays well inside Tesla's $10/month free Fleet API tier.
 - 🛠 Full setup wizard inside TeslaHub Settings — copy-paste for every Tesla developer app field, QR code for vehicle pairing, "Send test" button for Telegram.
 
-> **One Fleet API setup powers every TeslaHub feature that talks to the car.** Sentry / break-in alerts, *Send destination to car*, **and the full Vehicle Control page** all rely on the same Tesla developer app, the same OAuth flow, and the same paired virtual key. Once one of these features is configured, the others light up automatically. If you see a "Tesla Fleet API not configured" banner anywhere, complete the wizard at Settings → Tesla integration first.
+> **One Fleet API setup powers every TeslaHub feature that talks to the car.** Vehicle Control, Send-to-car, and Sentry / break-in alerts all rely on the same Tesla developer app, the same OAuth flow, and the same paired virtual key. Once one of these features is configured, the others light up automatically. If you see a "Tesla Fleet API not configured" banner anywhere, complete the wizard at **Settings → Tesla integration** first.
 
 ### Multi-account support (couples / shared TeslaHub)
 
@@ -285,7 +291,7 @@ Concretely, when both accounts are linked:
 
 The setup flow on the second account is exactly the same as the first one — done from the second person's phone (so Tesla auto-uses *their* identity in the OAuth login), then they scan the same pairing QR / tap the same `tesla.com/_ak/<your-domain>` link to pair the TeslaHub virtual key on their car, from their phone.
 
-### Vehicle Control page (optional)
+### Vehicle Control page
 
 Once the Tesla Fleet API + virtual-key pairing described above is in place, a new **Control** entry shows up in the bottom navigation (next to *Home*) and a row of quick-action chips appears under the vehicle silhouette on the *Home* page. Both are silent if Fleet API isn't configured or the virtual key isn't paired — TeslaHub stays informational for users without Fleet API.
 
@@ -330,7 +336,7 @@ Verified against `teslamotors/vehicle-command/pkg/proxy/command.go`:
 
 | Path | How TeslaHub sends it |
 |---|---|
-| `command/auto_conditioning_*`, `set_temps`, `remote_seat_*`, `set_climate_keeper_mode`, `door_lock/unlock`, `actuate_trunk`, `window_control`, `charge_start/stop`, `set_charge_limit`, `set_charging_amps`, `charge_port_door_*`, `set_sentry_mode`, `schedule_software_update`, `cancel_software_update`, `set_valet_mode`, `speed_limit_*`, `media_*`, `flash_lights`, `honk_horn`, `set_preconditioning_max`, `set_cabin_overheat_protection`, `set_cop_temp` | **Signed via local `tesla-http-proxy`** (the proxy adds the partner-key signature on top of the user bearer token, then forwards to `fleet-api.prd.<region>`). |
+| `command/auto_conditioning_*`, `set_temps`, `remote_seat_heater_request`, `remote_steering_wheel_heater_request`, `set_climate_keeper_mode`, `set_preconditioning_max`, `set_cabin_overheat_protection`, `set_cop_temp`, `set_bioweapon_mode`, `door_lock/unlock`, `actuate_trunk`, `window_control`, `charge_start/stop`, `set_charge_limit`, `set_charging_amps`, `charge_port_door_*`, `set_sentry_mode`, `set_valet_mode`, `speed_limit_*`, `media_*`, `adjust_volume`, `flash_lights`, `honk_horn`, `schedule_software_update`, `cancel_software_update` | **Signed via local `tesla-http-proxy`** (the proxy adds the partner-key signature on top of the user bearer token, then forwards to `fleet-api.prd.<region>`). |
 | `wake_up` (no `command/` prefix) | **Plain REST** straight to `fleet-api.prd.<region>` — Tesla cannot verify a signature from a sleeping car. |
 | `command/share` (navigation_request, used by *Send to car*) | **Plain REST** — the proxy returns `ErrCommandUseRESTAPI` because Tesla parses the address server-side. |
 | `vehicle_data`, `GET /vehicles/{id}` | **Plain REST** — read-only, never signed. |
@@ -355,7 +361,7 @@ Everything stays on **your** server. No third-party cloud, no shared client_id, 
 
 ### Step 1 — Create your Tesla developer app (5 min, free)
 
-> 💡 The same instructions are also displayed inside TeslaHub: open **Settings → Security Alerts** and follow the embedded "0. Create your Tesla developer app" guide. Each value has a one-click copy button.
+> 💡 The same instructions are also displayed inside TeslaHub: open **Settings → Tesla integration** and follow the embedded "0. Create your Tesla developer app" guide. Each value has a one-click copy button.
 
 1. Open [developer.tesla.com](https://developer.tesla.com), click **Sign in** and use your existing Tesla account credentials.
 2. From the left menu, go to **Apps**, then click **Create New App**.
@@ -729,7 +735,7 @@ tesla-http-proxy-1  | {"level":"info","msg":"listening","port":4443}
 
 #### Tell Tesla to start streaming
 
-Open Settings → Security Alerts → in the wizard step 4:
+Open Settings → Tesla integration → in the wizard step 4:
 
 1. **First click "Export private key for the proxy"**. This writes your partner private key (decrypted) to the shared `key-vault` Docker volume so `tesla-http-proxy` can sign Tesla API requests with it. Do this **once**.
 2. **Then click "Configure telemetry for all paired vehicles"**. TeslaHub sends a signed `POST /api/1/vehicles/fleet_telemetry_config` request through the proxy, which Tesla accepts. Each paired car will then open a persistent connection to your `fleet-telemetry` container as soon as it's awake.
@@ -769,7 +775,7 @@ docker compose up -d teslahub-api
 
 #### Add recipients
 
-In TeslaHub → **Settings → Security Alerts**, scroll down to *Notification recipients*. For each person who should receive alerts:
+In TeslaHub → **Settings → Tesla integration**, scroll down to *Notification recipients*. For each person who should receive alerts:
 
 1. Find their Telegram chat ID by sending any message to [@userinfobot](https://t.me/userinfobot) on Telegram — it replies with the numeric `id`.
 2. Add a recipient (Name + chat ID + language).
@@ -867,7 +873,7 @@ Bringing the Security Alerts stack online involves quite a few moving pieces (Te
 
 | Symptom | Root cause | Fix |
 |---|---|---|
-| **Proxy crash-loops with `open /key-vault/private.pem: no such file or directory`** | The partner private key lives encrypted in the TeslaHub database. It must be exported once to the shared `key-vault` volume before the proxy can sign requests. | In TeslaHub → **Settings → Security Alerts**, click **"Export private key for the proxy"**. Then `docker compose restart tesla-http-proxy`. |
+| **Proxy crash-loops with `open /key-vault/private.pem: no such file or directory`** | The partner private key lives encrypted in the TeslaHub database. It must be exported once to the shared `key-vault` volume before the proxy can sign requests. | In TeslaHub → **Settings → Tesla integration**, click **"Export private key for the proxy"**. Then `docker compose restart tesla-http-proxy`. |
 | **Proxy crash-loops with `open /key-vault/proxy.key: permission denied`** | The init container previously wrote `proxy.key` with mode `600`; the proxy runs as `nonroot` and could not read its own TLS key. | Pull the latest `docker-compose.security-alerts.yml` from this repo (PR #19) — the init container now sets `chmod 644` on `proxy.key` (acceptable: the file is on a private Docker network and the cert pair is regenerated trivially). On an existing volume: `docker run --rm -v <stack>_key-vault:/key-vault alpine chmod 644 /key-vault/proxy.key`. |
 | **Proxy is up but `configure-telemetry` still 502s** | `teslahub-api` is not pointing at the proxy. | Verify `docker compose exec teslahub-api env \| grep TESLA_COMMAND_PROXY_URL` returns `https://tesla-http-proxy:4443`. If empty, add it to `.env` and to the `teslahub-api` `environment:` block (see `docker-compose.addon.yml`), then `docker compose up -d teslahub-api`. |
 
@@ -933,7 +939,7 @@ teslahub.yourdomain.com {
 
 # Telemetry sub-domain. Caddy never serves traffic here — its only job
 # is to obtain and renew the Let's Encrypt cert that fleet-telemetry
-# reads from disk. See "Security Alerts (optional)" → "Telemetry stack".
+# reads from disk. See "Tesla Fleet API integration (optional)" → "Telemetry stack".
 telemetry.yourdomain.com {
     encode gzip zstd
     respond 404
@@ -1025,7 +1031,7 @@ The provided `update.sh` script does this for you when `SECURITY_ALERTS_ENABLED=
 | `MQTT_USER` | *(empty)* | MQTT username (if broker requires auth) |
 | `MQTT_PASSWORD` | *(empty)* | MQTT password |
 | `MQTT_NAMESPACE` | *(empty)* | TeslaMate MQTT namespace (if configured) |
-| `TESLA_CLIENT_ID` / `TESLA_CLIENT_SECRET` / `TESLA_REDIRECT_URI` | *(optional)* | Tesla developer app credentials, required for *Send to car*, the *Control* page, and Security Alerts. See [Security Alerts setup](#security-alerts-optional). |
+| `TESLA_CLIENT_ID` / `TESLA_CLIENT_SECRET` / `TESLA_REDIRECT_URI` | *(optional)* | Tesla developer app credentials, required for the *Control* page, *Send to car*, and Security Alerts. See [Tesla Fleet API integration](#tesla-fleet-api-integration-optional). |
 | `TESLA_AUDIENCE` | EU Fleet API | `https://fleet-api.prd.eu.vn.cloud.tesla.com` (EU) or `https://fleet-api.prd.na.vn.cloud.tesla.com` (NA/AP). |
 | `TESLA_COMMAND_PROXY_URL` | *(empty)* | URL of the local `tesla-http-proxy` container (e.g. `https://tesla-http-proxy:4443`). Required to send any signed Fleet command (climate, charging, locks, OTA, …). Without it, only the unsigned `wake_up` and `share` calls work. |
 | `SECURITY_ALERTS_ENABLED` | `false` | Master switch for the Fleet Telemetry consumer (Sentry / break-in alerts). The *Control* page and *Send to car* work even when this is `false`, as long as the Tesla app + virtual key are paired. |
