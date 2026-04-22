@@ -38,6 +38,11 @@ export default function ChargeCard({ vehicleId, snapshot, vehicleStatus, capabil
     && chargingStateLower !== 'unknown';
   const limitServer = charge.charge_limit_soc ?? 80;
   const ampsServer = charge.charge_amps ?? charge.charge_current_request ?? 16;
+  // The Tesla mobile app exposes 5–32 A. Tesla docs note that values
+  // below 5 A are typically ignored by the vehicle (and require a
+  // double call to take effect). We mirror that floor so the slider
+  // never sends a value the car would silently drop.
+  const minAmps = Math.max(5, charge.charge_current_request_min ?? 5);
   const maxAmps = charge.charge_current_request_max ?? 32;
 
   const [limit, setLimit] = useState(limitServer);
@@ -120,9 +125,9 @@ export default function ChargeCard({ vehicleId, snapshot, vehicleStatus, capabil
           </div>
           <input
             type="range"
-            min={1}
+            min={minAmps}
             max={maxAmps}
-            value={amps}
+            value={Math.max(minAmps, Math.min(maxAmps, amps))}
             disabled={false}
             onChange={(e) => setAmps(Number(e.target.value))}
             className="w-full accent-[#e31937]"

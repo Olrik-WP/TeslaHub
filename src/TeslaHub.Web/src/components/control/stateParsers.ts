@@ -63,6 +63,7 @@ export interface ChargeState {
   charge_amps?: number;
   charge_current_request?: number;
   charge_current_request_max?: number;
+  charge_current_request_min?: number;
   charging_state?: string;
   charge_port_door_open?: boolean;
   charge_port_latch?: string;
