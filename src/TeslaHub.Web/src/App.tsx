@@ -142,7 +142,17 @@ function AppLayout() {
             onChange={handleCarChange}
           />
         )}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]">
+        {/* min-h-0 is required: flex items default to min-height:auto,
+            which lets them grow with their content instead of clipping
+            it. Without this, very long pages (Control with all cards
+            expanded) make the container taller than the viewport, so
+            the inner overflow-y-auto never kicks in and the document
+            scrolls instead. That breaks two things at once:
+              - the CarSelector (rendered above this div) scrolls out
+                of view, hiding the active vehicle;
+              - position:sticky inside the routed pages anchors to the
+                document and the headers slide off with the rest. */}
+        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]">
           <ErrorBoundary>
             <Suspense fallback={<div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>}>
               <Routes>
