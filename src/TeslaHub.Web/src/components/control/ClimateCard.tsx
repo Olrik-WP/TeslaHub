@@ -92,7 +92,16 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
   };
 
   const keeperInt = keeperModeToInt(climate.climate_keeper_mode);
-  const isPreconditioning = climate.is_preconditioning ?? false;
+  // The "Dégivrage" / "Defrost" button maps to Tesla's set_preconditioning_max
+  // command (= "Dégivrage du véhicule" in the mobile app). Its state must
+  // therefore be derived from defrost_mode (0 = off, 2 = max defrost).
+  // We deliberately do NOT use is_preconditioning here: Tesla flips that
+  // flag to true as soon as the cabin is being warmed up to reach the
+  // requested temperature — i.e. on a normal Climate ON, which would
+  // make the Defrost button glow even though the user never pressed it.
+  // This mirrors the Tesla app, where Climate ON and "Dégivrage du
+  // véhicule" are two visibly independent states.
+  const isMaxDefrost = (climate.defrost_mode ?? 0) === 2;
   const steeringHot = climate.steering_wheel_heater ?? false;
   const copOn = (climate.cabin_overheat_protection ?? 'Off').toLowerCase() !== 'off';
   const copFanOnly = (climate.cabin_overheat_protection ?? '').toLowerCase().includes('no');
@@ -185,8 +194,8 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
       <div className="grid grid-cols-3 gap-2 mt-3">
         <ControlButton
           label={t('control.climate.precondition')}
-          onClick={() => precondition.mutate({ on: !isPreconditioning })}
-          state={isPreconditioning ? 'warning' : 'neutral'}
+          onClick={() => precondition.mutate({ on: !isMaxDefrost })}
+          state={isMaxDefrost ? 'warning' : 'neutral'}
           loading={precondition.isPending}
           wakingHint={precondition.wakingHint}
           disabled={false}
