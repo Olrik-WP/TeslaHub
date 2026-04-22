@@ -115,8 +115,19 @@ export default function Control({ carId, onCarChange }: Props) {
 
   return (
     <div className="px-3 sm:px-4 pt-3 max-w-2xl mx-auto">
-      {/* Sticky header */}
-      <header className="sticky top-0 z-10 -mx-3 sm:-mx-4 px-3 sm:px-4 py-3 bg-[#0a0a0a]/95 backdrop-blur border-b border-[#2a2a2a] mb-3">
+      {/* Sticky header.
+          NOTE: the previous version used `bg-…/95 backdrop-blur` for a
+          frosted-glass look. That combination broke position:sticky
+          in some browsers (Chromium #1042020, WebKit #195836): the
+          backdrop-filter creates a stacking/containment context that
+          stops the header from sticking to the scroll container, so
+          the active vehicle name disappeared as soon as the user
+          scrolled past the climate card. Solid opaque background +
+          explicit inline style guarantees the header always sticks. */}
+      <header
+        className="sticky top-0 z-20 -mx-3 sm:-mx-4 px-3 sm:px-4 py-3 bg-[#0a0a0a] border-b border-[#2a2a2a] mb-3"
+        style={{ position: 'sticky', top: 0 }}
+      >
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             {/* In-header vehicle switcher: keeps the active car visible
