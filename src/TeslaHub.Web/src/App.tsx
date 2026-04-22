@@ -134,7 +134,13 @@ function AppLayout() {
 
   return (
     <ControlFeedbackProvider>
-      <div className="min-h-[calc(100dvh-env(safe-area-inset-top))] bg-[#0a0a0a] flex flex-col">
+      {/* h-full (not min-h): combined with the html/body height:100% +
+          overflow:hidden in index.css, this forces ALL scrolling to
+          happen inside the routed scroll container below. Otherwise
+          body grows with the page content and the document scrolls,
+          which slides the CarSelector and every sticky page header
+          off the screen. */}
+      <div className="h-full bg-[#0a0a0a] flex flex-col">
         {cars && cars.length > 1 && (
           <CarSelector
             cars={cars}
