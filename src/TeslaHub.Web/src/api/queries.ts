@@ -242,7 +242,36 @@ export interface GlobalSettings {
   chargersCustomNetworks: string | null;
   chargersMinPowerKw: number;
   chargersOcmApiKey: string | null;
+  showFleetApiCost: boolean;
 }
+
+// ─── Tesla Fleet API usage (locally-estimated monthly cost) ──────
+export interface FleetApiUsageCategory {
+  category: string;
+  requestCount: number;
+  unitPriceUsd: number;
+  subtotalUsd: number;
+}
+
+export interface FleetApiUsagePreviousMonth {
+  yearMonth: string;
+  grossUsd: number;
+  netUsd: number;
+}
+
+export interface FleetApiUsage {
+  enabled: boolean;
+  yearMonth: string;
+  periodStartUtc: string;
+  generatedAtUtc: string;
+  categories: FleetApiUsageCategory[];
+  grossUsd: number;
+  creditUsd: number;
+  netUsd: number;
+  previousMonth: FleetApiUsagePreviousMonth | null;
+}
+
+export const getFleetApiUsage = () => api<FleetApiUsage>('/fleet-usage');
 
 // ─── Public chargers (Open Charge Map) ──────────────────────────
 export interface ChargerConnection {

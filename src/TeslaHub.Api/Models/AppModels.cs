@@ -101,6 +101,15 @@ public class GlobalSettings
     /// </summary>
     [MaxLength(100)]
     public string? ChargersOcmApiKey { get; set; }
+
+    /// <summary>
+    /// Whether to display the locally-estimated Tesla Fleet API monthly cost
+    /// in Settings. Off by default — the user opts in. The estimate is
+    /// computed by counting outgoing Fleet API requests and applying Tesla's
+    /// published per-category prices (Tesla doesn't expose a billing API,
+    /// so this is an estimate, not the actual invoice).
+    /// </summary>
+    public bool ShowFleetApiCost { get; set; }
 }
 
 public class CarConfig

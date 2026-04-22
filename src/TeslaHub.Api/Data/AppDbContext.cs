@@ -19,6 +19,7 @@ public class AppDbContext : DbContext
     public DbSet<NotificationRecipient> NotificationRecipients => Set<NotificationRecipient>();
     public DbSet<RecipientVehicleSubscription> RecipientVehicleSubscriptions => Set<RecipientVehicleSubscription>();
     public DbSet<SecurityAlertEvent> SecurityAlertEvents => Set<SecurityAlertEvent>();
+    public DbSet<FleetApiUsage> FleetApiUsages => Set<FleetApiUsage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -70,6 +71,10 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<SecurityAlertEvent>()
             .HasIndex(e => e.DetectedAt);
+
+        modelBuilder.Entity<FleetApiUsage>()
+            .HasIndex(u => new { u.YearMonth, u.Category })
+            .IsUnique();
 
         modelBuilder.Entity<GlobalSettings>().HasData(new GlobalSettings
         {

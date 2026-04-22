@@ -189,6 +189,7 @@ public static class CostsEndpoints
             settings.ChargersOcmApiKey = string.IsNullOrWhiteSpace(update.ChargersOcmApiKey)
                 ? null
                 : update.ChargersOcmApiKey.Trim();
+            settings.ShowFleetApiCost = update.ShowFleetApiCost;
 
             await db.SaveChangesAsync();
             return Results.Ok(settings);
