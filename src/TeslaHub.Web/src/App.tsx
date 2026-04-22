@@ -163,7 +163,7 @@ function AppLayout() {
                 <Route path="/locations" element={<Locations carId={selectedCarId} />} />
                 <Route path="/trip" element={<Trip carId={selectedCarId} />} />
                 <Route path="/dashboard" element={<Dashboard carId={selectedCarId} />} />
-                <Route path="/control" element={<Control carId={selectedCarId} />} />
+                <Route path="/control" element={<Control carId={selectedCarId} onCarChange={handleCarChange} />} />
                 <Route path="/settings" element={<Settings carId={selectedCarId} />} />
               </Routes>
             </Suspense>
