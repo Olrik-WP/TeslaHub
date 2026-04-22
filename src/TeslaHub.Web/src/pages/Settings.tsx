@@ -10,6 +10,7 @@ import { MAP_STYLES } from '../hooks/useMapStyle';
 import type { GlobalSettings, ChargingLocation } from '../api/queries';
 import CustomSelect from '../components/CustomSelect';
 import SecurityAlertsCard from '../components/SecurityAlertsCard';
+import FleetApiCostCard from '../components/FleetApiCostCard';
 
 type SettingsTab = 'general' | 'tesla';
 const VALID_TABS: SettingsTab[] = ['general', 'tesla'];
@@ -262,6 +263,15 @@ export default function Settings({ carId }: Props) {
         <>
           {/* Security Alerts (optional Tesla Fleet API integration) */}
           <SecurityAlertsCard />
+
+          {/* Fleet API monthly cost estimate (opt-in) */}
+          <FleetApiCostCard
+            enabled={!!form.showFleetApiCost}
+            onToggle={(v) => {
+              setForm((f) => ({ ...f, showFleetApiCost: v }));
+              save.mutate();
+            }}
+          />
         </>
       ) : (
         <>
