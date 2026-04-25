@@ -34,7 +34,16 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<CacheService>();
 builder.Services.AddSingleton<MqttLiveDataService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttLiveDataService>());
-builder.Services.AddHttpClient("tesla", c => c.DefaultRequestHeaders.UserAgent.ParseAdd("TeslaHub/1.0"));
+
+// Singleton meter that counts outgoing Fleet API requests for the
+// monthly cost estimator surfaced in Settings. Registered before the
+// HttpClient factories so the DelegatingHandler can resolve it.
+builder.Services.AddSingleton<FleetApiUsageMeter>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<FleetApiUsageMeter>());
+builder.Services.AddTransient<FleetApiUsageHandler>();
+
+builder.Services.AddHttpClient("tesla", c => c.DefaultRequestHeaders.UserAgent.ParseAdd("TeslaHub/1.0"))
+    .AddHttpMessageHandler<FleetApiUsageHandler>();
 
 // The "tesla-proxy" HttpClient is used to talk to the local
 // vehicle-command-proxy container, which presents a self-signed TLS
@@ -42,6 +51,7 @@ builder.Services.AddHttpClient("tesla", c => c.DefaultRequestHeaders.UserAgent.P
 // for the proxy hostname configured via TESLA_COMMAND_PROXY_URL) —
 // direct calls to Tesla's public Fleet API still use strict TLS.
 builder.Services.AddHttpClient("tesla-proxy", c => c.DefaultRequestHeaders.UserAgent.ParseAdd("TeslaHub/1.0"))
+    .AddHttpMessageHandler<FleetApiUsageHandler>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
     {
         ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
@@ -194,6 +204,7 @@ app.MapTeslaShareEndpoints();
 app.MapTeslaControlEndpoints();
 app.MapSecurityAlertsEndpoints();
 app.MapChargersEndpoints();
+app.MapFleetApiUsageEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { Status = "OK", Timestamp = DateTime.UtcNow }))
     .AllowAnonymous();

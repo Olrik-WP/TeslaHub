@@ -502,6 +502,26 @@
       "getApiKey": "Kostenlosen Schlüssel besorgen",
       "dataSource": "Daten von Open Charge Map (CC-BY-SA), serverseitig 24 h gecacht."
     },
+    "fleetApiCost": {
+      "title": "Tesla Fleet API Kosten",
+      "toggle": "Geschätzte monatliche Fleet-API-Kosten anzeigen",
+      "toggleHint": "Tesla bietet keine Abrechnungs-API. TeslaHub schätzt die Kosten lokal, indem ausgehende Anfragen gezählt und Teslas veröffentlichte Preise angewendet werden.",
+      "gross": "Brutto diesen Monat",
+      "net": "Geschätzte Rechnung",
+      "creditApplied": "Nach {{credit}} $ Kleinentwickler-Guthaben",
+      "category": "Kategorie",
+      "requests": "Anfragen",
+      "unitPrice": "Stückpreis (USD)",
+      "subtotal": "Zwischensumme (USD)",
+      "categories": {
+        "WakeUp": "Aufwecken",
+        "VehicleData": "Fahrzeugdaten",
+        "VehicleCommands": "Fahrzeugbefehle"
+      },
+      "previousMonth": "Vormonat ({{month}}): brutto {{gross}} $ → geschätzt {{net}} $.",
+      "disclaimer": "Nur Schätzung. Tesla rechnet mit Rundungsregeln und ohne Serverfehler (HTTP ≥ 500). Der offizielle Betrag ist im Tesla Developer-Dashboard zu finden.",
+      "openDashboard": "developer.tesla.com/dashboard/usage öffnen"
+    },
     "saveSettings": "Einstellungen speichern",
     "saving": "Speichere...",
     "vehicleImage": "Fahrzeugbild",

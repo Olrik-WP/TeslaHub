@@ -134,7 +134,13 @@ function AppLayout() {
 
   return (
     <ControlFeedbackProvider>
-      <div className="min-h-[calc(100dvh-env(safe-area-inset-top))] bg-[#0a0a0a] flex flex-col">
+      {/* h-full (not min-h): combined with the html/body height:100% +
+          overflow:hidden in index.css, this forces ALL scrolling to
+          happen inside the routed scroll container below. Otherwise
+          body grows with the page content and the document scrolls,
+          which slides the CarSelector and every sticky page header
+          off the screen. */}
+      <div className="h-full bg-[#0a0a0a] flex flex-col">
         {cars && cars.length > 1 && (
           <CarSelector
             cars={cars}
@@ -142,7 +148,17 @@ function AppLayout() {
             onChange={handleCarChange}
           />
         )}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]">
+        {/* min-h-0 is required: flex items default to min-height:auto,
+            which lets them grow with their content instead of clipping
+            it. Without this, very long pages (Control with all cards
+            expanded) make the container taller than the viewport, so
+            the inner overflow-y-auto never kicks in and the document
+            scrolls instead. That breaks two things at once:
+              - the CarSelector (rendered above this div) scrolls out
+                of view, hiding the active vehicle;
+              - position:sticky inside the routed pages anchors to the
+                document and the headers slide off with the rest. */}
+        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]">
           <ErrorBoundary>
             <Suspense fallback={<div className="flex items-center justify-center h-[60vh] text-[#9ca3af]">{t('app.loading')}</div>}>
               <Routes>
@@ -163,7 +179,7 @@ function AppLayout() {
                 <Route path="/locations" element={<Locations carId={selectedCarId} />} />
                 <Route path="/trip" element={<Trip carId={selectedCarId} />} />
                 <Route path="/dashboard" element={<Dashboard carId={selectedCarId} />} />
-                <Route path="/control" element={<Control carId={selectedCarId} />} />
+                <Route path="/control" element={<Control carId={selectedCarId} onCarChange={handleCarChange} />} />
                 <Route path="/settings" element={<Settings carId={selectedCarId} />} />
               </Routes>
             </Suspense>
