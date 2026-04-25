@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using TeslaHub.Api.Data;
 using TeslaHub.Api.Models;
@@ -59,6 +61,14 @@ public sealed class TeslaShareService
             return ShareResult.Fail(ShareFailureKind.VehicleNotFound,
                 "Vehicle is not registered in TeslaHub. Sync your vehicles in Settings → Tesla integration.");
 
+        // If the caller passed raw "lat,lng" coordinates (with or without
+        // an address line in front), normalise them to a Google Maps URL
+        // so Tesla's server-side parser uses the EXACT pin instead of
+        // fuzzy-matching a nearby POI from the address line. The web
+        // front-end already builds a URL itself; this guard is defence
+        // in depth for any other caller (Telegram bot, scripts, …).
+        var sharedValue = NormaliseToTeslaUrl(trimmedValue);
+
         var normalisedLocale = NormalizeLocale(request.Locale);
         var timestampMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
 
@@ -67,7 +77,7 @@ public sealed class TeslaShareService
             type = "share_ext_content_raw",
             value = new Dictionary<string, string>
             {
-                ["android.intent.extra.TEXT"] = trimmedValue,
+                ["android.intent.extra.TEXT"] = sharedValue,
             },
             locale = normalisedLocale,
             timestamp_ms = timestampMs,
@@ -80,7 +90,7 @@ public sealed class TeslaShareService
             {
                 _logger.LogInformation(
                     "Sent destination to vehicle {VehicleId} ({Vin}): {Value}",
-                    vehicle.Id, vehicle.Vin, Truncate(trimmedValue, 120));
+                    vehicle.Id, vehicle.Vin, Truncate(sharedValue, 120));
                 return ShareResult.Ok(result.WokeUp);
             }
 
@@ -103,6 +113,70 @@ public sealed class TeslaShareService
         CommandFailureKind.Rejected => ShareFailureKind.Rejected,
         _ => ShareFailureKind.Transport,
     };
+
+    // Pattern: optional sign, 1-3 integer digits, dot, ≥1 fractional digits
+    // for lat AND lng, separated by `,` or `;` with optional whitespace.
+    // Anchored loosely so we can spot a coordinate pair sitting on its own
+    // line inside a multi-line "Address\nLat,Lng" payload.
+    private static readonly Regex CoordinatePairPattern = new(
+        @"(?<lat>-?\d{1,3}\.\d+)\s*[,;]\s*(?<lng>-?\d{1,3}\.\d+)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Tesla's `command/share` endpoint geocodes the text we send it. If we
+    /// hand it raw "Lat,Lng" or "Address\nLat,Lng" it tends to use the
+    /// (approximate) address line and ignore the precise coordinates,
+    /// landing the navigation destination hundreds of meters off the
+    /// actual pin. To force pin-precision, repackage any detected
+    /// coordinate pair into a `https://maps.google.com/?q=lat,lng` URL —
+    /// the same shape Tesla's iOS share extension produces, which Tesla
+    /// firmware reliably parses to the EXACT coordinates.
+    /// Anything that already looks like a URL or a plain address (no
+    /// coords detected) is forwarded unchanged.
+    /// </summary>
+    internal static string NormaliseToTeslaUrl(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return value;
+
+        var trimmed = value.Trim();
+
+        // Already a URL — let Tesla parse it as-is.
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("geo:", StringComparison.OrdinalIgnoreCase))
+        {
+            return trimmed;
+        }
+
+        var match = CoordinatePairPattern.Match(trimmed);
+        if (!match.Success) return trimmed;
+
+        if (!double.TryParse(match.Groups["lat"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var lat)
+            || !double.TryParse(match.Groups["lng"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var lng))
+        {
+            return trimmed;
+        }
+
+        if (lat is < -90 or > 90 || lng is < -180 or > 180) return trimmed;
+
+        // Anything that precedes/follows the coordinate match (typically
+        // a reverse-geocoded address) is reused as a Google-Maps style
+        // label so Tesla shows a friendly destination name instead of
+        // raw lat/lng on the central screen.
+        var label = (trimmed[..match.Index] + trimmed[(match.Index + match.Length)..])
+            .Replace('\n', ' ')
+            .Replace('\r', ' ')
+            .Trim(' ', ',', ';', '|', '\t');
+
+        var latStr = lat.ToString("0.000000", CultureInfo.InvariantCulture);
+        var lngStr = lng.ToString("0.000000", CultureInfo.InvariantCulture);
+
+        if (string.IsNullOrEmpty(label))
+            return $"https://maps.google.com/?q={latStr},{lngStr}";
+
+        var encodedLabel = Uri.EscapeDataString(label).Replace("%20", "+");
+        return $"https://maps.google.com/?q={latStr},{lngStr}({encodedLabel})";
+    }
 
     private static string NormalizeLocale(string? locale)
     {

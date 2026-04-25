@@ -175,9 +175,24 @@ export default function SendToCarPanel({
       if (!pin || selectedVehicleIds.length === 0) {
         throw new Error(t('sendToCar.feedback.missing'));
       }
-      const value = resolvedAddress
-        ? `${resolvedAddress}\n${pin.latitude.toFixed(6)},${pin.longitude.toFixed(6)}`
-        : `${pin.latitude.toFixed(6)},${pin.longitude.toFixed(6)}`;
+      // Send a Google Maps URL containing the EXACT pin coordinates so
+      // Tesla's server-side parser navigates to the dropped pin and not
+      // to a nearby POI guessed from the (approximate) reverse-geocoded
+      // address. The previous "Address\nLat,Lng" payload made Tesla fall
+      // back to the address line, which is fuzzy by nature (Nominatim
+      // snaps to the closest building/road), so the car would land
+      // hundreds of meters off the actual map pin. The `https://maps.google.com/?q=lat,lng`
+      // form is the same one the iOS Tesla share extension produces and
+      // is reliably parsed by every Tesla firmware that supports
+      // `command/share`. The optional `(label)` suffix is a Google Maps
+      // convention Tesla honours to display a friendly destination name
+      // instead of raw coordinates.
+      const lat = pin.latitude.toFixed(6);
+      const lng = pin.longitude.toFixed(6);
+      const labelText = resolvedAddress?.trim();
+      const value = labelText
+        ? `https://maps.google.com/?q=${lat},${lng}(${encodeURIComponent(labelText).replace(/%20/g, '+')})`
+        : `https://maps.google.com/?q=${lat},${lng}`;
       const results = await Promise.allSettled(
         selectedVehicleIds.map((id) =>
           api<{ sent: boolean; wokeUp?: boolean }>(`/tesla-share/${id}/destination`, {
