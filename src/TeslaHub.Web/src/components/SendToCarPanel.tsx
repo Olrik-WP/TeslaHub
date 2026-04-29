@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { reverseGeocode, searchAddress, haversineMeters, type SearchResult } from '../utils/geocoding';
+import { encodePlusCode } from '../utils/plusCode';
 
 interface ShareTarget {
   id: number;
@@ -175,24 +176,31 @@ export default function SendToCarPanel({
       if (!pin || selectedVehicleIds.length === 0) {
         throw new Error(t('sendToCar.feedback.missing'));
       }
-      // Send a Google Maps URL containing the EXACT pin coordinates so
-      // Tesla's server-side parser navigates to the dropped pin and not
-      // to a nearby POI guessed from the (approximate) reverse-geocoded
-      // address. The previous "Address\nLat,Lng" payload made Tesla fall
-      // back to the address line, which is fuzzy by nature (Nominatim
-      // snaps to the closest building/road), so the car would land
-      // hundreds of meters off the actual map pin. The `https://maps.google.com/?q=lat,lng`
-      // form is the same one the iOS Tesla share extension produces and
-      // is reliably parsed by every Tesla firmware that supports
-      // `command/share`. The optional `(label)` suffix is a Google Maps
-      // convention Tesla honours to display a friendly destination name
-      // instead of raw coordinates.
-      const lat = pin.latitude.toFixed(6);
-      const lng = pin.longitude.toFixed(6);
-      const labelText = resolvedAddress?.trim();
-      const value = labelText
-        ? `https://maps.google.com/?q=${lat},${lng}(${encodeURIComponent(labelText).replace(/%20/g, '+')})`
-        : `https://maps.google.com/?q=${lat},${lng}`;
+      // Use a Plus Code (Open Location Code) as the destination value.
+      // This is the only format the Tesla nav parser treats as a *raw
+      // geographic cell* rather than a search query: there is no
+      // address resolution, no POI fuzzing and no road-snap of the
+      // displayed pin (the routing engine still picks the best road
+      // approach for the route line, but the destination cell itself
+      // stays exactly where the user dropped the map pin). 11-char
+      // precision = ~3 m, matching civilian GPS — meter-level accuracy.
+      // Verified by the Tesla owner community on r/TeslaModel3,
+      // r/TeslaLounge and CybertruckOwnersClub.
+      //
+      // Why not the previous variants?
+      //   - "Address\nLat,Lng"               → Tesla took the address
+      //     line (Nominatim-approximate) and ignored the coords →
+      //     drift of hundreds of meters.
+      //   - "https://maps.google.com/?q=lat,lng" → improvement, but
+      //     Tesla still re-geocodes the URL and the displayed pin can
+      //     drift to a strong nearby POI ("often Tesla adapts/
+      //     changes" feedback from real-world testing).
+      //   - "https://maps.google.com/?q=lat,lng(label)" → label can
+      //     win over the coords on certain firmwares.
+      //
+      // Plus Code is the only format with deterministic, repeatable
+      // accuracy across vehicles and firmwares.
+      const value = encodePlusCode(pin.latitude, pin.longitude, 11);
       const results = await Promise.allSettled(
         selectedVehicleIds.map((id) =>
           api<{ sent: boolean; wokeUp?: boolean }>(`/tesla-share/${id}/destination`, {

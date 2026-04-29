@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using TeslaHub.Api.Data;
 using TeslaHub.Api.Models;
+using TeslaHub.Api.Utilities;
 
 namespace TeslaHub.Api.Services;
 
@@ -62,12 +63,13 @@ public sealed class TeslaShareService
                 "Vehicle is not registered in TeslaHub. Sync your vehicles in Settings → Tesla integration.");
 
         // If the caller passed raw "lat,lng" coordinates (with or without
-        // an address line in front), normalise them to a Google Maps URL
-        // so Tesla's server-side parser uses the EXACT pin instead of
-        // fuzzy-matching a nearby POI from the address line. The web
-        // front-end already builds a URL itself; this guard is defence
-        // in depth for any other caller (Telegram bot, scripts, …).
-        var sharedValue = NormaliseToTeslaUrl(trimmedValue);
+        // an address line in front), normalise them to a Plus Code so
+        // Tesla navigates to the EXACT pin instead of fuzzy-matching a
+        // nearby POI from the address line or snapping to the closest
+        // road. The web front-end already builds a Plus Code itself;
+        // this guard is defence in depth for any other caller (Telegram
+        // bot, scripts, …).
+        var sharedValue = NormaliseDestinationValue(trimmedValue);
 
         var normalisedLocale = NormalizeLocale(request.Locale);
         var timestampMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
@@ -128,13 +130,14 @@ public sealed class TeslaShareService
     /// (approximate) address line and ignore the precise coordinates,
     /// landing the navigation destination hundreds of meters off the
     /// actual pin. To force pin-precision, repackage any detected
-    /// coordinate pair into a `https://maps.google.com/?q=lat,lng` URL —
-    /// the same shape Tesla's iOS share extension produces, which Tesla
-    /// firmware reliably parses to the EXACT coordinates.
-    /// Anything that already looks like a URL or a plain address (no
-    /// coords detected) is forwarded unchanged.
+    /// coordinate pair into a Plus Code (Open Location Code), which
+    /// Tesla parses as a raw geographic cell instead of a search query
+    /// — no POI fuzzing, no address-resolved drift. 11-char precision
+    /// = ~3 m, matching civilian GPS accuracy.
+    /// Anything that already looks like a URL/Plus Code or a plain
+    /// address (no coords detected) is forwarded unchanged.
     /// </summary>
-    internal static string NormaliseToTeslaUrl(string value)
+    internal static string NormaliseDestinationValue(string value)
     {
         if (string.IsNullOrWhiteSpace(value)) return value;
 
@@ -159,23 +162,7 @@ public sealed class TeslaShareService
 
         if (lat is < -90 or > 90 || lng is < -180 or > 180) return trimmed;
 
-        // Anything that precedes/follows the coordinate match (typically
-        // a reverse-geocoded address) is reused as a Google-Maps style
-        // label so Tesla shows a friendly destination name instead of
-        // raw lat/lng on the central screen.
-        var label = (trimmed[..match.Index] + trimmed[(match.Index + match.Length)..])
-            .Replace('\n', ' ')
-            .Replace('\r', ' ')
-            .Trim(' ', ',', ';', '|', '\t');
-
-        var latStr = lat.ToString("0.000000", CultureInfo.InvariantCulture);
-        var lngStr = lng.ToString("0.000000", CultureInfo.InvariantCulture);
-
-        if (string.IsNullOrEmpty(label))
-            return $"https://maps.google.com/?q={latStr},{lngStr}";
-
-        var encodedLabel = Uri.EscapeDataString(label).Replace("%20", "+");
-        return $"https://maps.google.com/?q={latStr},{lngStr}({encodedLabel})";
+        return PlusCode.Encode(lat, lng, codeLength: 11);
     }
 
     private static string NormalizeLocale(string? locale)
