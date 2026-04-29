@@ -1110,6 +1110,16 @@ npm run dev
 - **Auth:** bcrypt + JWT with refresh tokens
 - **Deployment:** Docker multi-arch (amd64/arm64), Docker Compose
 
+## Tesla Wrap
+
+An official TeslaHub wrap is available for **Model 3 Highland (2024+)** via Tesla's in-car Paint Shop (Toybox → Paint Shop → Wraps). Performance-inspired green & black design with carbon-style hood and clean TeslaHub branding — companion, not competitor: TeslaMate remains the telemetry backend, TeslaHub adds the daily UI.
+
+Download it from [tesla-wrap.com](https://www.tesla-wrap.com/design/79dc51bc-98e7-4a6f-85d0-22e1a95b76d7), copy the PNG into a `Wraps` folder at the root of an exFAT/FAT32 USB drive, and apply it from your car's touchscreen.
+
+| Front | Rear |
+|:---:|:---:|
+| ![TeslaHub wrap — front](docs/screenshots/TeslaHub_F.png) | ![TeslaHub wrap — rear](docs/screenshots/TeslaHub_R.png) |
+
 ## Credits
 
 TeslaHub works alongside [TeslaMate](https://github.com/teslamate-org/teslamate), which is licensed under the [GNU AGPLv3](https://github.com/teslamate-org/teslamate/blob/master/LICENSE).
