@@ -152,11 +152,21 @@ public sealed class LoadSheddingEngine : BackgroundService
             if (live is null
                 || !string.Equals(live.ChargingState, "Charging", StringComparison.OrdinalIgnoreCase))
             {
-                if (state.Phase != "Steady")
-                {
-                    state.Phase = "Steady";
-                    state.LastAppliedAmps = null;
-                }
+                // Phase is purely for the live UI status pill. LastAppliedAmps
+                // however MUST persist across brief non-Charging windows: at
+                // ~100 % the BMS routinely flips Charging ↔ Complete/Stopped/
+                // NoPower for a few seconds while balancing cells. If we
+                // cleared LastAppliedAmps here, the next time the car flipped
+                // back to Charging the policy would fall back on the
+                // (now-tapered) observedAmps and re-issue set_charging_amps
+                // every cooldown window — exactly the loop our policy fix
+                // was supposed to break. Keeping the value is safe: it gets
+                // overwritten on the next real command, or naturally lost on
+                // engine restart. A new charging session at a different wall
+                // connector with a lower physical limit would simply hold
+                // (no harm) until either an overload triggers a Reduce or
+                // the user re-saves the profile.
+                if (state.Phase != "Steady") state.Phase = "Steady";
                 continue;
             }
 
