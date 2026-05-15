@@ -46,6 +46,19 @@ public sealed class SimpleHysteresisPolicy : ILoadSheddingPolicy
         if (!housePower.HasData)
             return new LoadSheddingDecision(LoadSheddingDecisionKind.NoData, null, "No MQTT samples yet");
 
+        // Reference amps for the headroom checks below: prefer the value
+        // WE last commanded over what the car physically reports. Why:
+        // `set_charging_amps(N)` sets the MAXIMUM the car is allowed to
+        // pull, not the actual draw. A wall connector / breaker / mobile
+        // connector capped below MaxAmps will make the car report e.g.
+        // 13 A even when we commanded 32 A. If we kept comparing against
+        // observedAmps we would forever re-issue the same `set_charging_amps`
+        // every cooldown window — burning Fleet API quota for nothing
+        // and spamming the audit log with duplicate Raise rows. Falling
+        // back to observedAmps before any command has been issued in this
+        // charging session gives the policy a sensible cold-start value.
+        var refAmps = state.LastAppliedAmps ?? observedAmps;
+
         // Reduce: house apparent power has been above the high threshold
         // for the entire high-window, AND we still have headroom above
         // the reduced setpoint. Without the second test we'd command the
@@ -54,7 +67,7 @@ public sealed class SimpleHysteresisPolicy : ILoadSheddingPolicy
                 profile.HighThresholdVa,
                 TimeSpan.FromSeconds(profile.HighWindowSeconds),
                 profile.MinSamplesInWindow)
-            && observedAmps > profile.TargetReducedAmps)
+            && refAmps > profile.TargetReducedAmps)
         {
             return new LoadSheddingDecision(
                 LoadSheddingDecisionKind.Reduce,
@@ -69,7 +82,7 @@ public sealed class SimpleHysteresisPolicy : ILoadSheddingPolicy
                 profile.LowThresholdVa,
                 TimeSpan.FromSeconds(profile.LowWindowSeconds),
                 profile.MinSamplesInWindow)
-            && observedAmps < profile.MaxAmps)
+            && refAmps < profile.MaxAmps)
         {
             return new LoadSheddingDecision(
                 LoadSheddingDecisionKind.Raise,
