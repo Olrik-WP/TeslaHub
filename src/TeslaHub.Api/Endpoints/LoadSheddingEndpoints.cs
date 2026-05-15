@@ -180,9 +180,24 @@ public static class LoadSheddingEndpoints
             profile.HourlyCommandQuota = body.HourlyCommandQuota;
             profile.DailyCommandQuota = body.DailyCommandQuota;
             profile.MinSamplesInWindow = body.MinSamplesInWindow;
-            var newTopic = string.IsNullOrWhiteSpace(body.MqttTopic) ? "zigbee2mqtt/Lixee" : body.MqttTopic.Trim();
-            var newField = string.IsNullOrWhiteSpace(body.PowerJsonField) ? "apparent_power" : body.PowerJsonField.Trim();
-            var newUnit = string.IsNullOrWhiteSpace(body.PowerUnit) ? "VA" : body.PowerUnit.Trim();
+            // Preserve the user's intent verbatim (trim only). An empty
+            // PowerJsonField is a deliberate, valid value: it tells the
+            // consumer the payload is a scalar at the root (e.g. P1 Reader,
+            // Shelly EM Gen1 .../emeter/0/power, IoTaWatt). If we silently
+            // substituted "apparent_power" here, the saved profile would
+            // never match any preset that publishes a root scalar — the
+            // SPA's preset dropdown would forever fall back to "Custom"
+            // after the first save. Defaults are applied where they
+            // belong: the consumer falls back when no profile exists at
+            // all (LoadSheddingMqttConsumer.ResolveSourceAsync) and the
+            // DTO falls back for display when the stored value is blank
+            // (ToDto below). MqttTopic is required: an empty string would
+            // make MQTTnet's subscribe call meaningless, so we reject it.
+            var newTopic = (body.MqttTopic ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(newTopic))
+                return Results.BadRequest(new { error = "MqttTopic is required." });
+            var newField = (body.PowerJsonField ?? string.Empty).Trim();
+            var newUnit = (body.PowerUnit ?? string.Empty).Trim();
             var newScale = body.PowerScale <= 0 ? 1.0 : body.PowerScale;
             var sourceChanged = profile.MqttTopic != newTopic
                 || profile.PowerJsonField != newField

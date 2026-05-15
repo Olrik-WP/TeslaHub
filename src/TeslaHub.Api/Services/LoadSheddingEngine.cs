@@ -45,6 +45,17 @@ public sealed class LoadSheddingEngine : BackgroundService
     private DateTimeOffset _tmCarIdMapAt = DateTimeOffset.MinValue;
     private static readonly TimeSpan TmCarMapTtl = TimeSpan.FromSeconds(60);
 
+    // Audit-log retention. The engine writes a LoadSheddingEvent on every
+    // non-Hold decision (Reduce, Raise, Skip, QuotaHit, ProxyError, …).
+    // In dry-run with a sustained over-threshold the policy keeps wanting
+    // to act every 5 s tick, which can produce hundreds of rows per hour.
+    // We keep a rolling window of EventRetention so the table stays small
+    // (the SPA only ever asks for the 50 most recent rows anyway) and run
+    // the cleanup at most once per CleanupInterval.
+    private static readonly TimeSpan EventRetention = TimeSpan.FromDays(30);
+    private static readonly TimeSpan CleanupInterval = TimeSpan.FromHours(1);
+    private DateTimeOffset _lastCleanupAt = DateTimeOffset.MinValue;
+
     public LoadSheddingEngine(
         IServiceScopeFactory scopeFactory,
         HousePowerSource housePower,
@@ -114,6 +125,11 @@ public sealed class LoadSheddingEngine : BackgroundService
                 _logger.LogWarning(ex, "Failed to refresh TeslaMate VIN→carId map; engine will retry next tick.");
             }
         }
+
+        // Opportunistic audit-log cleanup (cheap thanks to the
+        // (TeslaVehicleId, At) index). Runs at most once per hour and
+        // never blocks decision-making — failures are logged and ignored.
+        await PurgeOldEventsAsync(db, cancellationToken);
 
         // Join profiles with their TeslaVehicle to get the VIN. We need
         // the VIN to look up the TeslaMate carId for live data, while
@@ -236,6 +252,27 @@ public sealed class LoadSheddingEngine : BackgroundService
                     observedAmps, clampedTarget,
                     $"{result.FailureKind}: {result.Error}", cancellationToken);
             }
+        }
+    }
+
+    private async Task PurgeOldEventsAsync(AppDbContext db, CancellationToken cancellationToken)
+    {
+        if (DateTimeOffset.UtcNow - _lastCleanupAt < CleanupInterval) return;
+        _lastCleanupAt = DateTimeOffset.UtcNow;
+
+        try
+        {
+            var cutoff = DateTime.UtcNow - EventRetention;
+            var deleted = await db.LoadSheddingEvents
+                .Where(e => e.At < cutoff)
+                .ExecuteDeleteAsync(cancellationToken);
+            if (deleted > 0)
+                _logger.LogInformation("LoadSheddingEvents cleanup: pruned {Count} rows older than {Days} days.",
+                    deleted, (int)EventRetention.TotalDays);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to purge old LoadSheddingEvents.");
         }
     }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSettings, getChargingLocations, getCarImageInfo } from '../api/queries';
 import { useUnits } from '../hooks/useUnits';
@@ -31,13 +31,29 @@ export default function Settings({ carId }: Props) {
   // Tabs are URL-driven (?tab=tesla) so other parts of the app (e.g. the
   // map's "Send to car" panel) can deep-link straight to the right section.
   // Falls back to localStorage so the user lands on the same tab on refresh.
+  // We keep `activeTab` as local state (single source of truth) and sync
+  // it to/from the URL + localStorage via effects. The previous useMemo
+  // approach that read localStorage on every render was racy under React
+  // 18 strict-mode: the post-render useEffect could overwrite the value
+  // we'd just written in `switchTab`, leaving the tab stuck on "tesla".
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = useMemo<SettingsTab>(() => {
-    const fromUrl = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
+    if (typeof window === 'undefined') return 'general';
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get('tab');
     if (fromUrl && VALID_TABS.includes(fromUrl as SettingsTab)) return fromUrl as SettingsTab;
-    const fromStorage = (typeof window !== 'undefined' && localStorage.getItem(TAB_STORAGE_KEY)) || '';
+    const fromStorage = localStorage.getItem(TAB_STORAGE_KEY) || '';
     if (VALID_TABS.includes(fromStorage as SettingsTab)) return fromStorage as SettingsTab;
     return 'general';
+  });
+  // Sync URL → state when an external deep-link arrives (e.g. SecurityAlertsTeaser).
+  useEffect(() => {
+    const fromUrl = searchParams.get('tab');
+    if (fromUrl && VALID_TABS.includes(fromUrl as SettingsTab) && fromUrl !== activeTab) {
+      setActiveTab(fromUrl as SettingsTab);
+    }
+    // Intentionally exclude `activeTab` to avoid a feedback loop with switchTab.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -45,14 +61,9 @@ export default function Settings({ carId }: Props) {
     }
   }, [activeTab]);
   const switchTab = (next: SettingsTab) => {
-    // Persist the choice *before* updating the URL: the activeTab useMemo
-    // re-runs synchronously on the searchParams change and falls back to
-    // localStorage when no `?tab=` is present (case: user clicks "General").
-    // If we wrote localStorage in the post-render useEffect instead, the
-    // memo would still see the previous value ("tesla") and stay stuck.
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(TAB_STORAGE_KEY, next);
-    }
+    // Update local state synchronously so the UI reflects the click on the
+    // very next render, regardless of how/when React Router flushes the URL.
+    setActiveTab(next);
     const sp = new URLSearchParams(searchParams);
     if (next === 'general') sp.delete('tab');
     else sp.set('tab', next);
