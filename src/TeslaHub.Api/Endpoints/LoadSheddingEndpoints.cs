@@ -29,12 +29,32 @@ public static class LoadSheddingEndpoints
             MqttLiveDataService liveData,
             CancellationToken ct) =>
         {
-            var vehicles = await db.TeslaVehicles
-                .OrderBy(v => v.DisplayName ?? v.Vin)
+            // Multi-account installs: the same VIN can appear twice in
+            // TeslaVehicles when both spouses' Tesla accounts share the
+            // car (one row per account, by design — the pairing wizard
+            // needs both rows because each account must pair its own
+            // virtual key). For load shedding only ONE entry per
+            // physical car makes sense — otherwise we'd risk firing
+            // set_charging_amps from two different accounts onto the
+            // same VIN. We also filter to KeyPaired=true since unpaired
+            // vehicles cannot accept signed commands anyway.
+            var profiles = await db.LoadSheddingProfiles.ToListAsync(ct);
+            var profileVehicleIds = profiles.Select(p => p.TeslaVehicleId).ToHashSet();
+
+            var allRows = await db.TeslaVehicles
+                .Where(v => v.KeyPaired)
                 .Select(v => new { v.Id, v.Vin, v.DisplayName })
                 .ToListAsync(ct);
 
-            var profiles = await db.LoadSheddingProfiles.ToListAsync(ct);
+            // Dedup by VIN. Prefer the row that already has a profile
+            // attached, so editing an existing profile keeps working
+            // even if the multi-account row order shifts on resync.
+            var vehicles = allRows
+                .GroupBy(v => v.Vin)
+                .Select(g => g.OrderByDescending(v => profileVehicleIds.Contains(v.Id)).First())
+                .OrderBy(v => v.DisplayName ?? v.Vin)
+                .ToList();
+
             var profileByVehicle = profiles.ToDictionary(p => p.TeslaVehicleId);
 
             var firstProfile = profiles.FirstOrDefault();
