@@ -28,6 +28,33 @@ type Vehicle = {
   keyPaired: boolean;
 };
 
+/** Optimistic cache patch: upsert or remove a (recipient, vehicle) subscription row. */
+function applySubscriptionPatch(
+  old: Recipient[] | undefined,
+  recipientId: number,
+  vehicleId: number,
+  vin: string,
+  displayName: string | null | undefined,
+  sentryAlerts: boolean,
+  breakInAlerts: boolean,
+): Recipient[] | undefined {
+  if (!old) return old;
+  return old.map((rec) => {
+    if (rec.id !== recipientId) return rec;
+    const rest = rec.subscriptions.filter((s) => s.vehicleId !== vehicleId);
+    if (!sentryAlerts && !breakInAlerts) {
+      return { ...rec, subscriptions: rest };
+    }
+    return {
+      ...rec,
+      subscriptions: [
+        ...rest,
+        { vehicleId, vin, displayName, sentryAlerts, breakInAlerts },
+      ],
+    };
+  });
+}
+
 type AlertEvent = {
   id: number;
   vin: string;
@@ -116,7 +143,32 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
           breakInAlerts: payload.breakInAlerts,
         }),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['securityRecipients'] }),
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: ['securityRecipients'] });
+      const previous = queryClient.getQueryData<Recipient[]>(['securityRecipients']);
+      const v = vehicles.find((x) => x.id === payload.vehicleId);
+      if (v) {
+        queryClient.setQueryData<Recipient[]>(['securityRecipients'], (old) =>
+          applySubscriptionPatch(
+            old,
+            payload.recipientId,
+            payload.vehicleId,
+            v.vin,
+            v.displayName,
+            payload.sentryAlerts,
+            payload.breakInAlerts,
+          ),
+        );
+      }
+      return { previous };
+    },
+    onError: (err: Error, _payload, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(['securityRecipients'], context.previous);
+      }
+      setFeedback({ ok: false, text: err.message });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['securityRecipients'] }),
   });
 
   const unsubscribeMutation = useMutation({
@@ -124,7 +176,24 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
       api(`/security-alerts/recipients/${payload.recipientId}/subscriptions/${payload.vehicleId}`, {
         method: 'DELETE',
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['securityRecipients'] }),
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: ['securityRecipients'] });
+      const previous = queryClient.getQueryData<Recipient[]>(['securityRecipients']);
+      const v = vehicles.find((x) => x.id === payload.vehicleId);
+      if (v) {
+        queryClient.setQueryData<Recipient[]>(['securityRecipients'], (old) =>
+          applySubscriptionPatch(old, payload.recipientId, payload.vehicleId, v.vin, v.displayName, false, false),
+        );
+      }
+      return { previous };
+    },
+    onError: (err: Error, _payload, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(['securityRecipients'], context.previous);
+      }
+      setFeedback({ ok: false, text: err.message });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['securityRecipients'] }),
   });
 
   const eligibleVehicles = vehicles.filter((v) => v.keyPaired);
@@ -272,7 +341,12 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
                               checked={sub?.sentryAlerts ?? false}
                               onChange={(e) => {
                                 const sentryAlerts = e.target.checked;
-                                const breakInAlerts = sub?.breakInAlerts ?? true;
+                                // Default the twin checkbox to FALSE when no
+                                // subscription exists yet, otherwise toggling
+                                // a single box would silently flip the other
+                                // one on too. Once a subscription exists we
+                                // honour the saved value of the other flag.
+                                const breakInAlerts = sub?.breakInAlerts ?? false;
                                 if (!sentryAlerts && !breakInAlerts) {
                                   unsubscribeMutation.mutate({ recipientId: r.id, vehicleId: v.id });
                                 } else {
@@ -292,7 +366,10 @@ export default function SecurityAlertRecipients({ vehicles }: { vehicles: Vehicl
                               checked={sub?.breakInAlerts ?? false}
                               onChange={(e) => {
                                 const breakInAlerts = e.target.checked;
-                                const sentryAlerts = sub?.sentryAlerts ?? true;
+                                // Same reasoning as the sentry checkbox above:
+                                // default to FALSE for a brand-new row so a
+                                // single click activates only the box clicked.
+                                const sentryAlerts = sub?.sentryAlerts ?? false;
                                 if (!sentryAlerts && !breakInAlerts) {
                                   unsubscribeMutation.mutate({ recipientId: r.id, vehicleId: v.id });
                                 } else {

@@ -152,10 +152,17 @@ public sealed class LoadSheddingEngine : BackgroundService
 
             if (state.CooldownUntil is { } until && DateTimeOffset.UtcNow < until)
             {
-                // Cooldown active — explicit log so the timeline shows why.
+                // Cooldown active — log the remaining seconds rather than
+                // an absolute timestamp. The other Detail strings are all
+                // short and timezone-free (matches "Hourly quota X exhausted",
+                // "House >N VA for Ms", "|Δ| < MinAmpsDelta (X)") and the
+                // SPA renders the row time via new Date(at).toLocaleTimeString()
+                // — embedding an ISO/UTC timestamp here only confused users
+                // because it never matches their local clock.
+                var secondsLeft = (int)Math.Max(0, Math.Ceiling((until - DateTimeOffset.UtcNow).TotalSeconds));
                 await WriteEventAsync(db, profile.TeslaVehicleId, "Skip",
                     observedAmps, decision.TargetAmps,
-                    $"Cooldown until {until:O}", cancellationToken);
+                    $"Cooldown {secondsLeft}s left", cancellationToken);
                 continue;
             }
 

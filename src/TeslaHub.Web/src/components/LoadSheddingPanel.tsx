@@ -123,6 +123,26 @@ const SOURCE_PRESETS: SourcePreset[] = [
   { id: 'custom',    topic: '',                                         field: '',                 unit: 'VA', scale: 1 },
 ];
 
+/** Which row in SOURCE_PRESETS matches the current form (topic/field/unit/scale exactly). */
+function matchSourcePreset(form: Pick<LoadSheddingProfile, 'mqttTopic' | 'powerJsonField' | 'powerUnit' | 'powerScale'>): string {
+  const topic = form.mqttTopic.trim();
+  const field = form.powerJsonField.trim();
+  const unit = form.powerUnit.trim();
+  const scale = Number(form.powerScale);
+  for (const p of SOURCE_PRESETS) {
+    if (p.id === 'custom') continue;
+    if (
+      p.topic.trim() === topic &&
+      p.field.trim() === field &&
+      p.unit.trim() === unit &&
+      Math.abs(p.scale - scale) < 1e-6
+    ) {
+      return p.id;
+    }
+  }
+  return 'custom';
+}
+
 function NumberField({
   label,
   value,
@@ -260,6 +280,11 @@ export default function LoadSheddingPanel() {
   // back to the form's local edit so the suffix updates immediately when
   // the user picks a preset, before the next status poll lands.
   const displayUnit = status?.house?.unit || form.powerUnit || 'VA';
+
+  const matchedSourcePresetId = useMemo(
+    () => matchSourcePreset(form),
+    [form.mqttTopic, form.powerJsonField, form.powerUnit, form.powerScale],
+  );
 
   const renderHouse = () => {
     const house = status?.house;
@@ -419,6 +444,7 @@ export default function LoadSheddingPanel() {
               <label className={sectionTitleClass}>{t('loadShedding.source.preset')}</label>
               <select
                 className={inputClass}
+                value={matchedSourcePresetId}
                 onChange={(e) => {
                   const preset = SOURCE_PRESETS.find((p) => p.id === e.target.value);
                   if (!preset || preset.id === 'custom') return;
@@ -430,9 +456,7 @@ export default function LoadSheddingPanel() {
                     powerScale: preset.scale,
                   });
                 }}
-                defaultValue=""
               >
-                <option value="" disabled>{t('loadShedding.source.presetPlaceholder')}</option>
                 {SOURCE_PRESETS.map((p) => (
                   <option key={p.id} value={p.id}>
                     {t(`loadShedding.source.presets.${p.id}`)}
