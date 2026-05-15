@@ -67,17 +67,15 @@ public sealed class LoadSheddingMqttConsumer : BackgroundService
         try { await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken); }
         catch (OperationCanceledException) { return; }
 
+        // Always connect, even before any profile is saved. The consumer
+        // is purely observational — feeding the live "house power" tile
+        // in Settings is useful BEFORE the user enables anything, so they
+        // can pick sensible thresholds based on their own peaks. We start
+        // with the first persisted profile's topic+field if any, falling
+        // back to the ZLinky-in-standard-TIC defaults otherwise.
         var (topic, jsonField) = await ResolveTopicAndFieldAsync(stoppingToken);
-        if (string.IsNullOrWhiteSpace(topic) || string.IsNullOrWhiteSpace(jsonField))
-        {
-            _logger.LogInformation(
-                "No load-shedding profile configured yet — MQTT consumer waits idle. Save a profile from Settings to start consuming.");
-            // Stay alive so registering one later (after restart) still gets us going,
-            // but don't connect until we have something to subscribe to.
-            try { await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken); }
-            catch (OperationCanceledException) { }
-            return;
-        }
+        topic = string.IsNullOrWhiteSpace(topic) ? "zigbee2mqtt/Lixee" : topic;
+        jsonField = string.IsNullOrWhiteSpace(jsonField) ? "apparent_power" : jsonField;
 
         var port = int.TryParse(_configuration["MQTT_PORT"], out var p) ? p : 1883;
         var user = _configuration["MQTT_USER"] ?? string.Empty;
@@ -112,8 +110,10 @@ public sealed class LoadSheddingMqttConsumer : BackgroundService
         {
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            // ANY profile, regardless of Enabled / DryRun: we observe
+            // the meter for the live UI tile and so the user can later
+            // tune thresholds against real samples before activating.
             var profile = await db.LoadSheddingProfiles
-                .Where(p => p.Enabled)
                 .OrderBy(p => p.Id)
                 .FirstOrDefaultAsync(cancellationToken);
 

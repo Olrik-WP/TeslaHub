@@ -43,7 +43,10 @@ public static class LoadSheddingEndpoints
             var dto = new LoadSheddingStatusDto
             {
                 MqttConnected = housePower.MqttConnected,
-                MqttTopic = firstProfile?.MqttTopic,
+                // Mirror the topic the consumer is actually subscribed to
+                // (defaults applied when no profile exists yet) so the UI
+                // and the engine never disagree about what's being read.
+                MqttTopic = firstProfile?.MqttTopic ?? "zigbee2mqtt/Lixee",
                 House = new LoadSheddingHouseDto
                 {
                     CurrentVa = latest?.Va,
