@@ -70,6 +70,17 @@ builder.Services.AddScoped<TeslaShareService>();
 builder.Services.AddHostedService<TeslaTokenRefreshBackgroundService>();
 builder.Services.AddHostedService<TeslaTelemetryConsumer>();
 
+// Dynamic load-shedding driven by an MQTT smart-meter feed (typically
+// ZLinky → Zigbee2MQTT). Singleton state is shared between the MQTT
+// consumer (producer of HousePowerSamples), the engine (decision loop)
+// and the REST endpoint (UI snapshot). The policy is registered as a
+// concrete singleton because it is a pure function of its inputs.
+builder.Services.AddSingleton<HousePowerSource>();
+builder.Services.AddSingleton<ILoadSheddingPolicy, SimpleHysteresisPolicy>();
+builder.Services.AddSingleton<LoadSheddingEngine>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<LoadSheddingEngine>());
+builder.Services.AddHostedService<LoadSheddingMqttConsumer>();
+
 // Public chargers map layer (proxies Open Charge Map). Cached server-side so
 // every browser pan does not hit OCM directly.
 builder.Services.AddHttpClient("ocm", c =>
@@ -205,6 +216,7 @@ app.MapTeslaControlEndpoints();
 app.MapSecurityAlertsEndpoints();
 app.MapChargersEndpoints();
 app.MapFleetApiUsageEndpoints();
+app.MapLoadSheddingEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { Status = "OK", Timestamp = DateTime.UtcNow }))
     .AllowAnonymous();

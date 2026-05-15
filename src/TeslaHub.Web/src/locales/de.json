@@ -1023,6 +1023,76 @@
       "dismiss": "Ausblenden"
     }
   },
+  "loadShedding": {
+    "title": "Dynamisches Lastabwurf-System",
+    "intro": "Reduziert den Tesla-Ladestrom automatisch, wenn der Smart-Meter-Feed zeigt, dass das Haus den Vertragsschwellenwert erreicht. Liest ZLinky / Zigbee2MQTT und sendet set_charging_amps über den Tesla-Command-Proxy.",
+    "noVehicles": "Kein gekoppeltes Tesla-Fahrzeug. Koppeln Sie zuerst ein Fahrzeug in der Tesla-Integration.",
+    "status": {
+      "house": "Haus",
+      "samples": "{{count}} Werte in den letzten 60 s",
+      "mqttDisconnected": "MQTT-Broker nicht verbunden",
+      "noData": "Noch keine Daten — warte auf erste Nachricht",
+      "topic": "Topic: {{topic}}"
+    },
+    "vehicle": {
+      "selectPlaceholder": "Fahrzeug",
+      "enable": "Lastabwurf für dieses Fahrzeug aktivieren",
+      "enableHint": "Wenn deaktiviert, ignoriert die Engine dieses Fahrzeug komplett.",
+      "dryRun": "Testmodus (sendet keine Befehle)",
+      "dryRunHint": "Die Engine berechnet Entscheidungen und schreibt Audit-Einträge mit dem Tag 'DryRun', ruft Tesla aber nicht auf. Zur Validierung der Schwellenwerte bei realem Datenverkehr.",
+      "notConfigured": "Noch kein Profil gespeichert — füllen Sie das Formular unten aus und klicken Sie auf Speichern."
+    },
+    "thresholds": {
+      "title": "Schwellenwerte",
+      "high": "Reduzieren, wenn Haus > (VA)",
+      "highWindow": "… mindestens N Sekunden",
+      "low": "Wiederherstellen, wenn Haus < (VA)",
+      "lowWindow": "… mindestens N Sekunden",
+      "minAmps": "Min. Ampere",
+      "maxAmps": "Max. Ampere",
+      "targetReduced": "Ziel-Ampere bei Reduzierung"
+    },
+    "guards": {
+      "title": "Schutzmechanismen",
+      "cooldown": "Cooldown zwischen Befehlen (s)",
+      "minDelta": "Min. |Δ Ampere| zum Senden",
+      "hourQuota": "Max. Befehle / Stunde",
+      "dayQuota": "Max. Befehle / Tag",
+      "minSamples": "Min. Werte im Fenster"
+    },
+    "source": {
+      "title": "MQTT-Quelle",
+      "topic": "Z2M-Topic",
+      "field": "JSON-Feld (Volt-Ampere)",
+      "hint": "Standardmäßig ein ZLinky im TIC-Standardmodus (zigbee2mqtt/Lixee, apparent_power).",
+      "restartHint": "Änderungen an Topic oder Feld erfordern einen Neustart des teslahub-api-Containers."
+    },
+    "runtime": {
+      "title": "Live-Status",
+      "state": "Engine-Zustand",
+      "chargingState": "Tesla-Ladezustand",
+      "currentAmps": "Tesla-Strom",
+      "teslaVa": "Tesla-Leistung",
+      "lastCommand": "Letzter Befehl",
+      "quotaHour": "{{count}} / {{max}} diese Stunde",
+      "quotaDay": "{{count}} / {{max}} heute"
+    },
+    "events": {
+      "title": "Aktuelle Entscheidungen",
+      "empty": "Noch keine Entscheidungen — warte auf die nächste Ladesitzung.",
+      "arrowAmps": "{{from}} A → {{to}} A"
+    },
+    "buttons": {
+      "save": "Profil speichern",
+      "saving": "Speichern…",
+      "delete": "Profil löschen",
+      "deleted": "Profil gelöscht."
+    },
+    "feedback": {
+      "saved": "Profil gespeichert.",
+      "saveError": "Profil konnte nicht gespeichert werden."
+    }
+  },
   "sendToCar": {
     "openButton": "Ziel senden",
     "openButtonShort": "Senden",

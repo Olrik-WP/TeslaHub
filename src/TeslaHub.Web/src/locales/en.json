@@ -1023,6 +1023,76 @@
       "dismiss": "Dismiss"
     }
   },
+  "loadShedding": {
+    "title": "Dynamic load shedding",
+    "intro": "Throttle Tesla charge current automatically when the smart-meter feed shows the house is approaching the subscription limit. Reads ZLinky / Zigbee2MQTT and writes set_charging_amps via the Tesla command proxy.",
+    "noVehicles": "No paired Tesla vehicles. Pair a vehicle first in the Tesla integration.",
+    "status": {
+      "house": "House",
+      "samples": "{{count}} samples in last 60 s",
+      "mqttDisconnected": "MQTT broker not connected",
+      "noData": "No data yet — waiting for first message",
+      "topic": "Topic: {{topic}}"
+    },
+    "vehicle": {
+      "selectPlaceholder": "Vehicle",
+      "enable": "Enable load shedding for this vehicle",
+      "enableHint": "When off, the engine ignores this vehicle entirely.",
+      "dryRun": "Dry-run mode (test without sending commands)",
+      "dryRunHint": "The engine still computes decisions and writes audit events tagged 'DryRun', but never calls Tesla. Use to validate thresholds against real traffic.",
+      "notConfigured": "No profile saved yet — fill the form below and click Save to start."
+    },
+    "thresholds": {
+      "title": "Thresholds",
+      "high": "Reduce when house > (VA)",
+      "highWindow": "… for at least N seconds",
+      "low": "Restore when house < (VA)",
+      "lowWindow": "… for at least N seconds",
+      "minAmps": "Min amps",
+      "maxAmps": "Max amps",
+      "targetReduced": "Target amps when reduced"
+    },
+    "guards": {
+      "title": "Guard rails",
+      "cooldown": "Cooldown between commands (s)",
+      "minDelta": "Min |Δ amps| to send a command",
+      "hourQuota": "Max commands per hour",
+      "dayQuota": "Max commands per day",
+      "minSamples": "Min samples in window"
+    },
+    "source": {
+      "title": "MQTT source",
+      "topic": "Z2M topic",
+      "field": "JSON field (volt-amperes)",
+      "hint": "Default targets a ZLinky in TIC standard mode (zigbee2mqtt/Lixee, apparent_power).",
+      "restartHint": "Changing the topic or field requires restarting the teslahub-api container to take effect."
+    },
+    "runtime": {
+      "title": "Live status",
+      "state": "Engine state",
+      "chargingState": "Tesla charge state",
+      "currentAmps": "Tesla current",
+      "teslaVa": "Tesla power",
+      "lastCommand": "Last command",
+      "quotaHour": "{{count}} / {{max}} this hour",
+      "quotaDay": "{{count}} / {{max}} today"
+    },
+    "events": {
+      "title": "Recent decisions",
+      "empty": "No decisions yet — waiting for the next charging session.",
+      "arrowAmps": "{{from}} A → {{to}} A"
+    },
+    "buttons": {
+      "save": "Save profile",
+      "saving": "Saving…",
+      "delete": "Delete profile",
+      "deleted": "Profile deleted."
+    },
+    "feedback": {
+      "saved": "Profile saved.",
+      "saveError": "Could not save the profile."
+    }
+  },
   "sendToCar": {
     "openButton": "Send a destination",
     "openButtonShort": "Send",

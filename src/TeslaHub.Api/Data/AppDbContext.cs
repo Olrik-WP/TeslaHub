@@ -20,6 +20,8 @@ public class AppDbContext : DbContext
     public DbSet<RecipientVehicleSubscription> RecipientVehicleSubscriptions => Set<RecipientVehicleSubscription>();
     public DbSet<SecurityAlertEvent> SecurityAlertEvents => Set<SecurityAlertEvent>();
     public DbSet<FleetApiUsage> FleetApiUsages => Set<FleetApiUsage>();
+    public DbSet<LoadSheddingProfile> LoadSheddingProfiles => Set<LoadSheddingProfile>();
+    public DbSet<LoadSheddingEvent> LoadSheddingEvents => Set<LoadSheddingEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -75,6 +77,19 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<FleetApiUsage>()
             .HasIndex(u => new { u.YearMonth, u.Category })
             .IsUnique();
+
+        modelBuilder.Entity<LoadSheddingProfile>()
+            .HasIndex(p => p.TeslaVehicleId)
+            .IsUnique();
+
+        modelBuilder.Entity<LoadSheddingProfile>()
+            .HasOne(p => p.TeslaVehicle)
+            .WithMany()
+            .HasForeignKey(p => p.TeslaVehicleId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<LoadSheddingEvent>()
+            .HasIndex(e => new { e.TeslaVehicleId, e.At });
 
         modelBuilder.Entity<GlobalSettings>().HasData(new GlobalSettings
         {

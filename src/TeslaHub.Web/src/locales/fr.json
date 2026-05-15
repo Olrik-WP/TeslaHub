@@ -1023,6 +1023,76 @@
       "dismiss": "Masquer"
     }
   },
+  "loadShedding": {
+    "title": "Délestage dynamique",
+    "intro": "Réduit automatiquement le courant de charge Tesla quand le compteur Linky indique que la maison approche du seuil de l'abonnement. Lit ZLinky / Zigbee2MQTT et envoie set_charging_amps via le proxy de commandes Tesla.",
+    "noVehicles": "Aucun véhicule Tesla appairé. Appairez d'abord un véhicule dans l'intégration Tesla.",
+    "status": {
+      "house": "Maison",
+      "samples": "{{count}} échantillon(s) sur les 60 dernières s",
+      "mqttDisconnected": "Broker MQTT déconnecté",
+      "noData": "Pas encore de donnée — en attente du premier message",
+      "topic": "Topic : {{topic}}"
+    },
+    "vehicle": {
+      "selectPlaceholder": "Véhicule",
+      "enable": "Activer le délestage pour ce véhicule",
+      "enableHint": "Lorsque désactivé, le moteur ignore complètement ce véhicule.",
+      "dryRun": "Mode test (n'envoie pas les commandes)",
+      "dryRunHint": "Le moteur calcule les décisions et écrit des événements d'audit marqués 'DryRun', mais n'appelle pas Tesla. Sert à valider les seuils sur du trafic réel.",
+      "notConfigured": "Aucun profil enregistré — remplissez le formulaire ci-dessous puis cliquez sur Enregistrer."
+    },
+    "thresholds": {
+      "title": "Seuils",
+      "high": "Réduire si maison > (VA)",
+      "highWindow": "… pendant au moins N secondes",
+      "low": "Restaurer si maison < (VA)",
+      "lowWindow": "… pendant au moins N secondes",
+      "minAmps": "Ampères min",
+      "maxAmps": "Ampères max",
+      "targetReduced": "Ampères cibles quand réduit"
+    },
+    "guards": {
+      "title": "Garde-fous",
+      "cooldown": "Cooldown entre commandes (s)",
+      "minDelta": "Δ ampères minimal pour envoyer",
+      "hourQuota": "Commandes max / heure",
+      "dayQuota": "Commandes max / jour",
+      "minSamples": "Échantillons min dans la fenêtre"
+    },
+    "source": {
+      "title": "Source MQTT",
+      "topic": "Topic Z2M",
+      "field": "Champ JSON (volt-ampères)",
+      "hint": "Par défaut un ZLinky en mode TIC standard (zigbee2mqtt/Lixee, apparent_power).",
+      "restartHint": "Changer le topic ou le champ nécessite de redémarrer le container teslahub-api."
+    },
+    "runtime": {
+      "title": "État live",
+      "state": "État du moteur",
+      "chargingState": "État de charge Tesla",
+      "currentAmps": "Courant Tesla",
+      "teslaVa": "Puissance Tesla",
+      "lastCommand": "Dernière commande",
+      "quotaHour": "{{count}} / {{max}} cette heure",
+      "quotaDay": "{{count}} / {{max}} aujourd'hui"
+    },
+    "events": {
+      "title": "Décisions récentes",
+      "empty": "Aucune décision pour l'instant — en attente de la prochaine session de charge.",
+      "arrowAmps": "{{from}} A → {{to}} A"
+    },
+    "buttons": {
+      "save": "Enregistrer le profil",
+      "saving": "Enregistrement…",
+      "delete": "Supprimer le profil",
+      "deleted": "Profil supprimé."
+    },
+    "feedback": {
+      "saved": "Profil enregistré.",
+      "saveError": "Impossible d'enregistrer le profil."
+    }
+  },
   "sendToCar": {
     "openButton": "Envoyer une destination",
     "openButtonShort": "Envoyer",

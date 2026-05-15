@@ -11,6 +11,7 @@ import type { GlobalSettings, ChargingLocation } from '../api/queries';
 import CustomSelect from '../components/CustomSelect';
 import SecurityAlertsCard from '../components/SecurityAlertsCard';
 import FleetApiCostCard from '../components/FleetApiCostCard';
+import LoadSheddingPanel from '../components/LoadSheddingPanel';
 
 type SettingsTab = 'general' | 'tesla';
 const VALID_TABS: SettingsTab[] = ['general', 'tesla'];
@@ -272,6 +273,9 @@ export default function Settings({ carId }: Props) {
               save.mutate();
             }}
           />
+
+          {/* Dynamic load shedding (ZLinky → Z2M → Tesla) */}
+          <LoadSheddingPanel />
         </>
       ) : (
         <>
