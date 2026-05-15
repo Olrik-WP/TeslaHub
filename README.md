@@ -32,6 +32,7 @@ TeslaHub reads your existing TeslaMate data (read-only) and provides a touch-fir
 - Internationalization (English / French / German)
 - **Optional, but the headline feature**: a full **Vehicle Control** page that goes well beyond the official Tesla app's 4 quick-action shortcuts — climate (temps + dual-zone + seat heaters per available seat + dog/camp/keep modes + cabin overheat), charging (start/stop, limit slider, amps slider, port door, cable unlock), access (lock, sentry, horn, lights, valet PIN, speed-limit PIN), openings (frunk, trunk, vent/close windows), media (play, next/prev, favorites, volume), software updates (schedule 1m/1h/6h or cancel), with auto wake-up, dynamic state colours, capability-aware UI and zero polling (vampire-drain safe). See [Vehicle Control](#vehicle-control-page).
 - **Optional** real-time Sentry / break-in alerts via Tesla Fleet Telemetry — see [Tesla Fleet API integration](#tesla-fleet-api-integration-optional)
+- **Optional** dynamic **load shedding**: throttle Tesla charge current automatically when your house power approaches the breaker / contract limit. Reads any MQTT-published power sensor (ZLinky FR, Shelly EM, Tasmota, P1 reader NL/BE, IoTaWatt US, Emporia, …), applies hysteresis + cooldown + Fleet API quotas, with a built-in dry-run mode. See [Dynamic Load Shedding](#dynamic-load-shedding-optional).
 - **Multi-account aware**: link multiple Tesla identities to the same TeslaHub instance (typical use case: a couple where each spouse owns their own car). Every command is routed with the right owner's OAuth token automatically.
 
 TeslaMate remains your telemetry source. TeslaHub is the UX layer.
@@ -919,6 +920,95 @@ docker compose exec teslahub-api wget -qO- --no-check-certificate https://tesla-
 docker compose exec mosquitto mosquitto_sub -h localhost -t 'telemetry/#' -v -C 5
 # → wakes the car or arms Sentry, then watch live messages
 ```
+
+---
+
+## Dynamic Load Shedding (optional)
+
+Automatically throttle Tesla charge current when your house power approaches the breaker or contract limit, then restore it when the house calms down. Designed to keep a fast 32 A wallbox session running without ever tripping the main breaker, while spending as few Tesla Fleet API calls as possible.
+
+### How it works
+
+```text
+Smart meter / power monitor
+  → MQTT broker (your existing Mosquitto)
+  → TeslaHub LoadSheddingMqttConsumer (subscribes to a single topic)
+  → HousePowerSource (sliding window + dedup)
+  → LoadSheddingEngine (5 s tick)
+       ↳ reads charging state from MqttLiveDataService (TeslaMate cache)
+       ↳ applies hysteresis (high VA + duration / low VA + duration)
+       ↳ applies cooldown + hourly/daily quotas + minimum delta
+       ↳ calls TeslaCommandService.SendSignedCommandAsync("set_charging_amps")
+         via the local tesla-http-proxy (signed Fleet command)
+       ↳ writes a LoadSheddingEvent audit row (visible in the Settings panel)
+```
+
+Two `BackgroundService` instances, deliberately split:
+
+- `LoadSheddingMqttConsumer` — owns the broker connection. Topic + JSON field + scale are reloaded on every reconnection, so editing them from the UI takes effect within a few seconds (no container restart). The connection stays up even before any profile is enabled, so the live "house power" tile lets you tune thresholds against your real peaks before activating anything.
+- `LoadSheddingEngine` — pure decision loop. No I/O during the policy step. Quotas, cooldown, and minimum-amp delta are enforced before any Fleet API call. In **dry-run mode** the engine still logs would-be decisions but never calls Tesla — perfect for validating thresholds against live traffic.
+
+### Supported sensors / countries
+
+Topic and JSON field path are free text, so any sensor publishing a numeric power value on MQTT works. The Settings panel ships a dropdown of common presets to spare typing:
+
+| Preset | Topic example | JSON field path | Unit | Scale |
+|---|---|---|---|---|
+| ZLinky TIC via Zigbee2MQTT (FR) | `zigbee2mqtt/Lixee` | `apparent_power` | VA | 1 |
+| Shelly EM Gen1 | `shellies/shellyem-XXXX/emeter/0/power` | *(empty — payload is the scalar)* | W | 1 |
+| Shelly Pro 3EM Gen2 | `shellypro3em-XXXX/status/em:0` | `total_act_power` | W | 1 |
+| Tasmota / Shelly Plug | `tele/tasmota_XXXX/SENSOR` | `ENERGY.Power` | W | 1 |
+| DSMR P1 Reader (NL/BE) | `p1reader/sensor/power_consumed/state` | *(empty)* | W | 1000 (kW → W) |
+| IoTaWatt (US/EU) | `iotawatt/Mains` | *(empty)* | W | 1 |
+| Emporia Vue (US) | `emporia/vue/mains` | `usage_w` | W | 1 |
+| Custom | *anything* | dot-notation, e.g. `em.0.power_kw` | *anything* | *anything* |
+
+The JSON field path supports dot-notation (`em.total_act_power`, `ENERGY.Power`, `0.power`) so nested payloads work without any custom parser. Empty path means the payload IS the scalar value (typical for P1-style topics that publish a single number).
+
+The **scale factor** is applied at ingestion: a sensor publishing kW with `scale=1000` is stored as W, so you keep integer thresholds (`9500` instead of `9` or `9.5`) and avoid losing precision. The **display unit** is just a cosmetic suffix shown next to live values, thresholds, and audit rows.
+
+### How to enable it
+
+Everything is configured from **Settings → Tesla → Load shedding** in the TeslaHub UI. No new env vars — it reuses the existing `MQTT_HOST` / `MQTT_PORT` / `MQTT_USER` / `MQTT_PASSWORD`.
+
+1. Open the panel and pick a vehicle. The "house power" tile starts showing live values within seconds, even before you save anything.
+2. Pick a preset (or fill the topic / field path manually). The "Last received value" row updates live so you can confirm topic + field are right.
+3. Set the thresholds, e.g.:
+   - **Reduce** when house > 9 500 (your unit) for at least 30 s
+   - **Restore** when house < 7 000 for at least 900 s (15 min)
+   - Min / max / target-reduced amps (default 6 / 32 / 20)
+4. Tweak the guards:
+   - **Cooldown** between commands (default 60 s)
+   - **Min amp delta** required to send a new command (default 2 A)
+   - **Hourly / daily Fleet API quotas** (default 30 / 200) — hard limits, the engine writes a `QuotaHit` audit row instead of calling Tesla.
+5. Leave **Dry run** ON for the first day. The engine writes `DryRunReduce` / `DryRunRaise` events to the timeline so you can verify the logic against real traffic without any Tesla API call.
+6. Toggle **Dry run** OFF when the timeline shows decisions you would have approved manually.
+
+### Safety & cost guarantees
+
+- The engine **never wakes the car**. If the Tesla is asleep, every decision is a no-op (`Skip` audit row). It only acts on a vehicle that's already in `Charging` state with a current amperage available — no surprise wakes, no vampire drain.
+- **Cooldown + minimum delta + quotas** all apply *before* any signed command leaves TeslaHub. A reasonable default profile sends 1–4 commands per charging session.
+- All decisions (and skips, errors, quota hits) are persisted in `LoadSheddingEvents` — visible as a timeline in the panel, queryable via `GET /api/load-shedding/events`.
+- **Multi-account installs**: the engine deduplicates by VIN (one profile per physical car, even if the car appears under several Tesla accounts in `TeslaVehicles`). Live data is matched via the TeslaMate `cars.vin → cars.id` mapping, not via the TeslaHub row id.
+
+### What it requires
+
+- A working MQTT broker reachable from the `teslahub-api` container ([MQTT setup](#mqtt-setup-live-vehicle-status)).
+- A smart meter or power monitor publishing house power on that broker.
+- A working [Tesla Fleet API integration](#tesla-fleet-api-integration-optional) — the engine sends signed `set_charging_amps` through your `tesla-http-proxy`. Without Fleet API, dry-run mode still works for observation.
+
+### Known limitations
+
+The pipeline is intentionally minimal so the failure modes are easy to reason about. A few things to be aware of before picking this for production:
+
+- **MQTT broker must accept plain TCP with username/password.** No TLS, no client-certificate auth — designed for a local Mosquitto / Home Assistant add-on broker on the same Docker network. Cloud brokers requiring TLS (HiveMQ Cloud, EMQX Cloud, AWS IoT Core, …) won't connect as-is.
+- **MQTT v3.1.1 only.** No v5-specific features (subscription IDs, properties, shared subscriptions). Good enough for every common broker.
+- **Wildcards (`+`, `#`) work technically but parse every match with the same JSON path** — only use them when the wildcard captures exactly one sensor. Use an exact topic for everything else.
+- **Payload must be parseable as JSON** — that includes raw scalars (`123.4`, `"123.4"`) which JSON accepts. XML, CSV, Protobuf, MessagePack or raw bytes are dropped silently. The vast majority of MQTT smart-meter integrations are JSON.
+- **Negative readings are filtered out.** Useful when a P1 / EM sensor goes negative during PV export — the engine ignores those and waits for a positive sample. If you want to throttle on **net** consumption (load minus PV production), publish a separate computed topic on the broker (`max(0, load - prod)`) and point the engine at it.
+- **Sensor publication frequency must match your high-window seconds.** A Tasmota plug at the default `TelePeriod=300` will never put 2 samples in a 30 s window — either lower `TelePeriod` to 10–30 s, raise the high-window seconds, or set `MinSamplesInWindow=1` in the panel.
+- **No-wake by design.** The engine never wakes the car. If the car is asleep when the house is over the threshold, nothing happens (`Skip` audit row). Trade-off: avoids vampire drain and keeps Fleet API usage near zero, at the cost of not enforcing the limit during sleep. In practice this is fine because Tesla won't draw current while asleep anyway.
+- **One physical car per profile.** Multi-account installs see one row per VIN in the panel (deduplicated by VIN, paired vehicle wins). If you actually want to drive the same VIN from two different Tesla accounts, the engine still sends through the dedup'd account only — pair the same key on both accounts beforehand.
 
 ---
 

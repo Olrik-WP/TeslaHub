@@ -21,6 +21,8 @@ type LoadSheddingProfile = {
   minSamplesInWindow: number;
   mqttTopic: string;
   powerJsonField: string;
+  powerUnit: string;
+  powerScale: number;
 };
 
 type LoadSheddingRuntime = {
@@ -45,6 +47,7 @@ type LoadSheddingHouse = {
   currentVa?: number | null;
   lastSampleAt?: string | null;
   samplesInLast60s: number;
+  unit: string;
 };
 
 type LoadSheddingStatus = {
@@ -92,7 +95,33 @@ const DEFAULT_PROFILE: LoadSheddingProfile = {
   minSamplesInWindow: 2,
   mqttTopic: 'zigbee2mqtt/Lixee',
   powerJsonField: 'apparent_power',
+  powerUnit: 'VA',
+  powerScale: 1,
 };
+
+// Common smart-meter / power-monitor presets, country-neutral.
+// `unit` is what the UI displays as a suffix (VA / W). `scale` is the
+// multiplier the backend applies before storing the raw payload value
+// as an integer — so a P1 reader publishing kW is converted to W on
+// ingestion (scale=1000) and the user works in W everywhere, keeping
+// integer thresholds and avoiding lost precision.
+type SourcePreset = {
+  id: string;
+  topic: string;
+  field: string;
+  unit: string;
+  scale: number;
+};
+const SOURCE_PRESETS: SourcePreset[] = [
+  { id: 'zlinky',    topic: 'zigbee2mqtt/Lixee',                       field: 'apparent_power',   unit: 'VA', scale: 1 },
+  { id: 'shellyEm',  topic: 'shellies/shellyem-XXXX/emeter/0/power',   field: '',                 unit: 'W',  scale: 1 },
+  { id: 'shellyPro', topic: 'shellypro3em-XXXX/status/em:0',           field: 'total_act_power',  unit: 'W',  scale: 1 },
+  { id: 'tasmota',   topic: 'tele/tasmota_XXXX/SENSOR',                field: 'ENERGY.Power',     unit: 'W',  scale: 1 },
+  { id: 'p1Reader',  topic: 'p1reader/sensor/power_consumed/state',    field: '',                 unit: 'W',  scale: 1000 },
+  { id: 'iotawatt',  topic: 'iotawatt/Mains',                           field: '',                 unit: 'W',  scale: 1 },
+  { id: 'emporia',   topic: 'emporia/vue/mains',                        field: 'usage_w',          unit: 'W',  scale: 1 },
+  { id: 'custom',    topic: '',                                         field: '',                 unit: 'VA', scale: 1 },
+];
 
 function NumberField({
   label,
@@ -227,6 +256,11 @@ export default function LoadSheddingPanel() {
     );
   }
 
+  // Server-truth unit (echoed from the active profile in /status). Falls
+  // back to the form's local edit so the suffix updates immediately when
+  // the user picks a preset, before the next status poll lands.
+  const displayUnit = status?.house?.unit || form.powerUnit || 'VA';
+
   const renderHouse = () => {
     const house = status?.house;
     const va = house?.currentVa;
@@ -241,7 +275,7 @@ export default function LoadSheddingPanel() {
         <div>
           <div className={sectionTitleClass}>{t('loadShedding.status.house')}</div>
           <div className="text-xl font-semibold text-[#e0e0e0]">
-            {va !== null && va !== undefined ? `${va.toLocaleString()} VA` : '—'}
+            {va !== null && va !== undefined ? `${va.toLocaleString()} ${displayUnit}` : '—'}
           </div>
           <div className={`text-xs ${colour}`}>
             {!status?.mqttConnected
@@ -283,7 +317,7 @@ export default function LoadSheddingPanel() {
           </div>
           <div>
             <div className={subTextClass}>{t('loadShedding.runtime.teslaVa')}</div>
-            <div className="text-[#e0e0e0]">{r.teslaVa !== null && r.teslaVa !== undefined ? `${r.teslaVa.toLocaleString()} VA` : '—'}</div>
+            <div className="text-[#e0e0e0]">{r.teslaVa !== null && r.teslaVa !== undefined ? `${r.teslaVa.toLocaleString()} ${displayUnit}` : '—'}</div>
           </div>
           <div>
             <div className={subTextClass}>{t('loadShedding.runtime.lastCommand')}</div>
@@ -324,7 +358,7 @@ export default function LoadSheddingPanel() {
               {e.fromAmps !== null && e.fromAmps !== undefined && e.toAmps !== null && e.toAmps !== undefined
                 ? `${t('loadShedding.events.arrowAmps', { from: e.fromAmps, to: e.toAmps })}`
                 : ''}
-              {e.houseVa !== null && e.houseVa !== undefined ? ` · ${e.houseVa} VA` : ''}
+              {e.houseVa !== null && e.houseVa !== undefined ? ` · ${e.houseVa} ${displayUnit}` : ''}
               {e.detail ? ` · ${e.detail}` : ''}
             </span>
           </li>
@@ -372,6 +406,115 @@ export default function LoadSheddingPanel() {
 
       {selected && (
         <>
+          {/* MQTT source — moved to the top so users without a French
+              Linky meter see immediately that the source is configurable
+              and what to put. The form stays in dot-notation format so
+              both flat (ZLinky / Tasmota) and nested (Shelly Gen2 / EM)
+              payloads work without any backend change. */}
+          <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3 space-y-3">
+            <div className={sectionTitleClass}>{t('loadShedding.source.title')}</div>
+            <p className={subTextClass}>{t('loadShedding.source.intro')}</p>
+
+            <div className="space-y-1">
+              <label className={sectionTitleClass}>{t('loadShedding.source.preset')}</label>
+              <select
+                className={inputClass}
+                onChange={(e) => {
+                  const preset = SOURCE_PRESETS.find((p) => p.id === e.target.value);
+                  if (!preset || preset.id === 'custom') return;
+                  setForm({
+                    ...form,
+                    mqttTopic: preset.topic,
+                    powerJsonField: preset.field,
+                    powerUnit: preset.unit,
+                    powerScale: preset.scale,
+                  });
+                }}
+                defaultValue=""
+              >
+                <option value="" disabled>{t('loadShedding.source.presetPlaceholder')}</option>
+                {SOURCE_PRESETS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {t(`loadShedding.source.presets.${p.id}`)}
+                  </option>
+                ))}
+              </select>
+              <p className={subTextClass}>{t('loadShedding.source.presetHint')}</p>
+            </div>
+
+            <div className="space-y-1">
+              <label className={sectionTitleClass}>{t('loadShedding.source.topic')}</label>
+              <input
+                className={inputClass}
+                value={form.mqttTopic}
+                onChange={(e) => setForm({ ...form, mqttTopic: e.target.value })}
+                placeholder="zigbee2mqtt/Lixee"
+              />
+              <p className={subTextClass}>{t('loadShedding.source.topicHint')}</p>
+            </div>
+
+            <div className="space-y-1">
+              <label className={sectionTitleClass}>{t('loadShedding.source.field')}</label>
+              <input
+                className={inputClass}
+                value={form.powerJsonField}
+                onChange={(e) => setForm({ ...form, powerJsonField: e.target.value })}
+                placeholder="apparent_power"
+              />
+              <p className={subTextClass}>{t('loadShedding.source.fieldHint')}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className={sectionTitleClass}>{t('loadShedding.source.unit')}</label>
+                <input
+                  className={inputClass}
+                  value={form.powerUnit}
+                  onChange={(e) => setForm({ ...form, powerUnit: e.target.value.slice(0, 10) })}
+                  placeholder="VA"
+                  maxLength={10}
+                />
+                <p className={subTextClass}>{t('loadShedding.source.unitHint')}</p>
+              </div>
+              <div className="space-y-1">
+                <label className={sectionTitleClass}>{t('loadShedding.source.scale')}</label>
+                <input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  className={inputClass}
+                  value={form.powerScale}
+                  onChange={(e) => {
+                    const n = parseFloat(e.target.value);
+                    setForm({ ...form, powerScale: Number.isFinite(n) && n > 0 ? n : 1 });
+                  }}
+                />
+                <p className={subTextClass}>{t('loadShedding.source.scaleHint')}</p>
+              </div>
+            </div>
+
+            {/* Live verification block: shows what we currently receive
+                from the broker so the user can confirm topic+field are
+                correct WITHOUT having to enable the engine. */}
+            <div className="bg-[#141414] border border-[#2a2a2a] rounded-md p-2 text-xs space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[#9ca3af]">{t('loadShedding.source.liveCheck')}</span>
+                <span className={status?.mqttConnected ? 'text-[#a7e9a7]' : 'text-[#f0a47e]'}>
+                  {status?.mqttConnected ? t('loadShedding.source.brokerOk') : t('loadShedding.source.brokerKo')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#9ca3af]">{t('loadShedding.source.lastValue')}</span>
+                <span className="text-[#e0e0e0] tabular-nums">
+                  {status?.house?.currentVa !== null && status?.house?.currentVa !== undefined
+                    ? `${status.house.currentVa.toLocaleString()} ${form.powerUnit}`
+                    : '—'}
+                </span>
+              </div>
+              <p className={subTextClass}>{t('loadShedding.source.liveHint')}</p>
+            </div>
+          </div>
+
           {renderRuntime()}
 
           {/* Master toggle + dry-run */}
@@ -412,7 +555,7 @@ export default function LoadSheddingPanel() {
             <div className={sectionTitleClass}>{t('loadShedding.thresholds.title')}</div>
             <div className="grid grid-cols-2 gap-3">
               <NumberField
-                label={t('loadShedding.thresholds.high')}
+                label={t('loadShedding.thresholds.high', { unit: displayUnit })}
                 value={form.highThresholdVa}
                 onChange={(v) => setForm({ ...form, highThresholdVa: v })}
               />
@@ -423,7 +566,7 @@ export default function LoadSheddingPanel() {
                 min={1}
               />
               <NumberField
-                label={t('loadShedding.thresholds.low')}
+                label={t('loadShedding.thresholds.low', { unit: displayUnit })}
                 value={form.lowThresholdVa}
                 onChange={(v) => setForm({ ...form, lowThresholdVa: v })}
               />
@@ -487,33 +630,6 @@ export default function LoadSheddingPanel() {
                 onChange={(v) => setForm({ ...form, minSamplesInWindow: v })}
                 min={1}
               />
-            </div>
-          </div>
-
-          {/* MQTT source */}
-          <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-3 space-y-3">
-            <div className={sectionTitleClass}>{t('loadShedding.source.title')}</div>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <label className={sectionTitleClass}>{t('loadShedding.source.topic')}</label>
-                <input
-                  className={inputClass}
-                  value={form.mqttTopic}
-                  onChange={(e) => setForm({ ...form, mqttTopic: e.target.value })}
-                  placeholder="zigbee2mqtt/Lixee"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className={sectionTitleClass}>{t('loadShedding.source.field')}</label>
-                <input
-                  className={inputClass}
-                  value={form.powerJsonField}
-                  onChange={(e) => setForm({ ...form, powerJsonField: e.target.value })}
-                  placeholder="apparent_power"
-                />
-              </div>
-              <p className={subTextClass}>{t('loadShedding.source.hint')}</p>
-              <p className={subTextClass}>{t('loadShedding.source.restartHint')}</p>
             </div>
           </div>
 

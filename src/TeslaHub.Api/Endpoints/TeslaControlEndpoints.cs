@@ -240,7 +240,7 @@ public static class TeslaControlEndpoints
         CancellationToken ct)
     {
         var status = await oauth.GetStatusAsync(ct);
-        var vehicles = await db.Set<TeslaVehicle>()
+        var rows = await db.Set<TeslaVehicle>()
             .OrderBy(v => v.DisplayName ?? v.Vin)
             .Select(v => new
             {
@@ -254,7 +254,26 @@ public static class TeslaControlEndpoints
             })
             .ToListAsync(ct);
 
-        var dtos = vehicles.Select(v =>
+        // Multi-account installs: the same physical car (VIN) can appear
+        // multiple times in TeslaVehicles (one row per Tesla account).
+        // For the Control surface only ONE row per VIN makes sense:
+        //   * the SPA already filters by VIN + KeyPaired prior to picking
+        //     a row (Control / BottomNav / HomeQuickActions),
+        //   * but a third-party hitting this endpoint directly would
+        //     otherwise see duplicates and could fire each command twice
+        //     (and pay 2× Fleet API quota for one physical action).
+        // Dedup rule mirrors the SPA: KeyPaired=true wins, then lowest Id
+        // for determinism. Pairing-wizard / share / telegram endpoints
+        // intentionally keep the per-account rows and are NOT impacted.
+        var deduped = rows
+            .Where(v => !string.IsNullOrWhiteSpace(v.Vin))
+            .GroupBy(v => v.Vin!, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(v => v.KeyPaired).ThenBy(v => v.Id).First())
+            .Concat(rows.Where(v => string.IsNullOrWhiteSpace(v.Vin)))
+            .OrderBy(v => v.DisplayName ?? v.Vin)
+            .ToList();
+
+        var dtos = deduped.Select(v =>
         {
             var caps = new TeslaVehicle { CapabilitiesJson = v.CapabilitiesJson }.GetCapabilities();
             return new TeslaControlVehicleDto

@@ -18,6 +18,13 @@ public sealed class LoadSheddingHouseDto
     public int? CurrentVa { get; set; }
     public DateTime? LastSampleAt { get; set; }
     public int SamplesInLast60s { get; set; }
+
+    /// <summary>
+    /// Display unit for CurrentVa (and per-vehicle TeslaVa). Echoes the
+    /// PowerUnit of the active profile so the SPA can render a consistent
+    /// suffix without guessing. Defaults to "VA" when no profile exists.
+    /// </summary>
+    public string Unit { get; set; } = "VA";
 }
 
 public sealed class LoadSheddingVehicleDto
@@ -56,6 +63,8 @@ public sealed class LoadSheddingProfileDto
 
     public string MqttTopic { get; set; } = string.Empty;
     public string PowerJsonField { get; set; } = string.Empty;
+    public string PowerUnit { get; set; } = "VA";
+    public double PowerScale { get; set; } = 1.0;
 }
 
 public sealed class LoadSheddingRuntimeDto
@@ -95,6 +104,8 @@ public sealed class LoadSheddingProfileUpsertRequest
 
     public string MqttTopic { get; set; } = "zigbee2mqtt/Lixee";
     public string PowerJsonField { get; set; } = "apparent_power";
+    public string PowerUnit { get; set; } = "VA";
+    public double PowerScale { get; set; } = 1.0;
 }
 
 public sealed class LoadSheddingEventDto

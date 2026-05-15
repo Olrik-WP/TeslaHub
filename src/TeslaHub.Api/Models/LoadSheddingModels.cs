@@ -57,11 +57,35 @@ public class LoadSheddingProfile
     public string MqttTopic { get; set; } = "zigbee2mqtt/Lixee";
 
     /// <summary>
-    /// Top-level JSON property to read from the MQTT payload, in volt-amperes.
-    /// Default is `apparent_power` (matches ZLinky in TIC standard mode).
+    /// Dot-notation JSON path inside the MQTT payload pointing to the
+    /// instantaneous house power. Default `apparent_power` (ZLinky in
+    /// TIC standard). Other examples: `em.total_act_power` (Shelly Pro
+    /// 3EM Gen2), `ENERGY.Power` (Tasmota), `0.power` (array index).
+    /// Empty when the payload IS already the raw scalar (P1 readers,
+    /// per-channel Shelly Gen1 emeter feeds).
     /// </summary>
     [MaxLength(100)]
     public string PowerJsonField { get; set; } = "apparent_power";
+
+    /// <summary>
+    /// Display unit of the house power, used as a suffix in the UI
+    /// (Settings panel, runtime tile, audit timeline). Stored values and
+    /// thresholds are always in this same unit AFTER applying
+    /// <see cref="PowerScale"/>. Typical values: "VA" (Linky / ZLinky),
+    /// "W" (most everything else: Shelly, Tasmota, IoTaWatt, Emporia,
+    /// converted DSMR P1).
+    /// </summary>
+    [MaxLength(10)]
+    public string PowerUnit { get; set; } = "VA";
+
+    /// <summary>
+    /// Multiplier applied to the raw value parsed from the MQTT payload
+    /// before storing it as an integer. Lets us accept fractional units
+    /// (kW from a P1 reader: scale=1000, gives an integer count of W)
+    /// without leaking floats through the rest of the pipeline.
+    /// Defaults to 1 (no scaling — value passes through).
+    /// </summary>
+    public double PowerScale { get; set; } = 1.0;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

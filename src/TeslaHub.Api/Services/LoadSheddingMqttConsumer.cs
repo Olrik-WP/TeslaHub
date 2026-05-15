@@ -8,6 +8,37 @@ using TeslaHub.Api.Data;
 namespace TeslaHub.Api.Services;
 
 /// <summary>
+/// In-memory pub/sub used by the load-shedding endpoints to ask the
+/// <see cref="LoadSheddingMqttConsumer"/> to drop its current MQTT
+/// connection and re-resolve topic / JSON field from the database.
+///
+/// Avoids requiring the user to restart the container after editing
+/// the MQTT source from the Settings panel.
+/// </summary>
+public sealed class LoadSheddingMqttSignal
+{
+    private CancellationTokenSource _cts = new();
+    private readonly object _gate = new();
+
+    public CancellationToken Token
+    {
+        get { lock (_gate) { return _cts.Token; } }
+    }
+
+    public void RequestRefresh()
+    {
+        CancellationTokenSource old;
+        lock (_gate)
+        {
+            old = _cts;
+            _cts = new CancellationTokenSource();
+        }
+        old.Cancel();
+        old.Dispose();
+    }
+}
+
+/// <summary>
 /// Subscribes to the Zigbee2MQTT topic published by the smart-meter
 /// device (typically a ZLinky TIC). Each message is a JSON object whose
 /// <c>apparent_power</c> field carries the whole-house instantaneous
@@ -39,17 +70,20 @@ public sealed class LoadSheddingMqttConsumer : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
     private readonly HousePowerSource _housePower;
+    private readonly LoadSheddingMqttSignal _signal;
     private readonly ILogger<LoadSheddingMqttConsumer> _logger;
 
     public LoadSheddingMqttConsumer(
         IServiceScopeFactory scopeFactory,
         IConfiguration configuration,
         HousePowerSource housePower,
+        LoadSheddingMqttSignal signal,
         ILogger<LoadSheddingMqttConsumer> logger)
     {
         _scopeFactory = scopeFactory;
         _configuration = configuration;
         _housePower = housePower;
+        _signal = signal;
         _logger = logger;
     }
 
@@ -67,31 +101,39 @@ public sealed class LoadSheddingMqttConsumer : BackgroundService
         try { await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken); }
         catch (OperationCanceledException) { return; }
 
-        // Always connect, even before any profile is saved. The consumer
-        // is purely observational — feeding the live "house power" tile
-        // in Settings is useful BEFORE the user enables anything, so they
-        // can pick sensible thresholds based on their own peaks. We start
-        // with the first persisted profile's topic+field if any, falling
-        // back to the ZLinky-in-standard-TIC defaults otherwise.
-        var (topic, jsonField) = await ResolveTopicAndFieldAsync(stoppingToken);
-        topic = string.IsNullOrWhiteSpace(topic) ? "zigbee2mqtt/Lixee" : topic;
-        jsonField = string.IsNullOrWhiteSpace(jsonField) ? "apparent_power" : jsonField;
-
         var port = int.TryParse(_configuration["MQTT_PORT"], out var p) ? p : 1883;
         var user = _configuration["MQTT_USER"] ?? string.Empty;
         var pass = _configuration["MQTT_PASSWORD"] ?? string.Empty;
 
-        _logger.LogInformation(
-            "Load-shedding consumer starting (broker {Host}:{Port}, topic '{Topic}', field '{Field}').",
-            host, port, topic, jsonField);
-
+        // Topic/field/scale are re-resolved at every connection attempt
+        // so a profile edit from the UI takes effect on the next
+        // reconnection (triggered by LoadSheddingMqttSignal.RequestRefresh()).
         while (!stoppingToken.IsCancellationRequested)
         {
+            var resolved = await ResolveSourceAsync(stoppingToken);
+            var topic = string.IsNullOrWhiteSpace(resolved.Topic) ? "zigbee2mqtt/Lixee" : resolved.Topic;
+            var jsonField = string.IsNullOrWhiteSpace(resolved.Field) ? "apparent_power" : resolved.Field;
+            var scale = resolved.Scale <= 0 ? 1.0 : resolved.Scale;
+
+            // Combine the host stop token with the per-connection signal
+            // so PUT /load-shedding/profiles/{id} can yank the connection
+            // immediately and force a reload from DB on the next iteration.
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, _signal.Token);
+
             try
             {
-                await RunOnceAsync(host, port, user, pass, topic, jsonField, stoppingToken);
+                _logger.LogInformation(
+                    "Load-shedding consumer connecting (broker {Host}:{Port}, topic '{Topic}', field '{Field}', scale {Scale}).",
+                    host, port, topic, jsonField, scale);
+                await RunOnceAsync(host, port, user, pass, topic, jsonField, scale, linked.Token);
             }
-            catch (OperationCanceledException) { break; }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (OperationCanceledException)
+            {
+                // Refresh requested by the UI: loop back immediately.
+                _logger.LogInformation("Load-shedding consumer received reload signal — reconnecting.");
+                continue;
+            }
             catch (Exception ex)
             {
                 _housePower.MqttConnected = false;
@@ -104,7 +146,9 @@ public sealed class LoadSheddingMqttConsumer : BackgroundService
         _housePower.MqttConnected = false;
     }
 
-    private async Task<(string? topic, string? field)> ResolveTopicAndFieldAsync(CancellationToken cancellationToken)
+    private readonly record struct ResolvedSource(string? Topic, string? Field, double Scale);
+
+    private async Task<ResolvedSource> ResolveSourceAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -118,19 +162,19 @@ public sealed class LoadSheddingMqttConsumer : BackgroundService
                 .FirstOrDefaultAsync(cancellationToken);
 
             return profile is null
-                ? (null, null)
-                : (profile.MqttTopic, profile.PowerJsonField);
+                ? new ResolvedSource(null, null, 1.0)
+                : new ResolvedSource(profile.MqttTopic, profile.PowerJsonField, profile.PowerScale);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to read load-shedding profile from DB on startup.");
-            return (null, null);
+            return new ResolvedSource(null, null, 1.0);
         }
     }
 
     private async Task RunOnceAsync(
         string host, int port, string user, string pass,
-        string topic, string jsonField,
+        string topic, string jsonField, double scale,
         CancellationToken cancellationToken)
     {
         var factory = new MqttClientFactory();
@@ -146,7 +190,7 @@ public sealed class LoadSheddingMqttConsumer : BackgroundService
 
         client.ApplicationMessageReceivedAsync += e =>
         {
-            try { ProcessMessage(e.ApplicationMessage, jsonField); }
+            try { ProcessMessage(e.ApplicationMessage, jsonField, scale); }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to process load-shedding MQTT message on topic {Topic}", e.ApplicationMessage.Topic);
@@ -179,7 +223,7 @@ public sealed class LoadSheddingMqttConsumer : BackgroundService
         _housePower.MqttConnected = false;
     }
 
-    private void ProcessMessage(MqttApplicationMessage message, string jsonField)
+    private void ProcessMessage(MqttApplicationMessage message, string jsonField, double scale)
     {
         if (message.Payload.IsEmpty) return;
         var payload = Encoding.UTF8.GetString(message.Payload);
@@ -187,23 +231,69 @@ public sealed class LoadSheddingMqttConsumer : BackgroundService
         try
         {
             using var doc = JsonDocument.Parse(payload);
-            if (!doc.RootElement.TryGetProperty(jsonField, out var prop))
+            JsonElement prop;
+            // Empty path means the payload IS already a scalar value
+            // (P1 readers publish a single number on a leaf topic like
+            // .../power_consumed/state, no wrapping object).
+            if (string.IsNullOrWhiteSpace(jsonField))
+                prop = doc.RootElement;
+            else if (!TryResolvePath(doc.RootElement, jsonField, out prop))
                 return;
 
-            int? va = prop.ValueKind switch
+            double? raw = prop.ValueKind switch
             {
-                JsonValueKind.Number when prop.TryGetInt32(out var i) => i,
-                JsonValueKind.Number when prop.TryGetDouble(out var d) => (int)Math.Round(d),
-                JsonValueKind.String when int.TryParse(prop.GetString(), out var s) => s,
+                JsonValueKind.Number when prop.TryGetDouble(out var d) => d,
+                JsonValueKind.String when double.TryParse(
+                    prop.GetString(),
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var s) => s,
                 _ => null,
             };
 
-            if (va is null || va < 0) return;
-            _housePower.Add(va.Value);
+            // We refuse negative readings (export to grid is irrelevant
+            // for shedding) but accept any positive magnitude. The scale
+            // multiplier converts source unit (e.g. kW from a P1 reader,
+            // scale=1000) into the integer working unit used by the rest
+            // of the pipeline.
+            if (raw is null || raw < 0) return;
+            var scaled = raw.Value * scale;
+            _housePower.Add((int)Math.Round(scaled));
         }
         catch (JsonException)
         {
-            // Malformed payload from Z2M — drop quietly to avoid log spam.
+            // Malformed payload — drop quietly to avoid log spam.
         }
+    }
+
+    /// <summary>
+    /// Walks a dot-notation path through a JSON document.
+    /// "apparent_power" → root.apparent_power (ZLinky / generic).
+    /// "em.total_act_power" → root.em.total_act_power (Shelly EM Gen2).
+    /// "ENERGY.Power" → root.ENERGY.Power (Tasmota).
+    /// "0.power" → root[0].power (array index segment).
+    /// </summary>
+    private static bool TryResolvePath(JsonElement root, string path, out JsonElement value)
+    {
+        value = root;
+        if (string.IsNullOrWhiteSpace(path)) return false;
+
+        foreach (var segment in path.Split('.'))
+        {
+            if (string.IsNullOrEmpty(segment)) return false;
+            switch (value.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    if (!value.TryGetProperty(segment, out var next)) return false;
+                    value = next;
+                    break;
+                case JsonValueKind.Array when int.TryParse(segment, out var idx) && idx >= 0 && idx < value.GetArrayLength():
+                    value = value[idx];
+                    break;
+                default:
+                    return false;
+            }
+        }
+        return true;
     }
 }

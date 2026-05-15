@@ -76,6 +76,7 @@ builder.Services.AddHostedService<TeslaTelemetryConsumer>();
 // and the REST endpoint (UI snapshot). The policy is registered as a
 // concrete singleton because it is a pure function of its inputs.
 builder.Services.AddSingleton<HousePowerSource>();
+builder.Services.AddSingleton<LoadSheddingMqttSignal>();
 builder.Services.AddSingleton<ILoadSheddingPolicy, SimpleHysteresisPolicy>();
 builder.Services.AddSingleton<LoadSheddingEngine>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<LoadSheddingEngine>());

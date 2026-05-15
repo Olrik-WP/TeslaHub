@@ -1025,7 +1025,7 @@
   },
   "loadShedding": {
     "title": "Dynamic load shedding",
-    "intro": "Throttle Tesla charge current automatically when the smart-meter feed shows the house is approaching the subscription limit. Reads ZLinky / Zigbee2MQTT and writes set_charging_amps via the Tesla command proxy.",
+    "intro": "Throttle Tesla charge current automatically when your house power approaches the breaker / contract limit. TeslaHub subscribes to a MQTT topic publishing whole-house power (any sensor reachable from your broker — ZLinky FR, Shelly EM, Tasmota, DSMR P1 reader NL/BE, IoTaWatt US, Emporia…) and writes set_charging_amps via the Tesla command proxy.",
     "noVehicles": "No paired Tesla vehicles. Pair a vehicle first in the Tesla integration.",
     "status": {
       "house": "House",
@@ -1044,9 +1044,9 @@
     },
     "thresholds": {
       "title": "Thresholds",
-      "high": "Reduce when house > (VA)",
+      "high": "Reduce when house > ({{unit}})",
       "highWindow": "… for at least N seconds",
-      "low": "Restore when house < (VA)",
+      "low": "Restore when house < ({{unit}})",
       "lowWindow": "… for at least N seconds",
       "minAmps": "Min amps",
       "maxAmps": "Max amps",
@@ -1061,11 +1061,34 @@
       "minSamples": "Min samples in window"
     },
     "source": {
-      "title": "MQTT source",
-      "topic": "Z2M topic",
-      "field": "JSON field (volt-amperes)",
-      "hint": "Default targets a ZLinky in TIC standard mode (zigbee2mqtt/Lixee, apparent_power).",
-      "restartHint": "Changing the topic or field requires restarting the teslahub-api container to take effect."
+      "title": "House power source (MQTT)",
+      "intro": "The shedding engine compares the instant house power (published by your smart meter or current clamp on MQTT) against the thresholds below. Pick a preset or type your own topic and JSON field path. Any MQTT broker reachable from the container (MQTT_HOST/PORT/USER/PASSWORD env vars) works.",
+      "preset": "Common presets",
+      "presetPlaceholder": "Pick a sensor…",
+      "presetHint": "The preset fills in topic and field. Replace the device id placeholder (XXXX) with yours.",
+      "presets": {
+        "zlinky": "ZLinky TIC via Zigbee2MQTT (FR — VA)",
+        "shellyEm": "Shelly EM Gen1 (W)",
+        "shellyPro": "Shelly Pro 3EM Gen2 (W)",
+        "tasmota": "Tasmota / Shelly Plug over MQTT (W)",
+        "p1Reader": "P1 Reader DSMR — NL/BE (kW → W ×1000)",
+        "iotawatt": "IoTaWatt — US/EU (W)",
+        "emporia": "Emporia Vue (W)",
+        "custom": "Custom — other sensor"
+      },
+      "topic": "MQTT topic",
+      "topicHint": "Exact topic where your sensor publishes the live power. Examples: zigbee2mqtt/Lixee, shellies/shellyem-XXXX/emeter/0/power, tele/tasmota_XXXX/SENSOR.",
+      "field": "JSON field path",
+      "fieldHint": "Dot notation to drill into nested payloads. Leave empty if the payload IS the raw value (P1, Shelly Gen1 on emeter/N/power). Examples: apparent_power, em.total_act_power, ENERGY.Power, 0.power.",
+      "unit": "Display unit",
+      "unitHint": "Suffix shown next to values (live, thresholds, timeline). Cosmetic only — the engine compares integers, so the unit must match what your sensor actually publishes after applying the scale below.",
+      "scale": "Scale factor",
+      "scaleHint": "Multiplier applied to the raw value before storing it as an integer. Leave 1 if your sensor already publishes integers (W or VA). Use 1000 for a sensor publishing kW (typically P1/DSMR) — you'll then work in W everywhere.",
+      "liveCheck": "Live check",
+      "lastValue": "Last received value",
+      "brokerOk": "Broker connected",
+      "brokerKo": "Broker disconnected",
+      "liveHint": "If you see “—” while the broker is connected, your topic or field path is likely wrong. The engine never acts until at least one sample is received."
     },
     "runtime": {
       "title": "Live status",

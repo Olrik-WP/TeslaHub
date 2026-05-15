@@ -1025,7 +1025,7 @@
   },
   "loadShedding": {
     "title": "Délestage dynamique",
-    "intro": "Réduit automatiquement le courant de charge Tesla quand le compteur Linky indique que la maison approche du seuil de l'abonnement. Lit ZLinky / Zigbee2MQTT et envoie set_charging_amps via le proxy de commandes Tesla.",
+    "intro": "Réduit automatiquement le courant de charge Tesla quand votre compteur électrique approche le seuil du contrat. TeslaHub écoute la puissance maison sur un topic MQTT (n'importe quel capteur publié sur votre broker — ZLinky FR, Shelly EM, Tasmota, P1 reader NL/BE, IoTaWatt US, Emporia…) et appelle set_charging_amps via le proxy de commandes Tesla.",
     "noVehicles": "Aucun véhicule Tesla appairé. Appairez d'abord un véhicule dans l'intégration Tesla.",
     "status": {
       "house": "Maison",
@@ -1044,9 +1044,9 @@
     },
     "thresholds": {
       "title": "Seuils",
-      "high": "Réduire si maison > (VA)",
+      "high": "Réduire si maison > ({{unit}})",
       "highWindow": "… pendant au moins N secondes",
-      "low": "Restaurer si maison < (VA)",
+      "low": "Restaurer si maison < ({{unit}})",
       "lowWindow": "… pendant au moins N secondes",
       "minAmps": "Ampères min",
       "maxAmps": "Ampères max",
@@ -1061,11 +1061,34 @@
       "minSamples": "Échantillons min dans la fenêtre"
     },
     "source": {
-      "title": "Source MQTT",
-      "topic": "Topic Z2M",
-      "field": "Champ JSON (volt-ampères)",
-      "hint": "Par défaut un ZLinky en mode TIC standard (zigbee2mqtt/Lixee, apparent_power).",
-      "restartHint": "Changer le topic ou le champ nécessite de redémarrer le container teslahub-api."
+      "title": "Source de puissance maison (MQTT)",
+      "intro": "Le moteur de délestage compare la puissance instantanée de votre maison (publiée par votre compteur intelligent ou pince ampèremétrique sur MQTT) aux seuils définis plus bas. Choisissez un préréglage ou saisissez manuellement votre topic et le chemin du champ JSON. Tout broker MQTT atteignable (variables MQTT_HOST/PORT/USER/PASSWORD du conteneur) fonctionne.",
+      "preset": "Préréglages courants",
+      "presetPlaceholder": "Choisir un capteur…",
+      "presetHint": "Le préréglage remplit le topic et le champ. Adaptez l'identifiant de votre appareil (XXXX) à la place du modèle.",
+      "presets": {
+        "zlinky": "ZLinky TIC via Zigbee2MQTT (FR — VA)",
+        "shellyEm": "Shelly EM Gen1 (W)",
+        "shellyPro": "Shelly Pro 3EM Gen2 (W)",
+        "tasmota": "Tasmota / Shelly Plug en MQTT (W)",
+        "p1Reader": "P1 Reader DSMR — NL/BE (kW → W ×1000)",
+        "iotawatt": "IoTaWatt — US/EU (W)",
+        "emporia": "Emporia Vue (W)",
+        "custom": "Manuel — autre capteur"
+      },
+      "topic": "Topic MQTT",
+      "topicHint": "Topic exact où votre capteur publie la puissance instantanée. Exemples : zigbee2mqtt/Lixee, shellies/shellyem-XXXX/emeter/0/power, tele/tasmota_XXXX/SENSOR.",
+      "field": "Chemin du champ JSON",
+      "fieldHint": "Notation pointée pour descendre dans le JSON. Vide si le payload est déjà la valeur brute (P1, Shelly Gen1 sur emeter/N/power). Exemples : apparent_power, em.total_act_power, ENERGY.Power, 0.power.",
+      "unit": "Unité d'affichage",
+      "unitHint": "Suffixe affiché à côté des valeurs (live, seuils, timeline). Indicatif uniquement — le moteur compare des entiers, donc l'unité doit correspondre à ce que publie réellement votre capteur après application du facteur ci-dessous.",
+      "scale": "Facteur d'échelle",
+      "scaleHint": "Multiplicateur appliqué à la valeur reçue avant stockage en entier. Laissez 1 si votre capteur publie déjà des entiers (W ou VA). Mettez 1000 pour un capteur qui publie en kW (typiquement P1/DSMR) — vous travaillerez ensuite en W partout.",
+      "liveCheck": "Vérification live",
+      "lastValue": "Dernière valeur reçue",
+      "brokerOk": "Broker connecté",
+      "brokerKo": "Broker déconnecté",
+      "liveHint": "Si « — » s'affiche alors que le broker est connecté, le topic ou le chemin du champ est probablement faux. Le moteur n'agit jamais tant qu'aucune donnée n'est reçue."
     },
     "runtime": {
       "title": "État live",

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TeslaHub.Api.Data;
 using TeslaHub.Api.Models;
 using TeslaHub.Api.Services;
+using TeslaHub.Api.TeslaMate;
 
 namespace TeslaHub.Api.Endpoints;
 
@@ -27,6 +28,7 @@ public static class LoadSheddingEndpoints
             HousePowerSource housePower,
             LoadSheddingEngine engine,
             MqttLiveDataService liveData,
+            TeslaMateConnectionFactory tm,
             CancellationToken ct) =>
         {
             // Multi-account installs: the same VIN can appear twice in
@@ -60,6 +62,18 @@ public static class LoadSheddingEndpoints
             var firstProfile = profiles.FirstOrDefault();
             var latest = housePower.Latest;
 
+            // The MQTT live cache (MqttLiveDataService) is keyed by the
+            // TeslaMate `cars.id`, NOT by TeslaHub's TeslaVehicle.Id —
+            // the former comes from the topic path `teslamate/cars/{id}/...`
+            // and is unrelated to our Fleet API row id. Build a quick
+            // VIN → TeslaMate carId map so we can fetch live data for a
+            // dedup'd vehicle even when TeslaMate's id ≠ TeslaHub's id.
+            var tmCars = (await tm.GetCarsAsync()).ToList();
+            var tmCarIdByVin = tmCars
+                .Where(c => !string.IsNullOrWhiteSpace(c.Vin))
+                .GroupBy(c => c.Vin!)
+                .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+
             var dto = new LoadSheddingStatusDto
             {
                 MqttConnected = housePower.MqttConnected,
@@ -72,12 +86,18 @@ public static class LoadSheddingEndpoints
                     CurrentVa = latest?.Va,
                     LastSampleAt = latest?.At,
                     SamplesInLast60s = housePower.RecentSampleCount(TimeSpan.FromSeconds(60)),
+                    // Echo the unit of the first profile so the SPA can
+                    // suffix all values consistently. ZLinky default if
+                    // none is configured yet.
+                    Unit = string.IsNullOrWhiteSpace(firstProfile?.PowerUnit) ? "VA" : firstProfile.PowerUnit,
                 },
                 Vehicles = vehicles.Select(v =>
                 {
                     profileByVehicle.TryGetValue(v.Id, out var profile);
                     var state = engine.States.TryGetValue(v.Id, out var s) ? s : null;
-                    var live = liveData.GetLiveData(v.Id);
+                    var live = tmCarIdByVin.TryGetValue(v.Vin, out var tmCarId)
+                        ? liveData.GetLiveData(tmCarId)
+                        : null;
 
                     int? teslaVa = null;
                     if (live?.ChargerVoltage is int volt && live.ChargerActualCurrent is double amp)
@@ -110,6 +130,7 @@ public static class LoadSheddingEndpoints
             int vehicleId,
             LoadSheddingProfileUpsertRequest body,
             AppDbContext db,
+            LoadSheddingMqttSignal mqttSignal,
             CancellationToken ct) =>
         {
             var vehicleExists = await db.TeslaVehicles.AnyAsync(v => v.Id == vehicleId, ct);
@@ -159,11 +180,27 @@ public static class LoadSheddingEndpoints
             profile.HourlyCommandQuota = body.HourlyCommandQuota;
             profile.DailyCommandQuota = body.DailyCommandQuota;
             profile.MinSamplesInWindow = body.MinSamplesInWindow;
-            profile.MqttTopic = string.IsNullOrWhiteSpace(body.MqttTopic) ? "zigbee2mqtt/Lixee" : body.MqttTopic.Trim();
-            profile.PowerJsonField = string.IsNullOrWhiteSpace(body.PowerJsonField) ? "apparent_power" : body.PowerJsonField.Trim();
+            var newTopic = string.IsNullOrWhiteSpace(body.MqttTopic) ? "zigbee2mqtt/Lixee" : body.MqttTopic.Trim();
+            var newField = string.IsNullOrWhiteSpace(body.PowerJsonField) ? "apparent_power" : body.PowerJsonField.Trim();
+            var newUnit = string.IsNullOrWhiteSpace(body.PowerUnit) ? "VA" : body.PowerUnit.Trim();
+            var newScale = body.PowerScale <= 0 ? 1.0 : body.PowerScale;
+            var sourceChanged = profile.MqttTopic != newTopic
+                || profile.PowerJsonField != newField
+                || Math.Abs(profile.PowerScale - newScale) > 0.0001;
+            profile.MqttTopic = newTopic;
+            profile.PowerJsonField = newField;
+            profile.PowerUnit = newUnit;
+            profile.PowerScale = newScale;
             profile.UpdatedAt = DateTime.UtcNow;
 
             await db.SaveChangesAsync(ct);
+
+            // Topic / JSON field changes: ask the MQTT consumer to drop
+            // its current subscription and re-resolve from DB. Without
+            // this the user would have to restart teslahub-api after
+            // every source edit.
+            if (sourceChanged) mqttSignal.RequestRefresh();
+
             return Results.Ok(ToDto(profile));
         });
 
@@ -229,5 +266,7 @@ public static class LoadSheddingEndpoints
         MinSamplesInWindow = p.MinSamplesInWindow,
         MqttTopic = p.MqttTopic,
         PowerJsonField = p.PowerJsonField,
+        PowerUnit = string.IsNullOrWhiteSpace(p.PowerUnit) ? "VA" : p.PowerUnit,
+        PowerScale = p.PowerScale <= 0 ? 1.0 : p.PowerScale,
     };
 }

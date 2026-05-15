@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 using TeslaHub.Api.Data;
 using TeslaHub.Api.Models;
+using TeslaHub.Api.TeslaMate;
 
 namespace TeslaHub.Api.Services;
 
@@ -35,6 +36,14 @@ public sealed class LoadSheddingEngine : BackgroundService
     private readonly ILogger<LoadSheddingEngine> _logger;
 
     private readonly ConcurrentDictionary<int, VehicleSheddingState> _states = new();
+
+    // Cached VIN → TeslaMate cars.id map (refreshed every 60 s). The
+    // MQTT live cache (MqttLiveDataService) is keyed by TeslaMate's id
+    // which is unrelated to TeslaHub's TeslaVehicle.Id; the VIN is the
+    // only stable bridge between both worlds.
+    private Dictionary<string, int> _tmCarIdByVin = new(StringComparer.OrdinalIgnoreCase);
+    private DateTimeOffset _tmCarIdMapAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan TmCarMapTtl = TimeSpan.FromSeconds(60);
 
     public LoadSheddingEngine(
         IServiceScopeFactory scopeFactory,
@@ -84,9 +93,35 @@ public sealed class LoadSheddingEngine : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var commands = scope.ServiceProvider.GetRequiredService<TeslaCommandService>();
+        var tm = scope.ServiceProvider.GetRequiredService<TeslaMateConnectionFactory>();
 
+        // Pull (and cache) the VIN ↔ TeslaMate carId mapping. Without it
+        // we cannot read live ChargingState / ChargerActualCurrent for
+        // the right car when the install has multiple Tesla accounts.
+        if (DateTimeOffset.UtcNow - _tmCarIdMapAt > TmCarMapTtl)
+        {
+            try
+            {
+                var tmCars = await tm.GetCarsAsync();
+                _tmCarIdByVin = tmCars
+                    .Where(c => !string.IsNullOrWhiteSpace(c.Vin))
+                    .GroupBy(c => c.Vin!)
+                    .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+                _tmCarIdMapAt = DateTimeOffset.UtcNow;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to refresh TeslaMate VIN→carId map; engine will retry next tick.");
+            }
+        }
+
+        // Join profiles with their TeslaVehicle to get the VIN. We need
+        // the VIN to look up the TeslaMate carId for live data, while
+        // commands still flow through the TeslaHub TeslaVehicle.Id (the
+        // Fleet API path).
         var profiles = await db.LoadSheddingProfiles
             .Where(p => p.Enabled)
+            .Include(p => p.TeslaVehicle)
             .ToListAsync(cancellationToken);
 
         foreach (var profile in profiles)
@@ -94,7 +129,10 @@ public sealed class LoadSheddingEngine : BackgroundService
             var state = _states.GetOrAdd(profile.TeslaVehicleId, _ => new VehicleSheddingState());
             state.TrimQuotaWindows();
 
-            var live = _liveData.GetLiveData(profile.TeslaVehicleId);
+            var vin = profile.TeslaVehicle?.Vin;
+            MqttLiveData? live = null;
+            if (!string.IsNullOrWhiteSpace(vin) && _tmCarIdByVin.TryGetValue(vin, out var tmCarId))
+                live = _liveData.GetLiveData(tmCarId);
             if (live is null
                 || !string.Equals(live.ChargingState, "Charging", StringComparison.OrdinalIgnoreCase))
             {

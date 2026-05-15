@@ -1025,7 +1025,7 @@
   },
   "loadShedding": {
     "title": "Dynamisches Lastabwurf-System",
-    "intro": "Reduziert den Tesla-Ladestrom automatisch, wenn der Smart-Meter-Feed zeigt, dass das Haus den Vertragsschwellenwert erreicht. Liest ZLinky / Zigbee2MQTT und sendet set_charging_amps über den Tesla-Command-Proxy.",
+    "intro": "Reduziert den Tesla-Ladestrom automatisch, wenn die Hausleistung dem Sicherungs- bzw. Vertragslimit nahekommt. TeslaHub liest die Momentanleistung des Hauses von einem MQTT-Topic (jeder am Broker erreichbare Sensor — ZLinky FR, Shelly EM, Tasmota, DSMR-P1-Reader NL/BE, IoTaWatt US, Emporia…) und ruft set_charging_amps über den Tesla-Command-Proxy auf.",
     "noVehicles": "Kein gekoppeltes Tesla-Fahrzeug. Koppeln Sie zuerst ein Fahrzeug in der Tesla-Integration.",
     "status": {
       "house": "Haus",
@@ -1044,9 +1044,9 @@
     },
     "thresholds": {
       "title": "Schwellenwerte",
-      "high": "Reduzieren, wenn Haus > (VA)",
+      "high": "Reduzieren, wenn Haus > ({{unit}})",
       "highWindow": "… mindestens N Sekunden",
-      "low": "Wiederherstellen, wenn Haus < (VA)",
+      "low": "Wiederherstellen, wenn Haus < ({{unit}})",
       "lowWindow": "… mindestens N Sekunden",
       "minAmps": "Min. Ampere",
       "maxAmps": "Max. Ampere",
@@ -1061,11 +1061,34 @@
       "minSamples": "Min. Werte im Fenster"
     },
     "source": {
-      "title": "MQTT-Quelle",
-      "topic": "Z2M-Topic",
-      "field": "JSON-Feld (Volt-Ampere)",
-      "hint": "Standardmäßig ein ZLinky im TIC-Standardmodus (zigbee2mqtt/Lixee, apparent_power).",
-      "restartHint": "Änderungen an Topic oder Feld erfordern einen Neustart des teslahub-api-Containers."
+      "title": "Hausleistungs-Quelle (MQTT)",
+      "intro": "Der Lastabwurf vergleicht die Momentanleistung Ihres Hauses (vom Smart Meter oder Stromzange per MQTT veröffentlicht) mit den unten definierten Schwellenwerten. Wählen Sie eine Vorlage oder geben Sie Ihr Topic und den JSON-Feldpfad manuell ein. Jeder vom Container erreichbare MQTT-Broker funktioniert (Umgebungsvariablen MQTT_HOST/PORT/USER/PASSWORD).",
+      "preset": "Häufige Vorlagen",
+      "presetPlaceholder": "Sensor wählen…",
+      "presetHint": "Die Vorlage füllt Topic und Feld. Ersetzen Sie den Geräte-Platzhalter (XXXX) durch Ihre eigene ID.",
+      "presets": {
+        "zlinky": "ZLinky TIC via Zigbee2MQTT (FR — VA)",
+        "shellyEm": "Shelly EM Gen1 (W)",
+        "shellyPro": "Shelly Pro 3EM Gen2 (W)",
+        "tasmota": "Tasmota / Shelly Plug über MQTT (W)",
+        "p1Reader": "P1-Reader DSMR — NL/BE (kW → W ×1000)",
+        "iotawatt": "IoTaWatt — US/EU (W)",
+        "emporia": "Emporia Vue (W)",
+        "custom": "Manuell — anderer Sensor"
+      },
+      "topic": "MQTT-Topic",
+      "topicHint": "Genaues Topic, auf dem Ihr Sensor die Momentanleistung veröffentlicht. Beispiele: zigbee2mqtt/Lixee, shellies/shellyem-XXXX/emeter/0/power, tele/tasmota_XXXX/SENSOR.",
+      "field": "JSON-Feldpfad",
+      "fieldHint": "Punktnotation zum Navigieren verschachtelter Payloads. Leer lassen, wenn das Payload der Rohwert ist (P1, Shelly Gen1 auf emeter/N/power). Beispiele: apparent_power, em.total_act_power, ENERGY.Power, 0.power.",
+      "unit": "Anzeige-Einheit",
+      "unitHint": "Suffix neben den Werten (Live, Schwellen, Verlauf). Nur kosmetisch — die Engine vergleicht Ganzzahlen, daher muss die Einheit zu dem passen, was Ihr Sensor nach Anwendung des Skalierungsfaktors tatsächlich veröffentlicht.",
+      "scale": "Skalierungsfaktor",
+      "scaleHint": "Multiplikator für den Rohwert, bevor er als Ganzzahl gespeichert wird. Lassen Sie 1, wenn Ihr Sensor bereits Ganzzahlen veröffentlicht (W oder VA). Verwenden Sie 1000 für einen Sensor, der in kW veröffentlicht (typisch P1/DSMR) — Sie arbeiten dann überall in W.",
+      "liveCheck": "Live-Prüfung",
+      "lastValue": "Letzter empfangener Wert",
+      "brokerOk": "Broker verbunden",
+      "brokerKo": "Broker getrennt",
+      "liveHint": "Wenn „—“ angezeigt wird, obwohl der Broker verbunden ist, sind Topic oder Feldpfad wahrscheinlich falsch. Die Steuerung greift erst, wenn mindestens ein Wert empfangen wurde."
     },
     "runtime": {
       "title": "Live-Status",
