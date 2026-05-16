@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import ControlButton, { type ControlButtonState } from './control/ControlButton';
-import { capabilitiesLoaded, useControlAvailability, useControlMutation } from '../hooks/useVehicleControl';
+import { capabilitiesLoaded, presumeSupported, useControlAvailability, useControlMutation } from '../hooks/useVehicleControl';
 import RefreshIndicator from './RefreshIndicator';
 import type { VehicleStatus } from '../api/queries';
 
@@ -35,6 +35,15 @@ export default function HomeQuickActions({ vehicle }: Props) {
     return matches.find((v) => v.keyPaired) ?? matches[0];
   }, [availability, vehicle?.vin]);
 
+  // Derived state — computed BEFORE the mutation hooks so the path
+  // suffix passed to `useControlMutation` reflects the current toggle.
+  // Same pattern as ChargeCard / ClimateCard.
+  const isClimateOn = vehicle?.isClimateOn ?? false;
+  // chargingState comes from TeslaMate's MQTT cache. "Charging" /
+  // "Starting" / "NoPower" / "Stopped" / "Complete" / "Disconnected".
+  // Only treat an actively-charging session as "stop" target.
+  const isCharging = vehicle?.chargingState === 'Charging' || vehicle?.chargingState === 'Starting';
+
   // All hooks MUST run before any early return: React's rules of hooks.
   // We pass vehicleId=0 fallbacks; the buttons themselves are disabled
   // when there is no vehicleId so no command will fire.
@@ -46,6 +55,14 @@ export default function HomeQuickActions({ vehicle }: Props) {
   const window = useControlMutation<{ command: string }>(vehicleId, 'access/window');
   const flash = useControlMutation(vehicleId, 'access/flash-lights');
   const honk = useControlMutation(vehicleId, 'access/honk-horn');
+  // New: charge + climate + defrost. defrost = Tesla "set_preconditioning_max"
+  // (= "Dégivrage du véhicule" in the mobile app). Same endpoint Control
+  // page's "Précondition" button uses; we keep the wording explicit on
+  // Home because most users tap it when they actually want to defrost.
+  const climateToggle = useControlMutation(vehicleId, isClimateOn ? 'climate/stop' : 'climate/start');
+  const defrost = useControlMutation<{ on: boolean }>(vehicleId, 'climate/precondition');
+  const chargePort = useControlMutation<{ on: boolean }>(vehicleId, 'charge/port-door');
+  const chargeToggle = useControlMutation(vehicleId, isCharging ? 'charge/stop' : 'charge/start');
 
   const mqttAvailable = !!vehicle?.mqttConnected;
   const fleetReady = !!availability?.configured && !!availability?.connected;
@@ -60,10 +77,23 @@ export default function HomeQuickActions({ vehicle }: Props) {
   const frunkOpen = vehicle.frunkOpen ?? false;
   const trunkOpen = vehicle.trunkOpen ?? false;
   const windowsOpen = vehicle.windowsOpen ?? false;
+  const portOpen = vehicle.chargePortDoorOpen ?? false;
+  const pluggedIn = vehicle.pluggedIn ?? false;
+  // MQTT doesn't expose defrost_mode (Tesla telemetry channel) so we
+  // approximate the "Dégivrage actif" state with the windshield-side
+  // defrosters. Front defroster ON means max-defrost was requested in
+  // virtually every real-world scenario; the Control page still shows
+  // the authoritative defrost_mode from vehicle_data.
+  const defrostActive = (vehicle.isFrontDefrosterOn ?? false) || (vehicle.isRearDefrosterOn ?? false);
   const caps = teslaVehicle.capabilities;
   // Show frunk/trunk chips by default (every modern Tesla actuates
   // both lids). Only hide when vehicle_config explicitly says false.
   const showTrunks = !capabilitiesLoaded(caps) || caps.canActuateTrunks;
+  // Same logic for the charge-port-door actuator: most Teslas have it,
+  // and the read-only "Tesla Roadster / Model S 2012 manual port" is
+  // the only modern exception. presumeSupported keeps the chip when
+  // capabilities haven't been fetched yet (sleeping car never woken).
+  const showChargePort = presumeSupported(caps, caps.motorizedChargePort);
 
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 mt-3">
@@ -96,6 +126,47 @@ export default function HomeQuickActions({ vehicle }: Props) {
           loading={sentry.isPending}
           wakingHint={sentry.wakingHint}
           icon={<EyeGlyph />}
+        />
+        {/* Climate toggle — same Tesla command pair as ClimateCard. */}
+        <ControlButton
+          label={t('home.quickActions.climate')}
+          state={isClimateOn ? 'on' : 'neutral'}
+          onClick={() => climateToggle.mutate(undefined as never)}
+          loading={climateToggle.isPending}
+          wakingHint={climateToggle.wakingHint}
+          icon={<ClimateGlyph />}
+        />
+        {/* Max defrost. We toggle by sending the OPPOSITE of the current
+            visible defrost state, mirroring how the Tesla app behaves. */}
+        <ControlButton
+          label={t('home.quickActions.defrost')}
+          state={defrostActive ? 'warning' : 'neutral'}
+          onClick={() => defrost.mutate({ on: !defrostActive })}
+          loading={defrost.isPending}
+          wakingHint={defrost.wakingHint}
+          icon={<DefrostGlyph />}
+        />
+        {showChargePort && (
+          <ControlButton
+            label={t('home.quickActions.chargePort')}
+            state={portOpen ? 'warning' : 'neutral'}
+            onClick={() => chargePort.mutate({ on: !portOpen })}
+            loading={chargePort.isPending}
+            wakingHint={chargePort.wakingHint}
+            icon={<ChargePortGlyph />}
+          />
+        )}
+        {/* Start/stop charge. Disabled (visually muted) when the car
+            is not plugged in — sending "charge_start" without a cable
+            attached just returns an error from the Fleet API. */}
+        <ControlButton
+          label={isCharging ? t('home.quickActions.chargeStop') : t('home.quickActions.charge')}
+          state={isCharging ? 'on' : 'neutral'}
+          onClick={() => chargeToggle.mutate(undefined as never)}
+          loading={chargeToggle.isPending}
+          wakingHint={chargeToggle.wakingHint}
+          disabled={!pluggedIn}
+          icon={<ChargeBoltGlyph />}
         />
         {showTrunks && (
           <ControlButton
@@ -198,6 +269,39 @@ function HornGlyph() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 10v4l5 1v-6L3 10zM8 9l8-4v14l-8-4V9z" />
+    </svg>
+  );
+}
+function ClimateGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v18M5 7l14 10M5 17 19 7" />
+      <path d="M12 3l-2 2M12 3l2 2M12 21l-2-2M12 21l2-2" />
+    </svg>
+  );
+}
+function DefrostGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 18c2-2 2-4 4-4M8 18c2-2 2-4 4-4M12 18c2-2 2-4 4-4M16 18c2-2 2-4 4-4" />
+      <path d="M3 9h18" />
+    </svg>
+  );
+}
+function ChargePortGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="6" width="16" height="12" rx="3" />
+      <circle cx="9" cy="12" r="1.4" />
+      <circle cx="15" cy="12" r="1.4" />
+      <path d="M12 9v6" />
+    </svg>
+  );
+}
+function ChargeBoltGlyph() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" />
     </svg>
   );
 }

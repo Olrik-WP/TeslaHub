@@ -439,6 +439,12 @@ export default function Home({ carId }: Props) {
         )}
       </div>
 
+      {/* Fleet API quick actions — placed between the headline stats card
+          and the live vehicle status panel so the most-tapped controls
+          stay above the fold on mobile. Silently renders nothing if
+          MQTT / Fleet / virtual key are not all available. */}
+      <HomeQuickActions vehicle={vehicle} />
+
       {/* Charging in progress */}
       {isCharging && lastCharge && (
         <div className="bg-[#141414] border border-[#3b82f6]/30 rounded-xl p-3 sm:p-4">
@@ -501,9 +507,6 @@ export default function Home({ carId }: Props) {
 
       {/* Vehicle status: TPMS, Body, Climate */}
       <VehicleTopView vehicle={vehicle} />
-
-      {/* Fleet API quick actions (silent if MQTT/Fleet/key not all present). */}
-      <HomeQuickActions vehicle={vehicle} />
 
       {/* Stats grid */}
       <div className="grid grid-cols-3 gap-3">
