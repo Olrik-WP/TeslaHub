@@ -36,9 +36,23 @@ export default function Login() {
 
   return (
     <div className="min-h-dvh flex items-center justify-center bg-[#0a0a0a] p-4">
+      {/* action="javascript:void(0)" is intentional. Without it, iOS Safari
+          (especially in PWA standalone mode + iCloud Keychain autofill)
+          can submit the form natively BEFORE React has a chance to run
+          its onSubmit handler / preventDefault. That native submission
+          targets the current URL (/login), the upstream proxy returns a
+          non-HTML response (Caddy's file_server emits 405 text/plain on
+          POST, for instance), and iOS interprets it as a downloadable
+          file named "login.txt". Pointing the action at a no-op
+          javascript URL makes the native submission a pure JS evaluation
+          that never reaches the network — autofill and save-password
+          prompts still trigger because the <form> + type="submit" +
+          autocomplete attributes are intact. */}
       <form
         name="login"
+        action="javascript:void(0)"
         onSubmit={handleSubmit}
+        noValidate
         className="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-8 w-full max-w-sm"
       >
         <h1 className="text-2xl font-bold text-center mb-2">{t('auth.title')}</h1>
