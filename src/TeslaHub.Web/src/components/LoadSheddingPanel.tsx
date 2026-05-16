@@ -267,6 +267,19 @@ export default function LoadSheddingPanel() {
     },
   });
 
+  // ALL hooks must run on every render. The previous version of this
+  // component had `useMemo(matchSourcePreset)` after an early return
+  // for `vehicles.length === 0`, which violated the Rules of Hooks:
+  // on the first render `/status` hasn't replied yet so vehicles is
+  // empty and the hook is skipped; once the query resolves, the hook
+  // IS called and React throws #310 ("rendered more hooks than during
+  // the previous render"). Keep all hook calls above any conditional
+  // early return.
+  const matchedSourcePresetId = useMemo(
+    () => matchSourcePreset(form),
+    [form.mqttTopic, form.powerJsonField, form.powerUnit, form.powerScale],
+  );
+
   if (vehicles.length === 0) {
     return (
       <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-2">
@@ -280,11 +293,6 @@ export default function LoadSheddingPanel() {
   // back to the form's local edit so the suffix updates immediately when
   // the user picks a preset, before the next status poll lands.
   const displayUnit = status?.house?.unit || form.powerUnit || 'VA';
-
-  const matchedSourcePresetId = useMemo(
-    () => matchSourcePreset(form),
-    [form.mqttTopic, form.powerJsonField, form.powerUnit, form.powerScale],
-  );
 
   const renderHouse = () => {
     const house = status?.house;
