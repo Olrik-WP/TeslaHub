@@ -56,6 +56,11 @@ function AuthExpiredBridge() {
 
 function ProtectedRoute() {
   const { t } = useTranslation();
+  // isAuthenticated() is the synchronous, client-side check: do we have
+  // a non-expired access token (or a refresh token that hasn't elapsed
+  // TESLAHUB_SESSION_DAYS yet)? If yes, render the app shell immediately
+  // — the iPhone home-screen icon opens straight into the dashboard, no
+  // "Connecting…" splash, no /api/auth/refresh round-trip required.
   const [authState, setAuthState] = useState<'checking' | 'ok' | 'denied'>(
     isAuthenticated() ? 'ok' : 'checking'
   );
@@ -64,6 +69,8 @@ function ProtectedRoute() {
     if (authState !== 'checking') return;
     let cancelled = false;
 
+    // No usable local session — try the HttpOnly refresh cookie path
+    // (classic browser sessions). If that fails we go to /login.
     tryInitialRefresh().then((success) => {
       if (!cancelled) setAuthState(success ? 'ok' : 'denied');
     });

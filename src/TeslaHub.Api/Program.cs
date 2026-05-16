@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using TeslaHub.Api.Auth;
@@ -9,6 +10,22 @@ using TeslaHub.Api.Services;
 using TeslaHub.Api.TeslaMate;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Honor X-Forwarded-* headers set by the upstream reverse proxy (Caddy in
+// the bundled compose stack, Cloudflare / nginx in custom deployments). We
+// need this so:
+//   * Request.IsHttps reflects the real client scheme — used to decide
+//     whether the auth refresh cookie should be flagged Secure.
+//   * Connection.RemoteIpAddress reflects the real client IP — used by
+//     the login rate-limiter and the optional IP allow-list.
+// KnownNetworks / KnownProxies are cleared because the proxy hop happens
+// inside the docker bridge network and its address is not predictable.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 var tmHost = builder.Configuration["TM_DB_HOST"] ?? "localhost";
 var tmPort = builder.Configuration["TM_DB_PORT"] ?? "5432";
@@ -187,6 +204,11 @@ using (var scope = app.Services.CreateScope())
         await authService.EnsureAdminUserAsync(adminUser, adminPass);
     }
 }
+
+// MUST run before any middleware that reads Request.IsHttps,
+// Request.Scheme or Connection.RemoteIpAddress (notably IpFilterMiddleware
+// and AuthEndpoints' cookie writer).
+app.UseForwardedHeaders();
 
 app.UseMiddleware<IpFilterMiddleware>();
 app.UseCors();

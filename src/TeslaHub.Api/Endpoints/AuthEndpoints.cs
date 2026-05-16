@@ -35,13 +35,13 @@ public static class AuthEndpoints
             var result = await auth.LoginAsync(request.Username, request.Password);
             if (result == null)
             {
-                var newCount = _loginAttempts.AddOrUpdate(ip,
+                _loginAttempts.AddOrUpdate(ip,
                     _ => (1, DateTime.UtcNow + GetLockoutDuration(1)),
                     (_, existing) =>
                     {
                         var c = existing.Count + 1;
                         return (c, DateTime.UtcNow + GetLockoutDuration(c));
-                    }).Count;
+                    });
 
                 return Results.Unauthorized();
             }
@@ -50,30 +50,56 @@ public static class AuthEndpoints
 
             SetRefreshCookie(ctx, result.RefreshToken, result.RefreshExpiresInDays);
 
-            return Results.Ok(new { result.AccessToken, result.ExpiresIn });
+            // refreshToken is also returned in the response body so the
+            // frontend can persist it in localStorage. This is the path that
+            // actually works in iOS Safari standalone PWA (cookies set in
+            // Safari are NOT visible to the home-screen-installed app), and
+            // on HTTP-only deployments (Tailscale) where Secure cookies
+            // would be dropped by the browser entirely.
+            return Results.Ok(new
+            {
+                result.AccessToken,
+                result.RefreshToken,
+                result.ExpiresIn,
+                result.RefreshExpiresInDays,
+            });
         }).AllowAnonymous();
 
-        group.MapPost("/refresh", (HttpContext ctx, AuthService auth) =>
+        group.MapPost("/refresh", (RefreshRequest? body, HttpContext ctx, AuthService auth) =>
         {
-            var refreshToken = ctx.Request.Cookies[RefreshCookieName];
+            // Accept the refresh token from either the request body (PWA /
+            // cross-origin / HTTP deployments) or the HttpOnly cookie
+            // (classic same-origin browser session). Body wins when both
+            // are present so a freshly-rotated client token always takes
+            // precedence over a stale cookie.
+            var refreshToken = !string.IsNullOrWhiteSpace(body?.RefreshToken)
+                ? body!.RefreshToken
+                : ctx.Request.Cookies[RefreshCookieName];
+
             if (string.IsNullOrEmpty(refreshToken))
                 return Results.Unauthorized();
 
             var result = auth.RefreshToken(refreshToken);
             if (result == null)
             {
-                ctx.Response.Cookies.Delete(RefreshCookieName);
+                ctx.Response.Cookies.Delete(RefreshCookieName, BuildCookieOptions(ctx));
                 return Results.Unauthorized();
             }
 
             SetRefreshCookie(ctx, result.RefreshToken, result.RefreshExpiresInDays);
 
-            return Results.Ok(new { result.AccessToken, result.ExpiresIn });
+            return Results.Ok(new
+            {
+                result.AccessToken,
+                result.RefreshToken,
+                result.ExpiresIn,
+                result.RefreshExpiresInDays,
+            });
         }).AllowAnonymous();
 
         group.MapPost("/logout", (HttpContext ctx) =>
         {
-            ctx.Response.Cookies.Delete(RefreshCookieName);
+            ctx.Response.Cookies.Delete(RefreshCookieName, BuildCookieOptions(ctx));
             return Results.Ok();
         }).AllowAnonymous();
 
@@ -96,13 +122,32 @@ public static class AuthEndpoints
 
     private static void SetRefreshCookie(HttpContext ctx, string token, int expiresInDays)
     {
-        ctx.Response.Cookies.Append(RefreshCookieName, token, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Lax,
-            Path = "/api/auth",
-            MaxAge = TimeSpan.FromDays(expiresInDays)
-        });
+        var options = BuildCookieOptions(ctx);
+        options.MaxAge = TimeSpan.FromDays(expiresInDays);
+        options.Expires = DateTimeOffset.UtcNow.AddDays(expiresInDays);
+
+        ctx.Response.Cookies.Append(RefreshCookieName, token, options);
     }
+
+    private static CookieOptions BuildCookieOptions(HttpContext ctx) => new()
+    {
+        HttpOnly = true,
+
+        // Secure is only meaningful — and only valid — on HTTPS. Forcing it
+        // to true breaks every HTTP deployment (notably http://*.ts.net
+        // over Tailscale and bare LAN access) because the browser silently
+        // drops the cookie. We rely on ForwardedHeaders being enabled in
+        // Program.cs so Request.IsHttps reflects the real client scheme
+        // when the API sits behind Caddy / Cloudflare.
+        Secure = ctx.Request.IsHttps,
+
+        // Lax is the correct trade-off here: the cookie travels on the
+        // top-level navigation that loads the SPA and on the same-site
+        // POST /api/auth/refresh issued by the SPA, but never on truly
+        // cross-site requests. We deliberately do not use SameSite=None
+        // because that would force Secure=true and break HTTP setups.
+        SameSite = SameSiteMode.Lax,
+
+        Path = "/api/auth",
+    };
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { getStoredAccessToken } from '../api/client';
 
 export interface LiveStreamData {
   speed: number | null;
@@ -62,7 +63,7 @@ export function useLiveStream(carId: number | undefined, enabled = true) {
         sourceRef.current.close();
       }
 
-      const token = localStorage.getItem('teslahub_token');
+      const token = getStoredAccessToken();
       const url = `/api/vehicle/${carId}/live-stream${token ? `?access_token=${encodeURIComponent(token)}` : ''}`;
       const source = new EventSource(url);
       sourceRef.current = source;

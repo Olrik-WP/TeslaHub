@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSettings, getChargingLocations, getCarImageInfo } from '../api/queries';
 import { useUnits } from '../hooks/useUnits';
-import { api, logout } from '../api/client';
+import { api, getStoredAccessToken, logout } from '../api/client';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES } from '../i18n';
@@ -199,7 +199,7 @@ export default function Settings({ carId }: Props) {
       const formData = new FormData();
       formData.append('file', file);
 
-      const token = localStorage.getItem('teslahub_token');
+      const token = getStoredAccessToken();
       await fetch(`/api/vehicle/${carId}/image/upload`, {
         method: 'POST',
         credentials: 'include',
