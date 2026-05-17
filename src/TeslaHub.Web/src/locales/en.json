@@ -386,7 +386,9 @@
     "teslaCost": "Tesla cost",
     "savings": "Savings",
     "savingsNegative": "Overcost",
-    "configureGas": "Enter fuel price and consumption to see savings."
+    "configureGas": "Enter fuel price and consumption to see savings.",
+    "fleetTotal": "Fleet total",
+    "vehicles": "vehicles"
   },
   "trips": {
     "title": "Trips",

@@ -227,7 +227,12 @@ export default function MapLibreMap({
 }: MapLibreMapProps) {
   const { t } = useTranslation();
   const mapRef = useRef<MapRef>(null);
-  const prevCount = useRef(0);
+  // Signature of the last route we auto-fit on (first+last coord +
+  // length). length-only dedup would incorrectly skip a fit when the
+  // user navigates from drive #A to drive #B and both happen to have
+  // the same sampled-point count — comparing actual coordinates makes
+  // every distinct trajectory re-trigger the camera.
+  const lastFitSig = useRef<string>('');
   const { styleUrl, pitch, bearing, is3D } = useMapStyle();
   const [popupInfo, setPopupInfo] = useState<ChargeMarker | null>(null);
   const [chargerPopup, setChargerPopup] = useState<PublicCharger | null>(null);
@@ -394,26 +399,57 @@ export default function MapLibreMap({
         ? routePoints[routePoints.length - 1]
         : ([48.8566, 2.3522] as [number, number]);
 
-  // Auto-fit on route changes — disabled in live-follow mode (the live effect handles the camera).
+  // Auto-fit on route changes — disabled in live-follow mode (the live
+  // effect handles the camera).
+  //
+  // Three failure modes the previous version had:
+  //   1) `mapReady` was not in the deps, so when routePoints arrived
+  //      AFTER the map was ready but the effect ran BEFORE (with
+  //      mapRef.current?.getMap() returning null), the early-return
+  //      stuck the camera on the initialViewState fallback (Paris).
+  //   2) The legacy fit logic also lived inside handleLoad — but
+  //      MapLibre attaches the load listener once at mount, so the
+  //      handleLoad closure captured routePoints=[] and never refit
+  //      after the drive-positions query resolved.
+  //   3) Length-based dedup skipped a fit when switching between two
+  //      drives with the same sampled count.
+  // The combined effect below replaces both paths.
   useEffect(() => {
     if (followLive) return;
+    if (!mapReady) return;
+    if (routePoints.length === 0) return;
     const map = mapRef.current?.getMap();
-    if (!map || routePoints.length === 0) return;
-    if (routePoints.length === prevCount.current) return;
-    prevCount.current = routePoints.length;
+    if (!map) return;
+
+    const first = routePoints[0];
+    const last = routePoints[routePoints.length - 1];
+    const sig = `${first[0].toFixed(5)},${first[1].toFixed(5)}|${last[0].toFixed(5)},${last[1].toFixed(5)}|${routePoints.length}`;
+    if (lastFitSig.current === sig) return;
+    lastFitSig.current = sig;
 
     if (routePoints.length === 1) {
-      map.flyTo({ center: [routePoints[0][1], routePoints[0][0]], zoom: 16 });
-    } else {
-      const lngs = routePoints.map((p) => p[1]);
-      const lats = routePoints.map((p) => p[0]);
-      const bounds: LngLatBoundsLike = [
-        [Math.min(...lngs), Math.min(...lats)],
-        [Math.max(...lngs), Math.max(...lats)],
-      ];
-      map.fitBounds(bounds, { padding: 40, maxZoom: 15 });
+      map.flyTo({
+        center: [routePoints[0][1], routePoints[0][0]],
+        zoom: 16,
+        duration: 1200,
+        essential: true,
+      });
+      return;
     }
-  }, [routePoints, followLive]);
+
+    const lngs = routePoints.map((p) => p[1]);
+    const lats = routePoints.map((p) => p[0]);
+    const bounds: LngLatBoundsLike = [
+      [Math.min(...lngs), Math.min(...lats)],
+      [Math.max(...lngs), Math.max(...lats)],
+    ];
+    map.fitBounds(bounds, {
+      padding: 60,
+      maxZoom: 15,
+      duration: 1500,
+      essential: true,
+    });
+  }, [routePoints, followLive, mapReady]);
 
   // Track whether the most recent camera move came from our follow effect, so
   // we can ignore it when watching for user-initiated interactions.
@@ -523,33 +559,20 @@ export default function MapLibreMap({
 
   const handleLoad = useCallback(() => {
     setMapReady(true);
+    // Only handle the live-follow snap here — it MUST happen
+    // synchronously inside the load tick so the subsequent live-follow
+    // easeTo doesn't fight an in-progress flyTo animation. Route fitting
+    // for historical drives is handled by the auto-fit effect above,
+    // which now correctly waits for `mapReady`.
     const map = mapRef.current?.getMap();
     if (!map) return;
-
     if (followLive && livePosition?.latitude != null && livePosition?.longitude != null) {
-      // Use jumpTo (instant) instead of flyTo so the live-follow easeTo that
-      // fires on the same tick can take over cleanly without fighting an
-      // in-progress fly animation.
       map.jumpTo({
         center: [livePosition.longitude, livePosition.latitude],
         zoom: 15,
       });
-      return;
     }
-
-    if (routePoints.length === 1) {
-      map.flyTo({ center: [routePoints[0][1], routePoints[0][0]], zoom: 16 });
-    } else if (routePoints.length > 1) {
-      const lngs = routePoints.map((p) => p[1]);
-      const lats = routePoints.map((p) => p[0]);
-      const bounds: LngLatBoundsLike = [
-        [Math.min(...lngs), Math.min(...lats)],
-        [Math.max(...lngs), Math.max(...lats)],
-      ];
-      map.fitBounds(bounds, { padding: 40, maxZoom: 15 });
-    }
-    prevCount.current = routePoints.length;
-  }, [routePoints, followLive, livePosition?.latitude, livePosition?.longitude]);
+  }, [followLive, livePosition?.latitude, livePosition?.longitude]);
 
   return (
     <div className="relative w-full h-full">

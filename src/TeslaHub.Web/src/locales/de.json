@@ -386,7 +386,9 @@
     "teslaCost": "Tesla-Kosten",
     "savings": "Ersparnis",
     "savingsNegative": "Mehrkosten",
-    "configureGas": "Geben Sie Kraftstoffpreis und Verbrauch ein, um die Ersparnis zu sehen."
+    "configureGas": "Geben Sie Kraftstoffpreis und Verbrauch ein, um die Ersparnis zu sehen.",
+    "fleetTotal": "Flotte gesamt",
+    "vehicles": "Fahrzeuge"
   },
   "trips": {
     "title": "Fahrten",

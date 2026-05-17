@@ -386,7 +386,9 @@
     "teslaCost": "Coût Tesla",
     "savings": "Économies",
     "savingsNegative": "Surcoût",
-    "configureGas": "Renseignez le prix du carburant et la consommation pour voir les économies."
+    "configureGas": "Renseignez le prix du carburant et la consommation pour voir les économies.",
+    "fleetTotal": "Total flotte",
+    "vehicles": "véhicules"
   },
   "trips": {
     "title": "Trajets",

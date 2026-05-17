@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getCostSummary, getCostOverrides, getSettings, getTeslaMateCostSummary, getTeslaMateMonthlyTrend, getCarConfig, updateCarConfig } from '../api/queries';
+import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query';
+import { getCostSummary, getCostOverrides, getSettings, getTeslaMateCostSummary, getTeslaMateMonthlyTrend, getCarConfig, updateCarConfig, type CostSummary } from '../api/queries';
+import { useCars } from '../hooks/useVehicle';
 import { useUnits } from '../hooks/useUnits';
 import { utcDate } from '../utils/date';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
@@ -74,17 +75,74 @@ export default function Costs({ carId }: Props) {
     staleTime: 5 * 60_000,
   });
 
+  // ── Fleet recap ────────────────────────────────────────────────────────
+  // Parallel per-car cost summaries so the fleet card on top of the page
+  // can show a true total across all vehicles. Only enabled when the user
+  // actually has more than one TeslaMate car — single-car users see no
+  // extra UI. Same `queryFn` and same params as the selected-car summary
+  // above, so react-query dedupes the request for the currently selected
+  // car (no double fetch).
+  const { data: cars } = useCars();
+  const carQueries = useQueries({
+    queries: (cars ?? []).map((car) => ({
+      queryKey: [
+        isTeslaHub ? 'costSummary' : 'tmCostSummary',
+        car.id, periodMode, year, month, day, customFrom, customTo,
+      ],
+      queryFn: () => {
+        if (periodMode === 'day' || periodMode === 'week') {
+          return queryFn(car.id, periodMode);
+        }
+        if (periodMode === 'custom') {
+          return queryFn(car.id, 'custom', undefined, undefined, customFrom, customTo);
+        }
+        return queryFn(car.id, periodMode, year, periodMode === 'all' ? undefined : month);
+      },
+      enabled: (cars?.length ?? 0) > 1,
+    })),
+  });
+  const fleetSummaries: { carId: number; name: string; summary: CostSummary | undefined }[] = (cars ?? []).map((car, i) => ({
+    carId: car.id,
+    name: car.name || car.marketingName || `Tesla #${car.id}`,
+    summary: carQueries[i]?.data,
+  }));
+  const fleetTotalCost = fleetSummaries.reduce((s, c) => s + (c.summary?.totalCost ?? 0), 0);
+  const fleetTotalKwh = fleetSummaries.reduce((s, c) => s + (c.summary?.totalKwh ?? 0), 0);
+  const fleetTotalDist = fleetSummaries.reduce((s, c) => s + (c.summary?.totalDistanceKm ?? 0), 0);
+  const fleetSessions = fleetSummaries.reduce((s, c) => s + (c.summary?.sessionCount ?? 0), 0);
+
   const [gasPrice, setGasPrice] = useState<string>('');
   const [gasConso, setGasConso] = useState<string>('');
   const [gasName, setGasName] = useState<string>('');
   const [showGasSetup, setShowGasSetup] = useState(false);
 
+  // Re-seed the three gas inputs whenever the cached carConfig changes.
+  // Critical when the user switches cars from the CarSelector: react-query
+  // hands us a fresh carConfig (different gasPrice/gasConso/gasName per
+  // vehicle), but the form inputs are now controlled by these state vars,
+  // so without this effect they'd keep the previous car's values until
+  // the user edits them manually. Also covers post-save re-fetches
+  // (carConfig comes back identical → setState is a no-op).
+  useEffect(() => {
+    if (carConfig) {
+      setGasPrice(carConfig.gasPricePerLiter != null ? String(carConfig.gasPricePerLiter) : '');
+      setGasConso(carConfig.gasConsumptionLPer100Km != null ? String(carConfig.gasConsumptionLPer100Km) : '');
+      setGasName(carConfig.gasVehicleName ?? '');
+    } else {
+      setGasPrice('');
+      setGasConso('');
+      setGasName('');
+    }
+  }, [carConfig, carId]);
+
   const gasConfigLoaded = carConfig != null;
   const hasGasConfig = carConfig?.gasPricePerLiter != null && carConfig?.gasConsumptionLPer100Km != null;
 
-  const effectiveGasPrice = gasPrice !== '' ? parseFloat(gasPrice) : (carConfig?.gasPricePerLiter ?? NaN);
-  const effectiveGasConso = gasConso !== '' ? parseFloat(gasConso) : (carConfig?.gasConsumptionLPer100Km ?? NaN);
-  const effectiveGasName = gasName !== '' ? gasName : (carConfig?.gasVehicleName ?? '');
+  // States are kept in sync with carConfig, so they ARE the source of
+  // truth here — no need to fall back to carConfig.* anymore.
+  const effectiveGasPrice = gasPrice !== '' ? parseFloat(gasPrice) : NaN;
+  const effectiveGasConso = gasConso !== '' ? parseFloat(gasConso) : NaN;
+  const effectiveGasName = gasName;
 
   const totalDist = summary?.totalDistanceKm ?? 0;
   const teslaCost = summary?.totalCost ?? 0;
@@ -236,6 +294,54 @@ export default function Costs({ carId }: Props) {
         </div>
       )}
 
+      {/* Fleet recap — only when the install has more than one car. */}
+      {(cars?.length ?? 0) > 1 && (
+        <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('costs.fleetTotal')}</div>
+            <div className="text-[10px] text-[#6b7280]">{cars?.length ?? 0} {t('costs.vehicles')}</div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <StatCard label={t('costs.totalCost')} value={fleetTotalCost.toFixed(2)} unit={u.currencySymbol} accent />
+            <StatCard label={t('costs.sessions')} value={fleetSessions} />
+            <StatCard label={t('costs.totalKwh')} value={fleetTotalKwh > 0 ? fleetTotalKwh.toFixed(1) : '—'} unit="kWh" color="#eab308" />
+            <StatCard
+              label={t('costs.distance')}
+              value={fleetTotalDist > 0 ? u.fmtDist(fleetTotalDist, 0) : '—'}
+              unit={u.distanceUnit}
+              color="#3b82f6"
+            />
+          </div>
+          {/* Per-car breakdown so the user can compare contribution at a glance. */}
+          <div className="space-y-1.5">
+            {fleetSummaries.map(({ carId: cId, name, summary: s }) => {
+              const cost = s?.totalCost ?? 0;
+              const share = fleetTotalCost > 0 ? (cost / fleetTotalCost) * 100 : 0;
+              const isActive = cId === carId;
+              return (
+                <div key={cId} className="flex items-center gap-3">
+                  <span className={`text-xs truncate min-w-0 flex-1 ${isActive ? 'text-white font-medium' : 'text-[#9ca3af]'}`}>
+                    {name}
+                  </span>
+                  <div className="flex-1 h-2 rounded-full bg-[#1a1a1a] overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${share}%`,
+                        backgroundColor: isActive ? '#e31937' : '#3b82f6',
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs tabular-nums text-[#e0e0e0] w-20 text-right">
+                    {cost.toFixed(2)} {u.currencySymbol}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Stats cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         <StatCard label={t('costs.totalCost')} value={summary ? summary.totalCost.toFixed(2) : '—'} unit={u.currencySymbol} accent />
@@ -258,7 +364,7 @@ export default function Costs({ carId }: Props) {
               <input
                 type="text"
                 placeholder={t('costs.gasVehiclePlaceholder')}
-                defaultValue={carConfig?.gasVehicleName ?? ''}
+                value={gasName}
                 onChange={(e) => setGasName(e.target.value)}
                 onBlur={saveGasConfig}
                 className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px]"
@@ -270,7 +376,7 @@ export default function Costs({ carId }: Props) {
                 type="number"
                 step="0.01"
                 placeholder="1.85"
-                defaultValue={carConfig?.gasPricePerLiter ?? ''}
+                value={gasPrice}
                 onChange={(e) => setGasPrice(e.target.value)}
                 onBlur={saveGasConfig}
                 className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px]"
@@ -282,7 +388,7 @@ export default function Costs({ carId }: Props) {
                 type="number"
                 step="0.1"
                 placeholder="7.0"
-                defaultValue={carConfig?.gasConsumptionLPer100Km ?? ''}
+                value={gasConso}
                 onChange={(e) => setGasConso(e.target.value)}
                 onBlur={saveGasConfig}
                 className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-sm focus:border-[#e31937] focus:outline-none min-h-[40px]"
