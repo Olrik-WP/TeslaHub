@@ -102,6 +102,12 @@ public static class VehicleEndpoints
             ClimateKeeperMode = live?.ClimateKeeperMode ?? vehicle.ClimateKeeperMode,
             IsPreconditioning = live?.IsPreconditioning ?? vehicle.IsPreconditioning,
             IsClimateOn = live?.IsClimateOn ?? vehicle.IsClimateOn,
+            // Defrosters: only set by OverlayFromFleetSnapshot (TeslaMate
+            // doesn't publish them on MQTT), so the ?? falls through to
+            // the persisted DB value on every car that hasn't had a
+            // recent Fleet refresh yet — backwards-compatible.
+            IsFrontDefrosterOn = live?.IsFrontDefrosterOn ?? vehicle.IsFrontDefrosterOn,
+            IsRearDefrosterOn = live?.IsRearDefrosterOn ?? vehicle.IsRearDefrosterOn,
             ChargePortDoorOpen = live?.ChargePortDoorOpen ?? vehicle.ChargePortDoorOpen,
             PluggedIn = live?.PluggedIn ?? vehicle.PluggedIn,
             BatteryLevel = live?.BatteryLevel ?? vehicle.BatteryLevel,

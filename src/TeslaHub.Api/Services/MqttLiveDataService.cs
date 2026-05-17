@@ -31,6 +31,15 @@ public class MqttLiveData
     public string? ClimateKeeperMode { get; set; }
     public bool? IsPreconditioning { get; set; }
     public bool? IsClimateOn { get; set; }
+    // Front / rear defrosters: TeslaMate stores these in the `positions`
+    // table but does NOT publish them on its MQTT topics, so the only
+    // way they show up here is via OverlayFromFleetSnapshot below. The
+    // Home page derives `defrostActive` from these two booleans, so we
+    // need them in the merged VehicleStatus or the "Dégivrage" quick-
+    // action button would flicker back to off the moment the Fleet
+    // force-refresh re-runs (which invalidates the ['vehicle'] cache).
+    public bool? IsFrontDefrosterOn { get; set; }
+    public bool? IsRearDefrosterOn { get; set; }
     public bool? ChargePortDoorOpen { get; set; }
     public bool? PluggedIn { get; set; }
 
@@ -130,6 +139,233 @@ public class MqttLiveDataService : BackgroundService
     public MqttLiveData? GetLiveData(int carId)
     {
         return _liveData.TryGetValue(carId, out var data) ? data : null;
+    }
+
+    /// <summary>
+    /// Overlay the live cache with fields parsed from a fresh Fleet API
+    /// <c>vehicle_data</c> response. Tesla command endpoints return only
+    /// <c>{ result: true }</c> — they never echo the post-command state.
+    /// After we force a <c>vehicle_data</c> refresh, this method projects
+    /// the new <c>vehicle_state</c> / <c>climate_state</c> / <c>charge_state</c>
+    /// blobs onto <see cref="MqttLiveData"/> so the Home page reflects the
+    /// command result immediately, without waiting for TeslaMate's next
+    /// Owner-API poll (which can lag 30-60s).
+    /// </summary>
+    /// <remarks>
+    /// JSON keys follow the Fleet API contract documented at
+    /// https://developer.tesla.com/docs/fleet-api/endpoints/vehicle-endpoints#vehicle-data
+    /// — any field we don't recognise is silently ignored to stay forward
+    /// compatible with Tesla's habit of adding fields without notice.
+    /// </remarks>
+    public void OverlayFromFleetSnapshot(
+        int carId,
+        string? vehicleStateJson,
+        string? climateStateJson,
+        string? chargeStateJson)
+    {
+        var data = _liveData.GetOrAdd(carId, _ => new MqttLiveData());
+        var changed = false;
+
+        if (!string.IsNullOrWhiteSpace(vehicleStateJson))
+            changed |= ApplyVehicleState(data, vehicleStateJson);
+        if (!string.IsNullOrWhiteSpace(climateStateJson))
+            changed |= ApplyClimateState(data, climateStateJson);
+        if (!string.IsNullOrWhiteSpace(chargeStateJson))
+            changed |= ApplyChargeState(data, chargeStateJson);
+
+        if (!changed) return;
+
+        data.LastUpdated = DateTime.UtcNow;
+        OnLiveDataChanged?.Invoke(carId, data);
+    }
+
+    private static bool ApplyVehicleState(MqttLiveData data, string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return false;
+
+            var changed = false;
+            changed |= AssignBool(root, "locked", v => data.Locked = v);
+            changed |= AssignBool(root, "sentry_mode", v => data.SentryMode = v);
+            changed |= AssignBool(root, "is_user_present", v => data.IsUserPresent = v);
+
+            // Door sensors: Fleet API exposes them as integers (0/1) per corner.
+            var df = TryGetInt(root, "df");
+            var dr = TryGetInt(root, "dr");
+            var pf = TryGetInt(root, "pf");
+            var pr = TryGetInt(root, "pr");
+            if (df.HasValue) { data.DriverFrontDoorOpen = df.Value != 0; changed = true; }
+            if (dr.HasValue) { data.DriverRearDoorOpen = dr.Value != 0; changed = true; }
+            if (pf.HasValue) { data.PassengerFrontDoorOpen = pf.Value != 0; changed = true; }
+            if (pr.HasValue) { data.PassengerRearDoorOpen = pr.Value != 0; changed = true; }
+            if (df.HasValue && dr.HasValue && pf.HasValue && pr.HasValue)
+            {
+                data.DoorsOpen = (df.Value | dr.Value | pf.Value | pr.Value) != 0;
+                changed = true;
+            }
+
+            var trunk = TryGetInt(root, "rt");
+            var frunk = TryGetInt(root, "ft");
+            if (trunk.HasValue) { data.TrunkOpen = trunk.Value != 0; changed = true; }
+            if (frunk.HasValue) { data.FrunkOpen = frunk.Value != 0; changed = true; }
+
+            // Windows: fd_window / fp_window / rd_window / rp_window are 0=closed, 1=open.
+            var fdw = TryGetInt(root, "fd_window");
+            var fpw = TryGetInt(root, "fp_window");
+            var rdw = TryGetInt(root, "rd_window");
+            var rpw = TryGetInt(root, "rp_window");
+            if (fdw.HasValue || fpw.HasValue || rdw.HasValue || rpw.HasValue)
+            {
+                data.WindowsOpen = (fdw ?? 0) + (fpw ?? 0) + (rdw ?? 0) + (rpw ?? 0) > 0;
+                changed = true;
+            }
+
+            var odo = TryGetDouble(root, "odometer");
+            if (odo.HasValue)
+            {
+                // Fleet API reports miles → TeslaMate uses kilometres in cache.
+                data.Odometer = odo.Value * 1.609344;
+                changed = true;
+            }
+
+            return changed;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool ApplyClimateState(MqttLiveData data, string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return false;
+
+            var changed = false;
+            changed |= AssignBool(root, "is_climate_on", v => data.IsClimateOn = v);
+            changed |= AssignBool(root, "is_preconditioning", v => data.IsPreconditioning = v);
+            changed |= AssignBool(root, "is_front_defroster_on", v => data.IsFrontDefrosterOn = v);
+            changed |= AssignBool(root, "is_rear_defroster_on", v => data.IsRearDefrosterOn = v);
+            changed |= AssignDouble(root, "driver_temp_setting", v => data.DriverTempSetting = v);
+            changed |= AssignDouble(root, "passenger_temp_setting", v => data.PassengerTempSetting = v);
+            changed |= AssignDouble(root, "inside_temp", v => data.InsideTemp = v);
+            changed |= AssignDouble(root, "outside_temp", v => data.OutsideTemp = v);
+
+            if (root.TryGetProperty("climate_keeper_mode", out var keeper) && keeper.ValueKind == JsonValueKind.String)
+            {
+                data.ClimateKeeperMode = keeper.GetString();
+                changed = true;
+            }
+
+            // Max-defrost (set_preconditioning_max) drives `defrost_mode`:
+            // 0 = off, 2 = max. When the Fleet payload doesn't include
+            // the per-defroster booleans (older firmwares) we derive both
+            // sides from defrost_mode so the Home "Dégivrage" pill still
+            // reflects truth after the 5s force-refresh.
+            var defrostMode = TryGetInt(root, "defrost_mode");
+            if (defrostMode.HasValue)
+            {
+                if (data.IsFrontDefrosterOn is null) data.IsFrontDefrosterOn = defrostMode.Value != 0;
+                if (data.IsRearDefrosterOn is null) data.IsRearDefrosterOn = defrostMode.Value != 0;
+                changed = true;
+            }
+            return changed;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool ApplyChargeState(MqttLiveData data, string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return false;
+
+            var changed = false;
+            changed |= AssignBool(root, "charge_port_door_open", v => data.ChargePortDoorOpen = v);
+
+            // PluggedIn is derived: Fleet API doesn't expose a single boolean,
+            // but charging_state ∈ {Charging, Stopped, Complete, NoPower, Starting}
+            // implies plugged in; "Disconnected" implies unplugged.
+            if (root.TryGetProperty("charging_state", out var cs) && cs.ValueKind == JsonValueKind.String)
+            {
+                var state = cs.GetString();
+                data.ChargingState = state;
+                data.PluggedIn = !string.Equals(state, "Disconnected", StringComparison.OrdinalIgnoreCase);
+                changed = true;
+            }
+
+            changed |= AssignInt(root, "battery_level", v => data.BatteryLevel = v);
+            changed |= AssignInt(root, "usable_battery_level", v => data.UsableBatteryLevel = v);
+            changed |= AssignInt(root, "charger_voltage", v => data.ChargerVoltage = v);
+            changed |= AssignInt(root, "charge_limit_soc", v => data.ChargeLimitSoc = v);
+            changed |= AssignDouble(root, "charger_power", v => data.ChargerPower = v);
+            changed |= AssignDouble(root, "charger_actual_current", v => data.ChargerActualCurrent = v);
+            changed |= AssignDouble(root, "charge_energy_added", v => data.ChargeEnergyAdded = v);
+            changed |= AssignDouble(root, "time_to_full_charge", v => data.TimeToFullCharge = v);
+
+            // Fleet API reports range in miles → cache stores km.
+            var rated = TryGetDouble(root, "battery_range");
+            if (rated.HasValue) { data.RatedBatteryRangeKm = rated.Value * 1.609344; changed = true; }
+            var ideal = TryGetDouble(root, "ideal_battery_range");
+            if (ideal.HasValue) { data.IdealBatteryRangeKm = ideal.Value * 1.609344; changed = true; }
+            var est = TryGetDouble(root, "est_battery_range");
+            if (est.HasValue) { data.EstBatteryRangeKm = est.Value * 1.609344; changed = true; }
+
+            return changed;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool AssignBool(JsonElement root, string prop, Action<bool?> set)
+    {
+        if (!root.TryGetProperty(prop, out var el)) return false;
+        switch (el.ValueKind)
+        {
+            case JsonValueKind.True: set(true); return true;
+            case JsonValueKind.False: set(false); return true;
+            default: return false;
+        }
+    }
+
+    private static bool AssignInt(JsonElement root, string prop, Action<int?> set)
+    {
+        var v = TryGetInt(root, prop);
+        if (!v.HasValue) return false;
+        set(v.Value);
+        return true;
+    }
+
+    private static bool AssignDouble(JsonElement root, string prop, Action<double?> set)
+    {
+        var v = TryGetDouble(root, prop);
+        if (!v.HasValue) return false;
+        set(v.Value);
+        return true;
+    }
+
+    private static int? TryGetInt(JsonElement element, string property)
+    {
+        if (!element.TryGetProperty(property, out var prop)) return null;
+        return prop.ValueKind switch
+        {
+            JsonValueKind.Number => prop.TryGetInt32(out var i) ? i : null,
+            JsonValueKind.String when int.TryParse(prop.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var i) => i,
+            _ => null,
+        };
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

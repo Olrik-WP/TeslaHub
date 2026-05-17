@@ -16,6 +16,24 @@ public static class VehicleQueries
             """);
     }
 
+    /// <summary>
+    /// Looks up the TeslaMate <c>cars.id</c> for a given VIN. Returns null
+    /// when TeslaMate hasn't yet ingested that car (rare — VIN matches
+    /// happen on the first sync, but a brand-new TeslaHub install talking
+    /// to a freshly-paired Tesla account may legitimately race here).
+    /// Used to bridge Fleet API responses back into the TeslaMate live
+    /// data cache so the Home page reflects commands instantly without
+    /// waiting on the next TeslaMate Owner-API poll.
+    /// </summary>
+    public static async Task<int?> GetCarIdByVinAsync(this TeslaMateConnectionFactory db, string vin)
+    {
+        if (string.IsNullOrWhiteSpace(vin)) return null;
+        using var conn = db.CreateConnection();
+        return await conn.QueryFirstOrDefaultAsync<int?>(
+            "SELECT id FROM cars WHERE upper(vin) = upper(@Vin) LIMIT 1",
+            new { Vin = vin });
+    }
+
     public static async Task<VehicleDto?> GetVehicleStatusAsync(this TeslaMateConnectionFactory db, int carId)
     {
         using var conn = db.CreateConnection();

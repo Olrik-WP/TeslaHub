@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TeslaHub.Api.Data;
 using TeslaHub.Api.Models;
+using TeslaHub.Api.TeslaMate;
 
 namespace TeslaHub.Api.Services;
 
@@ -70,19 +71,30 @@ public sealed class TeslaCommandService
     private readonly TeslaOAuthService _oauth;
     private readonly IHttpClientFactory _httpFactory;
     private readonly ILogger<TeslaCommandService> _logger;
+    private readonly MqttLiveDataService _mqtt;
+    private readonly TeslaMateConnectionFactory _teslaMate;
     private readonly string? _proxyBaseUrl;
+
+    // Cache VIN→TeslaMate carId lookups. The mapping never changes for
+    // the lifetime of the install (TeslaMate creates one row per VIN
+    // forever) and we don't want to hit Postgres on every command.
+    private static readonly ConcurrentDictionary<string, int?> CarIdByVin = new(StringComparer.OrdinalIgnoreCase);
 
     public TeslaCommandService(
         AppDbContext db,
         TeslaOAuthService oauth,
         IHttpClientFactory httpFactory,
         IConfiguration configuration,
-        ILogger<TeslaCommandService> logger)
+        ILogger<TeslaCommandService> logger,
+        MqttLiveDataService mqtt,
+        TeslaMateConnectionFactory teslaMate)
     {
         _db = db;
         _oauth = oauth;
         _httpFactory = httpFactory;
         _logger = logger;
+        _mqtt = mqtt;
+        _teslaMate = teslaMate;
         _proxyBaseUrl = configuration["TESLA_COMMAND_PROXY_URL"];
     }
 
@@ -183,7 +195,55 @@ public sealed class TeslaCommandService
         }
 
         StateCache[vehicleId] = new CachedSnapshot(snapshot, DateTimeOffset.UtcNow.AddSeconds(VehicleDataCacheSeconds));
+
+        // Propagate Fleet API truth to the TeslaMate live-data cache.
+        // TeslaMate's Owner-API poll can lag 30-60s after a command, so
+        // without this step the Home page would keep showing the
+        // pre-command state until the next poll. The overlay is a no-op
+        // when we can't resolve the TeslaMate carId yet (fresh install
+        // before TeslaMate's first sync).
+        await OverlayLiveDataAsync(vehicle, snapshot, cancellationToken);
+
         return snapshot;
+    }
+
+    private async Task OverlayLiveDataAsync(
+        TeslaVehicle vehicle,
+        VehicleStateSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(vehicle.Vin)) return;
+
+        if (!CarIdByVin.TryGetValue(vehicle.Vin, out var carId))
+        {
+            try
+            {
+                carId = await _teslaMate.GetCarIdByVinAsync(vehicle.Vin);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to look up TeslaMate carId for VIN {Vin}", vehicle.Vin);
+                return;
+            }
+            // Only cache positive resolutions — a null result here can
+            // legitimately become non-null after TeslaMate's first sync.
+            if (carId.HasValue) CarIdByVin[vehicle.Vin] = carId;
+        }
+
+        if (!carId.HasValue) return;
+
+        try
+        {
+            _mqtt.OverlayFromFleetSnapshot(
+                carId.Value,
+                snapshot.VehicleStateJson,
+                snapshot.ClimateStateJson,
+                snapshot.ChargeStateJson);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to overlay Fleet snapshot onto MQTT cache for car {CarId}", carId);
+        }
     }
 
     /// <summary>

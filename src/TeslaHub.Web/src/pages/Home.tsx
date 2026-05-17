@@ -1,6 +1,6 @@
 import { useRef, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Map, Marker } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useVehicleStatus } from '../hooks/useVehicle';
@@ -15,6 +15,8 @@ import VehicleTopView from '../components/VehicleTopView';
 import GoToCarSheet from '../components/GoToCarSheet';
 import SecurityAlertsTeaser from '../components/SecurityAlertsTeaser';
 import HomeQuickActions from '../components/HomeQuickActions';
+import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { getStats, getChargingStats, getDriveStats, getSettings, getCostOverrides, getCostSummary, getTeslaMateCostSummary, getCarConfig } from '../api/queries';
 import type { VehicleStatus } from '../api/queries';
 import { useTranslation } from 'react-i18next';
@@ -246,9 +248,19 @@ export default function Home({ carId }: Props) {
     return () => clearInterval(id);
   }, [tripInProgress]);
 
+  // Native pull-to-refresh on mobile (and trackpad two-finger pull on
+  // some laptops). Refetches every active query for the current car so
+  // the user has a manual escape hatch when the TeslaMate MQTT cache is
+  // lagging behind a Fleet API command they just sent.
+  const qc = useQueryClient();
+  const ptr = usePullToRefresh(async () => {
+    await qc.refetchQueries({ type: 'active' });
+  });
+
   if (!vehicle) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
+        <PullToRefreshIndicator state={ptr} />
         <div className="text-[#9ca3af] text-lg">{t('home.loadingVehicle')}</div>
       </div>
     );
@@ -256,6 +268,7 @@ export default function Home({ carId }: Props) {
 
   return (
     <div className="p-4 space-y-4">
+      <PullToRefreshIndicator state={ptr} />
       <div className="-mx-4">
         <SecurityAlertsTeaser />
       </div>

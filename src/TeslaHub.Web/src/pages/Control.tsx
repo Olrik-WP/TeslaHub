@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useControlAvailability,
   useVehicleState,
@@ -8,6 +9,7 @@ import {
   useWakeVehicle,
 } from '../hooks/useVehicleControl';
 import { useVehicleStatus } from '../hooks/useVehicle';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import ClimateCard from '../components/control/ClimateCard';
 import ChargeCard from '../components/control/ChargeCard';
 import AccessCard from '../components/control/AccessCard';
@@ -15,6 +17,7 @@ import OpeningsCard from '../components/control/OpeningsCard';
 import MediaCard from '../components/control/MediaCard';
 import SoftwareCard from '../components/control/SoftwareCard';
 import RefreshIndicator from '../components/RefreshIndicator';
+import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import ControlVehicleSwitcher from '../components/control/ControlVehicleSwitcher';
 
 interface Props {
@@ -74,6 +77,19 @@ export default function Control({ carId, onCarChange }: Props) {
   const refresh = useRefreshVehicleState();
   const wake = useWakeVehicle(vehicleId);
 
+  // Pull-to-refresh: force a Fleet API snapshot AND refetch every
+  // active query for this car. Mirrors the explicit "Refresh" button
+  // behaviour at the top of the page so mobile users have a gesture
+  // matching what Chrome / Safari natively expose.
+  const qc = useQueryClient();
+  const ptr = usePullToRefresh(async () => {
+    const tasks: Promise<unknown>[] = [qc.refetchQueries({ type: 'active' })];
+    if (vehicleId) {
+      tasks.push(refresh.mutateAsync(vehicleId).catch(() => undefined));
+    }
+    await Promise.all(tasks);
+  });
+
   if (availLoading) {
     return <div className="p-4 text-sm text-[#9ca3af]">{t('control.loading')}</div>;
   }
@@ -115,6 +131,7 @@ export default function Control({ carId, onCarChange }: Props) {
 
   return (
     <div className="px-3 sm:px-4 pt-3 max-w-2xl mx-auto">
+      <PullToRefreshIndicator state={ptr} />
       {/* Sticky header.
           NOTE: the previous version used `bg-…/95 backdrop-blur` for a
           frosted-glass look. That combination broke position:sticky

@@ -250,6 +250,20 @@ export function useRefreshCountdown(vehicleId: number | undefined) {
  * Returns the standard react-query mutation plus a `wakingHint` boolean
  * the caller can read to render a transparent "Waking your Tesla…" state.
  */
+/**
+ * Describes an optimistic patch to apply against an unrelated query
+ * (typically the TeslaMate-fed ['vehicle', carId]) the instant a command
+ * is fired, plus the cache invalidations to run once the backend has
+ * actually confirmed it. The mutation auto-rolls back the patch when
+ * the request fails — so the UI never lies about an action that didn't
+ * happen.
+ */
+export interface OptimisticPatch<TBody, TData = unknown> {
+  queryKey: QueryKey;
+  /** Returns the patched cache value. Receive the prev cache and the mutation body. */
+  update: (prev: TData | undefined, body: TBody) => TData | undefined;
+}
+
 export function useControlMutation<TBody = void>(
   vehicleId: number | undefined,
   pathSuffix: string,
@@ -260,13 +274,36 @@ export function useControlMutation<TBody = void>(
     successText?: string;
     /** Suppress the global toast entirely (used by tight-loop mutations like temp +/-). */
     silent?: boolean;
+    /**
+     * One or more cache patches applied the moment the command is sent.
+     * Used by HomeQuickActions to make the lock/climate/charge-port
+     * toggles feel instant: Tesla never echoes the post-command state
+     * (responses are { result: true } only), and TeslaMate's MQTT cache
+     * lags 30-60s, so we patch the local cache immediately and trust the
+     * downstream force-refresh + TeslaMate poll to confirm or correct.
+     * Rolled back automatically on error.
+     *
+     * `any` on the data slot is intentional: TypeScript treats the
+     * `update(prev, body) => prev` callback as contravariant on TData,
+     * so a strongly-typed `OptimisticPatch<TBody, VehicleStatus>` at the
+     * call site would not be assignable to a strongly-typed `unknown`
+     * here. We accept `any` to keep the call site fully typed without
+     * forcing the caller to cast every patch.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    optimistic?: OptimisticPatch<TBody, any>[] | OptimisticPatch<TBody, any>;
   },
 ) {
   const qc = useQueryClient();
   const feedback = useControlFeedback();
   const { t } = useTranslation();
 
-  const mutation = useMutation<CommandResponse, Error, TBody>({
+  const mutation = useMutation<
+    CommandResponse,
+    Error,
+    TBody,
+    { snapshots: { queryKey: QueryKey; prev: unknown }[] }
+  >({
     mutationFn: async (body: TBody) => {
       if (!vehicleId) throw new Error('No vehicle selected');
       const init: RequestInit = { method: 'POST' };
@@ -274,6 +311,24 @@ export function useControlMutation<TBody = void>(
         init.body = JSON.stringify(body);
       }
       return api<CommandResponse>(`/tesla-control/${vehicleId}/${pathSuffix}`, init);
+    },
+    onMutate: async (body) => {
+      const patches = options?.optimistic
+        ? Array.isArray(options.optimistic)
+          ? options.optimistic
+          : [options.optimistic]
+        : [];
+      const snapshots: { queryKey: QueryKey; prev: unknown }[] = [];
+      for (const patch of patches) {
+        // Cancel any in-flight refetch so it can't overwrite our patch.
+        await qc.cancelQueries({ queryKey: patch.queryKey });
+        const prev = qc.getQueryData(patch.queryKey);
+        snapshots.push({ queryKey: patch.queryKey, prev });
+        qc.setQueryData(patch.queryKey, (current: unknown) =>
+          patch.update(current, body),
+        );
+      }
+      return { snapshots };
     },
     onSuccess: (data) => {
       if (vehicleId) {
@@ -290,7 +345,13 @@ export function useControlMutation<TBody = void>(
       const txt = options?.successText ?? t('control.feedback.sent');
       feedback.show('success', data.wokeUp ? `${txt} ${t('control.feedback.wokeNote')}` : txt);
     },
-    onError: (err) => {
+    onError: (err, _body, context) => {
+      // Roll back every optimistic patch. We do this BEFORE the
+      // availability invalidate so the UI snaps back to truth before
+      // the user can perceive the flash.
+      context?.snapshots.forEach(({ queryKey, prev }) => {
+        qc.setQueryData(queryKey, prev);
+      });
       // Re-check availability whenever any command fails. The most
       // common reason we'd want to is "KeyNotPaired" — the backend
       // self-heals TeslaVehicle.KeyPaired=false on detection, so a

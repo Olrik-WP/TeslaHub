@@ -2,9 +2,38 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import ControlButton, { type ControlButtonState } from './control/ControlButton';
-import { capabilitiesLoaded, presumeSupported, useControlAvailability, useControlMutation } from '../hooks/useVehicleControl';
+import {
+  capabilitiesLoaded,
+  presumeSupported,
+  useControlAvailability,
+  useControlMutation,
+  type OptimisticPatch,
+} from '../hooks/useVehicleControl';
 import RefreshIndicator from './RefreshIndicator';
 import type { VehicleStatus } from '../api/queries';
+
+/**
+ * Builds an optimistic patch for the TeslaMate-fed `['vehicle', carId]`
+ * cache. Tesla command endpoints never echo the post-command state
+ * (`{ result: true }` only) and TeslaMate's MQTT cache typically lags
+ * 30-60s, so without this patch the Home UI keeps showing the
+ * pre-command state until the next poll — that's exactly the "I tapped
+ * lock but the icon stayed red" issue we're fixing.
+ *
+ * Patches are rolled back automatically by useControlMutation when the
+ * request fails, and the downstream force-refresh + MQTT overlay (server
+ * side) confirm or correct the value 5s later.
+ */
+function vehiclePatch<TBody = void>(
+  carId: number | undefined,
+  update: (prev: VehicleStatus, body: TBody) => Partial<VehicleStatus>,
+): OptimisticPatch<TBody, VehicleStatus> | undefined {
+  if (!carId) return undefined;
+  return {
+    queryKey: ['vehicle', carId],
+    update: (prev, body) => (prev ? { ...prev, ...update(prev, body) } : prev),
+  };
+}
 
 interface Props {
   vehicle: VehicleStatus | undefined;
@@ -48,21 +77,62 @@ export default function HomeQuickActions({ vehicle }: Props) {
   // We pass vehicleId=0 fallbacks; the buttons themselves are disabled
   // when there is no vehicleId so no command will fire.
   const vehicleId = teslaVehicle?.id;
-  const lock = useControlMutation(vehicleId, 'access/lock');
-  const unlock = useControlMutation(vehicleId, 'access/unlock');
-  const sentry = useControlMutation<{ on: boolean }>(vehicleId, 'access/sentry');
-  const trunk = useControlMutation<{ which: string }>(vehicleId, 'access/trunk');
-  const window = useControlMutation<{ command: string }>(vehicleId, 'access/window');
+  const carId = vehicle?.carId;
+
+  // Closure captures the current toggleable state so the patch knows
+  // which direction to flip — see `vehiclePatch` for the rationale on
+  // optimistic updates against TeslaMate's ['vehicle', carId] cache.
+  const lock = useControlMutation(vehicleId, 'access/lock', {
+    optimistic: vehiclePatch(carId, () => ({ isLocked: true })),
+  });
+  const unlock = useControlMutation(vehicleId, 'access/unlock', {
+    optimistic: vehiclePatch(carId, () => ({ isLocked: false })),
+  });
+  const sentry = useControlMutation<{ on: boolean }>(vehicleId, 'access/sentry', {
+    optimistic: vehiclePatch<{ on: boolean }>(carId, (_prev, body) => ({ sentryMode: body.on })),
+  });
+  const trunk = useControlMutation<{ which: string }>(vehicleId, 'access/trunk', {
+    optimistic: vehiclePatch<{ which: string }>(carId, (prev, body) =>
+      body.which === 'front'
+        ? { frunkOpen: !(prev.frunkOpen ?? false) }
+        : { trunkOpen: !(prev.trunkOpen ?? false) },
+    ),
+  });
+  const window = useControlMutation<{ command: string }>(vehicleId, 'access/window', {
+    // "vent" cracks the windows (windowsOpen=true), "close" closes them
+    // (windowsOpen=false). Other commands aren't issued from this strip.
+    optimistic: vehiclePatch<{ command: string }>(carId, (_prev, body) =>
+      body.command === 'close' ? { windowsOpen: false } : { windowsOpen: true },
+    ),
+  });
   const flash = useControlMutation(vehicleId, 'access/flash-lights');
   const honk = useControlMutation(vehicleId, 'access/honk-horn');
   // New: charge + climate + defrost. defrost = Tesla "set_preconditioning_max"
   // (= "Dégivrage du véhicule" in the mobile app). Same endpoint Control
   // page's "Précondition" button uses; we keep the wording explicit on
   // Home because most users tap it when they actually want to defrost.
-  const climateToggle = useControlMutation(vehicleId, isClimateOn ? 'climate/stop' : 'climate/start');
-  const defrost = useControlMutation<{ on: boolean }>(vehicleId, 'climate/precondition');
-  const chargePort = useControlMutation<{ on: boolean }>(vehicleId, 'charge/port-door');
-  const chargeToggle = useControlMutation(vehicleId, isCharging ? 'charge/stop' : 'charge/start');
+  const climateToggle = useControlMutation(vehicleId, isClimateOn ? 'climate/stop' : 'climate/start', {
+    optimistic: vehiclePatch(carId, () => ({ isClimateOn: !isClimateOn })),
+  });
+  const defrost = useControlMutation<{ on: boolean }>(vehicleId, 'climate/precondition', {
+    // Mirrors HomeQuickActions' `defrostActive` heuristic: max-defrost
+    // always cranks both windshield defrosters at the same time.
+    optimistic: vehiclePatch<{ on: boolean }>(carId, (_prev, body) => ({
+      isFrontDefrosterOn: body.on,
+      isRearDefrosterOn: body.on,
+    })),
+  });
+  const chargePort = useControlMutation<{ on: boolean }>(vehicleId, 'charge/port-door', {
+    optimistic: vehiclePatch<{ on: boolean }>(carId, (_prev, body) => ({ chargePortDoorOpen: body.on })),
+  });
+  const chargeToggle = useControlMutation(vehicleId, isCharging ? 'charge/stop' : 'charge/start', {
+    // chargingState is the TeslaMate cache field — set it to "Charging"
+    // optimistically, or to "Stopped" when stopping. The 5s force-refresh
+    // and the next MQTT overlay confirm the real state.
+    optimistic: vehiclePatch(carId, () => ({
+      chargingState: isCharging ? 'Stopped' : 'Charging',
+    })),
+  });
 
   const mqttAvailable = !!vehicle?.mqttConnected;
   const fleetReady = !!availability?.configured && !!availability?.connected;

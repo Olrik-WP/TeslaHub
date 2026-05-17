@@ -10,6 +10,7 @@ import BottomNav from './components/BottomNav';
 import CarSelector from './components/CarSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ControlFeedbackProvider } from './components/ControlFeedback';
+import { ScrollContainerProvider } from './contexts/ScrollContainerContext';
 import { STALE_TIME } from './constants/theme';
 
 const Login = lazy(() => import('./pages/Login'));
@@ -141,6 +142,7 @@ function AppLayout() {
 
   return (
     <ControlFeedbackProvider>
+      <ScrollContainerProvider scrollRef={scrollRef}>
       {/* h-full (not min-h): combined with the html/body height:100% +
           overflow:hidden in index.css, this forces ALL scrolling to
           happen inside the routed scroll container below. Otherwise
@@ -194,6 +196,7 @@ function AppLayout() {
         </div>
         <BottomNav carId={selectedCarId} />
       </div>
+      </ScrollContainerProvider>
     </ControlFeedbackProvider>
   );
 }
