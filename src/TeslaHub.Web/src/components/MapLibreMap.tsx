@@ -233,6 +233,12 @@ export default function MapLibreMap({
   // the same sampled-point count — comparing actual coordinates makes
   // every distinct trajectory re-trigger the camera.
   const lastFitSig = useRef<string>('');
+  // Timestamp of the last programmatic camera animation (fit / fly / follow).
+  // The 3D / style effect consults this to skip its own easeTo when a more
+  // recent camera tween is already in flight — otherwise its pitch/bearing-
+  // only easeTo cancels our fitBounds and the camera gets frozen mid-flight
+  // (this is what caused the "stuck on Paris" bug when opening a drive).
+  const lastFitAt = useRef<number>(0);
   const { styleUrl, pitch, bearing, is3D } = useMapStyle();
   const [popupInfo, setPopupInfo] = useState<ChargeMarker | null>(null);
   const [chargerPopup, setChargerPopup] = useState<PublicCharger | null>(null);
@@ -428,11 +434,13 @@ export default function MapLibreMap({
     lastFitSig.current = sig;
 
     if (routePoints.length === 1) {
-      map.flyTo({
+      lastFitAt.current = Date.now();
+      map.easeTo({
         center: [routePoints[0][1], routePoints[0][0]],
         zoom: 16,
+        pitch,
+        bearing,
         duration: 1200,
-        essential: true,
       });
       return;
     }
@@ -443,13 +451,39 @@ export default function MapLibreMap({
       [Math.min(...lngs), Math.min(...lats)],
       [Math.max(...lngs), Math.max(...lats)],
     ];
-    map.fitBounds(bounds, {
+    // Resolve the bounds to a concrete camera (center / zoom) so we can issue
+    // a SINGLE easeTo that also bakes pitch + bearing. Without this the 3D /
+    // style effect fires its own pitch/bearing-only easeTo right after, which
+    // cancels the fitBounds animation and freezes the camera mid-transition
+    // (= the "stuck on Paris" symptom when the map is created centred on the
+    // default fallback).
+    const camera = map.cameraForBounds(bounds, {
       padding: 60,
       maxZoom: 15,
-      duration: 1500,
-      essential: true,
+      bearing,
     });
-  }, [routePoints, followLive, mapReady]);
+    lastFitAt.current = Date.now();
+    if (camera && camera.center != null && camera.zoom != null) {
+      const c = camera.center as { lng: number; lat: number } | [number, number];
+      const center: [number, number] = Array.isArray(c) ? [c[0], c[1]] : [c.lng, c.lat];
+      map.easeTo({
+        center,
+        zoom: camera.zoom,
+        pitch,
+        bearing,
+        duration: 1500,
+        essential: true,
+      });
+    } else {
+      // Container has no size yet — fall back to the resilient fitBounds API.
+      map.fitBounds(bounds, {
+        padding: 60,
+        maxZoom: 15,
+        duration: 1500,
+        essential: true,
+      });
+    }
+  }, [routePoints, followLive, mapReady, pitch, bearing]);
 
   // Track whether the most recent camera move came from our follow effect, so
   // we can ignore it when watching for user-initiated interactions.
@@ -464,6 +498,7 @@ export default function MapLibreMap({
     const map = mapRef.current?.getMap();
     if (!map) return;
     programmaticMoveRef.current = true;
+    lastFitAt.current = Date.now();
     map.easeTo({
       center: [livePosition.longitude, livePosition.latitude],
       pitch,
@@ -480,6 +515,7 @@ export default function MapLibreMap({
     const map = mapRef.current?.getMap();
     if (!map) return;
     programmaticMoveRef.current = true;
+    lastFitAt.current = Date.now();
     map.flyTo({
       center: [flyTo.longitude, flyTo.latitude],
       zoom: flyTo.zoom ?? Math.max(map.getZoom(), 14),
@@ -522,19 +558,27 @@ export default function MapLibreMap({
       if (!map.isStyleLoaded()) return;
       if (is3D) {
         setup3D(map);
-        // In follow-mode the live-follow effect already animates pitch/bearing
-        // alongside the camera center — skipping here avoids racing easeTo calls.
-        if (!followLive) {
-          map.easeTo({ pitch, bearing, duration: 1000 });
-        }
       } else {
         if (map.getTerrain()) map.setTerrain(null);
         if (map.getLayer('3d-buildings')) map.removeLayer('3d-buildings');
         if (map.getSource('terrainSource')) map.removeSource('terrainSource');
-        if (!followLive) {
-          map.easeTo({ pitch: 0, bearing: 0, duration: 1000 });
-        }
       }
+      // Skip the camera tween if another effect just kicked off an animation
+      // that already bakes pitch/bearing (live-follow, auto-fit, imperative
+      // flyTo). Otherwise this stand-alone easeTo cancels that animation and
+      // the camera is left wherever it happened to be when we fired.
+      const recentFit = Date.now() - lastFitAt.current < 2000;
+      if (followLive || recentFit) return;
+      const targetPitch = is3D ? pitch : 0;
+      const targetBearing = is3D ? bearing : 0;
+      // Idempotent: don't trigger an animation if the camera is already there.
+      if (
+        Math.abs(map.getPitch() - targetPitch) < 0.5 &&
+        Math.abs(map.getBearing() - targetBearing) < 0.5
+      ) {
+        return;
+      }
+      map.easeTo({ pitch: targetPitch, bearing: targetBearing, duration: 1000 });
     };
 
     apply();
