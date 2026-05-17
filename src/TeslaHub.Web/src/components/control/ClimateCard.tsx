@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ControlCard from './ControlCard';
 import ControlButton from './ControlButton';
 import SeatHeaterRow from './SeatHeaterRow';
-import { capabilitiesLoaded, useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
+import { capabilitiesLoaded, snapshotPatch, useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
 import type { VehicleStatus } from '../../api/queries';
 import { useUnits } from '../../hooks/useUnits';
 import { copTempToInt, keeperModeToInt, readClimate } from './stateParsers';
@@ -64,9 +64,23 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
     return v == null ? '—' : (u.tempUnit === '°F' ? v.toFixed(0) : v.toFixed(1));
   };
 
-  const startStop = useControlMutation(vehicleId, isOn ? 'climate/stop' : 'climate/start');
+  // Optimistic patches mirror the HomeQuickActions behaviour — see the
+  // snapshotPatch helper for the why-and-how on Control's Fleet-fed
+  // ['vehicleControlState'] cache.
+  const startStop = useControlMutation(vehicleId, isOn ? 'climate/stop' : 'climate/start', {
+    optimistic: snapshotPatch(vehicleId, 'climate', () => ({ is_climate_on: !isOn })),
+  });
   const setTemps = useControlMutation<{ driverTemp: number; passengerTemp: number }>(vehicleId, 'climate/temps', { silent: true });
-  const precondition = useControlMutation<{ on: boolean }>(vehicleId, 'climate/precondition');
+  const precondition = useControlMutation<{ on: boolean }>(vehicleId, 'climate/precondition', {
+    // Max-defrost flips both windshield defrosters AND the dedicated
+    // defrost_mode (0 = off, 2 = max). Patching all three keeps every
+    // consumer (defrost pill on Home, max-defrost row here) consistent.
+    optimistic: snapshotPatch<{ on: boolean }>(vehicleId, 'climate', (_prev, body) => ({
+      defrost_mode: body.on ? 2 : 0,
+      is_front_defroster_on: body.on,
+      is_rear_defroster_on: body.on,
+    })),
+  });
   const steeringWheel = useControlMutation<{ on: boolean }>(vehicleId, 'climate/steering-wheel-heater');
   const keeper = useControlMutation<{ mode: number }>(vehicleId, 'climate/keeper');
   const copToggle = useControlMutation<{ on: boolean; fanOnly: boolean }>(vehicleId, 'climate/cabin-overheat');

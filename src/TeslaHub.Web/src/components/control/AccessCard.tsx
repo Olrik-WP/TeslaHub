@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ControlCard from './ControlCard';
 import ControlButton from './ControlButton';
 import PinPad from './PinPad';
-import { useControlMutation, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
+import { snapshotPatch, useControlMutation, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
 import type { VehicleStatus } from '../../api/queries';
 import { useUnits } from '../../hooks/useUnits';
 import { readVehicle } from './stateParsers';
@@ -34,11 +34,21 @@ export default function AccessCard({ vehicleId, snapshot, vehicleStatus, online 
   const u = useUnits();
   const v = readVehicle(snapshot, vehicleStatus);
 
-  const lock = useControlMutation(vehicleId, 'access/lock');
-  const unlock = useControlMutation(vehicleId, 'access/unlock');
+  // Optimistic patches: each tap flips the matching Fleet API field in
+  // the snapshot cache immediately so the AccessCard chips swap colour
+  // without waiting 5s for the post-command force-refresh. Rolled back
+  // automatically by useControlMutation on error.
+  const lock = useControlMutation(vehicleId, 'access/lock', {
+    optimistic: snapshotPatch(vehicleId, 'vehicle', () => ({ locked: true })),
+  });
+  const unlock = useControlMutation(vehicleId, 'access/unlock', {
+    optimistic: snapshotPatch(vehicleId, 'vehicle', () => ({ locked: false })),
+  });
   const flash = useControlMutation(vehicleId, 'access/flash-lights');
   const honk = useControlMutation(vehicleId, 'access/honk-horn');
-  const sentry = useControlMutation<{ on: boolean }>(vehicleId, 'access/sentry');
+  const sentry = useControlMutation<{ on: boolean }>(vehicleId, 'access/sentry', {
+    optimistic: snapshotPatch<{ on: boolean }>(vehicleId, 'vehicle', (_prev, body) => ({ sentry_mode: body.on })),
+  });
   const valet = useControlMutation<{ on: boolean; pin?: string }>(vehicleId, 'access/valet');
   const speedSet = useControlMutation<{ pin: string }>(vehicleId, 'access/speed-limit/activate');
   const speedDeact = useControlMutation<{ pin: string }>(vehicleId, 'access/speed-limit/deactivate');

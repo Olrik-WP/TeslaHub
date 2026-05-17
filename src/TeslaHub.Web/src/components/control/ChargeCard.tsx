@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import ControlCard from './ControlCard';
 import ControlButton from './ControlButton';
-import { presumeSupported, useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
+import { presumeSupported, snapshotPatch, useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
 import type { VehicleStatus } from '../../api/queries';
 import { readCharge } from './stateParsers';
 
@@ -50,10 +50,22 @@ export default function ChargeCard({ vehicleId, snapshot, vehicleStatus, capabil
   useEffect(() => { setLimit(limitServer); }, [limitServer]);
   useEffect(() => { setAmps(ampsServer); }, [ampsServer]);
 
-  const startStop = useControlMutation(vehicleId, isCharging ? 'charge/stop' : 'charge/start');
+  // Optimistic patches: flip charging_state and charge_port_door_open
+  // in the Fleet snapshot cache immediately. Tesla normalises charging
+  // state to PascalCase ("Charging"/"Stopped"/"Disconnected"…) so we
+  // stick to those exact values.
+  const startStop = useControlMutation(vehicleId, isCharging ? 'charge/stop' : 'charge/start', {
+    optimistic: snapshotPatch(vehicleId, 'charge', () => ({
+      charging_state: isCharging ? 'Stopped' : 'Charging',
+    })),
+  });
   const setLimitMut = useControlMutation<{ percent: number }>(vehicleId, 'charge/limit', { silent: true });
   const setAmpsMut = useControlMutation<{ amps: number }>(vehicleId, 'charge/amps', { silent: true });
-  const portDoor = useControlMutation<{ on: boolean }>(vehicleId, 'charge/port-door');
+  const portDoor = useControlMutation<{ on: boolean }>(vehicleId, 'charge/port-door', {
+    optimistic: snapshotPatch<{ on: boolean }>(vehicleId, 'charge', (_prev, body) => ({
+      charge_port_door_open: body.on,
+    })),
+  });
 
   // Debounced send to avoid hammering Tesla while user drags.
   const limitTimer = useRef<number | null>(null);

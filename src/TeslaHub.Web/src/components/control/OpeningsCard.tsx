@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import ControlCard from './ControlCard';
 import ControlButton from './ControlButton';
-import { capabilitiesLoaded, useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
+import { capabilitiesLoaded, snapshotPatch, useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
 import type { VehicleStatus } from '../../api/queries';
 import { readVehicle } from './stateParsers';
 
@@ -28,8 +28,29 @@ export default function OpeningsCard({ vehicleId, snapshot, vehicleStatus, capab
   const { t } = useTranslation();
   const v = readVehicle(snapshot, vehicleStatus);
 
-  const trunk = useControlMutation<{ which: string }>(vehicleId, 'access/trunk');
-  const window = useControlMutation<{ command: string }>(vehicleId, 'access/window');
+  // Optimistic patches against vehicle_state. Trunk/frunk are toggles
+  // so we have to read prev to know which direction to flip; windows
+  // are explicit "vent" / "close" so we can compute the target value
+  // straight from the body.
+  const trunk = useControlMutation<{ which: string }>(vehicleId, 'access/trunk', {
+    optimistic: snapshotPatch<{ which: string }>(vehicleId, 'vehicle', (prev, body) => {
+      if (body.which === 'front') {
+        const ft = Number(prev.ft ?? 0);
+        return { ft: ft > 0 ? 0 : 1 };
+      }
+      const rt = Number(prev.rt ?? 0);
+      return { rt: rt > 0 ? 0 : 1 };
+    }),
+  });
+  const window = useControlMutation<{ command: string }>(vehicleId, 'access/window', {
+    // "vent" cracks all four, "close" closes them. Anything else (rare)
+    // we leave untouched — the 5s force-refresh syncs reality.
+    optimistic: snapshotPatch<{ command: string }>(vehicleId, 'vehicle', (prev, body) => {
+      const open = body.command === 'vent' ? 1 : body.command === 'close' ? 0 : null;
+      if (open === null) return {};
+      return { fd_window: open, fp_window: open, rd_window: open, rp_window: open };
+    }),
+  });
 
   const frunkOpen = (v.ft ?? 0) > 0;
   const trunkOpen = (v.rt ?? 0) > 0;

@@ -264,6 +264,65 @@ export interface OptimisticPatch<TBody, TData = unknown> {
   update: (prev: TData | undefined, body: TBody) => TData | undefined;
 }
 
+/**
+ * The four JSON blobs Fleet API returns inside a VehicleStateSnapshot.
+ * Each one corresponds to a Tesla API sub-tree we serialise verbatim
+ * (so we don't have to chase Tesla's frequent field-renames in C# DTOs).
+ */
+type SnapshotBlock = 'vehicle' | 'climate' | 'charge' | 'drive';
+const SNAPSHOT_FIELD: Record<SnapshotBlock, keyof VehicleStateSnapshot> = {
+  vehicle: 'vehicleStateJson',
+  climate: 'climateStateJson',
+  charge: 'chargeStateJson',
+  drive: 'driveStateJson',
+};
+
+/**
+ * Builds an optimistic patch for the Fleet-API-fed
+ * ['vehicleControlState', vehicleId] cache, by re-encoding the relevant
+ * JSON blob (vehicle/climate/charge/drive). Used by the Control cards
+ * to mirror the instant-feedback behaviour HomeQuickActions already
+ * gets via vehiclePatch() against the TeslaMate ['vehicle'] cache.
+ *
+ * Defensive by design: if the JSON is missing or malformed (Tesla
+ * occasionally adds fields without notice), we return prev unchanged —
+ * the page falls back to the existing 5s force-refresh behaviour with
+ * no visible regression. Tesla's command response (`{ result: true }`)
+ * doesn't echo the post-command state, so this is the only way to make
+ * a tap on Control feel as instant as the same tap on Home.
+ *
+ * @example
+ * useControlMutation(vehicleId, 'access/lock', {
+ *   optimistic: snapshotPatch(vehicleId, 'vehicle', () => ({ locked: true })),
+ * });
+ */
+export function snapshotPatch<TBody = void>(
+  vehicleId: number | undefined,
+  block: SnapshotBlock,
+  update: (prevParsed: Record<string, unknown>, body: TBody) => Record<string, unknown>,
+): OptimisticPatch<TBody, VehicleStateSnapshot> | undefined {
+  if (!vehicleId) return undefined;
+  const jsonField = SNAPSHOT_FIELD[block];
+  return {
+    queryKey: ['vehicleControlState', vehicleId],
+    update: (prev, body) => {
+      if (!prev) return prev;
+      const jsonStr = prev[jsonField];
+      if (typeof jsonStr !== 'string' || jsonStr.length === 0) return prev;
+      try {
+        const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+        const patches = update(parsed, body);
+        const merged = { ...parsed, ...patches };
+        return { ...prev, [jsonField]: JSON.stringify(merged) };
+      } catch {
+        // Malformed JSON or update() threw — keep the snapshot intact.
+        // The 5s force-refresh will reconcile the cache from Fleet API.
+        return prev;
+      }
+    },
+  };
+}
+
 export function useControlMutation<TBody = void>(
   vehicleId: number | undefined,
   pathSuffix: string,
