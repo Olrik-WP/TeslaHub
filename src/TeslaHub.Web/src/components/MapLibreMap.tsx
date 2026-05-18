@@ -445,11 +445,26 @@ export default function MapLibreMap({
       return;
     }
 
-    const lngs = routePoints.map((p) => p[1]);
-    const lats = routePoints.map((p) => p[0]);
+    // Iterative reduce — `Math.min(...arr)` / `Math.max(...arr)` rely on
+    // Function.prototype.apply and crash with "Maximum call stack size
+    // exceeded" past ~10–65 k arguments depending on the engine. A user
+    // enabling the route on a 7- or 30-day range easily exceeds that
+    // (positions are sampled every few seconds while driving).
+    let minLng = Infinity;
+    let minLat = Infinity;
+    let maxLng = -Infinity;
+    let maxLat = -Infinity;
+    for (let i = 0; i < routePoints.length; i++) {
+      const lat = routePoints[i][0];
+      const lng = routePoints[i][1];
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
     const bounds: LngLatBoundsLike = [
-      [Math.min(...lngs), Math.min(...lats)],
-      [Math.max(...lngs), Math.max(...lats)],
+      [minLng, minLat],
+      [maxLng, maxLat],
     ];
     // Resolve the bounds to a concrete camera (center / zoom) so we can issue
     // a SINGLE easeTo that also bakes pitch + bearing. Without this the 3D /
@@ -589,7 +604,10 @@ export default function MapLibreMap({
   }, [is3D, pitch, bearing, mapReady, followLive]);
 
   const routeGeoJson = useMemo(() => {
-    const all = liveTrail && liveTrail.length > 0 ? [...routePoints, ...liveTrail] : routePoints;
+    // Array spread allocates each element on the call stack; for a 30-day
+    // range routePoints can hold 50 k+ samples and the spread blows the
+    // stack. Array.prototype.concat is iterative and handles huge inputs.
+    const all = liveTrail && liveTrail.length > 0 ? routePoints.concat(liveTrail) : routePoints;
     if (all.length < 2) return null;
     return {
       type: 'Feature' as const,

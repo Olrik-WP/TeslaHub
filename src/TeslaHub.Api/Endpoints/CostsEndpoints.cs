@@ -3,6 +3,7 @@ using TeslaHub.Api.Data;
 using TeslaHub.Api.Models;
 using TeslaHub.Api.Services;
 using TeslaHub.Api.TeslaMate;
+using TeslaHub.Api.Utilities;
 
 namespace TeslaHub.Api.Endpoints;
 
@@ -70,13 +71,61 @@ public static class CostsEndpoints
             return Results.Ok(new { location, sessionsUpdated = applied });
         });
 
+        // Deleting a location must NEVER lose previously-recorded session
+        // costs. There are two real-world scenarios we have to handle:
+        //
+        //   1. The user is merging a duplicate (e.g. Maison(CarId=NULL) and
+        //      Maison(CarId=A) sitting at the exact same coordinates). We
+        //      detect a "twin" location by lat/lng inside the radius and
+        //      re-point every linked ChargingCostOverride to it. After the
+        //      delete, AutoApplyAllLocationsPricingAsync will re-compute
+        //      auto-applied prices against the surviving twin, while manual
+        //      overrides keep their TotalCost untouched — only the FK moves.
+        //
+        //   2. No twin exists. We set LocationId to NULL on every linked
+        //      override so the underlying cost rows stay intact (just
+        //      detached from the location label) and the FK constraint stops
+        //      blocking the DELETE. Without this we'd hit a 23503 from
+        //      Postgres on FK_ChargingCostOverrides_ChargingLocations_LocationId.
         group.MapDelete("/locations/{id:int}", async (int id, AppDbContext db) =>
         {
             var location = await db.ChargingLocations.FindAsync(id);
             if (location == null) return Results.NotFound();
+
+            var others = await db.ChargingLocations
+                .Where(l => l.Id != id)
+                .ToListAsync();
+
+            // Treat any other location whose centre falls within the larger of
+            // the two radii as the same physical place. Prefer a CarId=NULL
+            // ("all vehicles") twin so merging always lands on the most
+            // permissive entry — that's almost always what the user wants.
+            var successor = others
+                .Where(l => GeoDistance.HaversineMeters(
+                    l.Latitude, l.Longitude, location.Latitude, location.Longitude)
+                    <= Math.Max(l.RadiusMeters, location.RadiusMeters))
+                .OrderBy(l => l.CarId == null ? 0 : 1)
+                .ThenBy(l => l.Id)
+                .FirstOrDefault();
+
+            var linkedOverrides = await db.ChargingCostOverrides
+                .Where(c => c.LocationId == id)
+                .ToListAsync();
+
+            foreach (var ovr in linkedOverrides)
+            {
+                ovr.LocationId = successor?.Id;
+                ovr.UpdatedAt = DateTime.UtcNow;
+            }
+
             db.ChargingLocations.Remove(location);
             await db.SaveChangesAsync();
-            return Results.NoContent();
+            return Results.Ok(new
+            {
+                deletedId = id,
+                successorId = successor?.Id,
+                overridesReassigned = linkedOverrides.Count
+            });
         });
 
         // ─── Session costs (inline from Charging page) ────────────
