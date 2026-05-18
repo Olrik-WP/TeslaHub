@@ -291,6 +291,9 @@
     "tripDistance": "Distance",
     "tripElapsed": "Écoulé",
     "tripPower": "Puissance",
+    "tripBattery": "Batterie",
+    "tripRange": "Autonomie",
+    "tripStartBattery": "Batterie au départ",
     "tripStartedAt": "Départ : {{time}}",
     "tripWaitingPosition": "En attente de la position…",
     "tripWaitingDb": "Trajet détecté via MQTT — TeslaMate ne l'a pas encore enregistré.",
@@ -298,6 +301,8 @@
     "tripDestination": "Destination",
     "tripEta": "Arrivée",
     "tripAtArrival": "à l'arrivée",
+    "tripBatteryAtArrival": "Batt. à l'arrivée",
+    "tripDistanceAtArrival": "Restant",
     "tripTraffic": "trafic",
     "tripNoRoute": "Aucun itinéraire actif"
   },

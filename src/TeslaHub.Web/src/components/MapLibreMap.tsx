@@ -9,6 +9,41 @@ import MapStylePicker from './MapStylePicker';
 import { getChargers, getSettings, type PublicCharger, type ChargerConnection } from '../api/queries';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
+// Maximum total points (history + live trail) for which we run Chaikin
+// smoothing. One iteration doubles the count, so 6000 → ~12 000 vertices.
+// Past that the trace is already dense enough that the eye won't catch
+// any "staircase" jitter, and smoothing would needlessly hammer memory
+// for very long ranges (30-day positions can hit 50 k+ points).
+const SMOOTH_MAX_POINTS = 6000;
+
+/**
+ * Chaikin's corner-cutting algorithm — single iteration. Replaces every
+ * inner vertex `P_i` by the pair (0.75*P_i + 0.25*P_{i+1}, 0.25*P_i + 0.75*P_{i+1}).
+ * First and last vertex are preserved so the smoothed line still starts
+ * and ends at the same place as the source. The result visually erases
+ * the GPS jitter that creates the staircase look on live MQTT traces at
+ * high zoom levels without altering the macroscopic path.
+ *
+ * Operates on [lat, lng] pairs to keep the rest of the file consistent.
+ * One iteration is enough — two would produce a visibly "padded" line
+ * that cuts real corners (sharp roundabouts, U-turns).
+ */
+function smoothPath(points: [number, number][]): [number, number][] {
+  const n = points.length;
+  if (n < 3) return points;
+  const out: [number, number][] = new Array(2 * n - 2);
+  out[0] = points[0];
+  let j = 1;
+  for (let i = 0; i < n - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    out[j++] = [a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25];
+    out[j++] = [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75];
+  }
+  out[j] = points[n - 1];
+  return out.slice(0, j + 1);
+}
+
 interface ChargeMarker {
   id: number;
   startDate: string;
@@ -609,12 +644,17 @@ export default function MapLibreMap({
     // stack. Array.prototype.concat is iterative and handles huge inputs.
     const all = liveTrail && liveTrail.length > 0 ? routePoints.concat(liveTrail) : routePoints;
     if (all.length < 2) return null;
+    // Smooth the path with Chaikin (single iteration) when the dataset
+    // is small enough — kills the "staircase" effect created by 5–10 m
+    // GPS jitter at 130 km/h on the live MQTT trace. Long-range views
+    // (already dense, no visible jitter) skip it for perf.
+    const smoothed = all.length <= SMOOTH_MAX_POINTS ? smoothPath(all) : all;
     return {
       type: 'Feature' as const,
       properties: {},
       geometry: {
         type: 'LineString' as const,
-        coordinates: all.map(([lat, lng]) => [lng, lat]),
+        coordinates: smoothed.map(([lat, lng]) => [lng, lat]),
       },
     };
   }, [routePoints, liveTrail]);

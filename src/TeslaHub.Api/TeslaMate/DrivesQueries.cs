@@ -22,7 +22,15 @@ public static class DrivesQueries
             SELECT
                 d.id AS "Id", d.car_id AS "CarId",
                 d.start_date AS "StartDate", d.end_date AS "EndDate",
-                d.start_km AS "StartKm", d.end_km AS "EndKm",
+                -- TeslaMate only writes `drives.start_km` at the moment it
+                -- associates a `start_position_id` with the drive — that
+                -- can be several seconds (sometimes longer) after the
+                -- drive row itself is inserted. While the drive is still
+                -- "fresh" the Home panel was showing "Distance: —". Fall
+                -- back to the position's odometer so the value is always
+                -- available as soon as the first position is recorded.
+                COALESCE(d.start_km, sp.odometer) AS "StartKm",
+                d.end_km AS "EndKm",
                 d.distance AS "Distance", d.duration_min AS "DurationMin",
                 d.speed_max AS "SpeedMax", d.power_max AS "PowerMax", d.power_min AS "PowerMin",
                 d.start_rated_range_km AS "StartRatedRangeKm",

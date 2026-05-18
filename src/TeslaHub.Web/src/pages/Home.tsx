@@ -701,6 +701,12 @@ export default function Home({ carId }: Props) {
                 : null;
             const speedKmh = live?.speed ?? null;
             const powerKw = live?.power ?? null;
+            const batteryPct = vehicle?.batteryLevel ?? null;
+            const rangeKm = vehicle?.ratedBatteryRangeKm ?? vehicle?.estBatteryRangeKm ?? null;
+            const startBattery = activeDrive?.startBatteryLevel ?? null;
+            const startTimeShort = activeDrive?.startDate
+              ? utcDate(activeDrive.startDate).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+              : null;
 
             const route = live?.activeRouteDestination ? {
               destination: live.activeRouteDestination,
@@ -735,6 +741,7 @@ export default function Home({ carId }: Props) {
                     <span className="text-[#22c55e]">{address ?? t('home.tripWaitingPosition')}</span>
                   </div>
                 )}
+                {/* Live row — telemetry that ticks while moving. */}
                 <div className="grid grid-cols-3 gap-2 mt-3">
                   <div>
                     <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.tripSpeed')}</div>
@@ -758,6 +765,37 @@ export default function Home({ carId }: Props) {
                     </div>
                   </div>
                 </div>
+
+                {/* Energy row — battery + remaining range + start SoC. */}
+                {(batteryPct != null || rangeKm != null || startBattery != null) && (
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <div>
+                      <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.tripBattery')}</div>
+                      <div className="text-base font-bold tabular-nums text-white">
+                        {batteryPct != null ? `${Math.round(batteryPct)}` : '—'}
+                        <span className="text-[10px] font-normal text-[#9ca3af]">%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.tripRange')}</div>
+                      <div className="text-base font-bold tabular-nums text-white">
+                        {rangeKm != null ? Math.round(u.convertDistance(rangeKm) ?? 0) : '—'}{' '}
+                        <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.tripStartBattery')}</div>
+                      <div className="text-base font-bold tabular-nums text-white">
+                        {startBattery != null ? `${Math.round(startBattery)}` : '—'}
+                        <span className="text-[10px] font-normal text-[#9ca3af]">%</span>
+                        {startTimeShort && (
+                          <span className="text-[10px] font-normal text-[#6b7280] ml-1">· {startTimeShort}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {powerKw != null && (
                   <div className="mt-2 text-xs text-[#9ca3af]">
                     {t('home.tripPower')}:{' '}
@@ -787,19 +825,36 @@ export default function Home({ carId }: Props) {
                         </div>
                       )}
                     </div>
-                    <div className="mt-1 text-xs text-[#9ca3af] flex items-center gap-x-3 gap-y-0.5 flex-wrap">
-                      {routeDistanceUserUnit != null && (
-                        <span className="tabular-nums">{routeDistanceUserUnit.toFixed(routeDistanceUserUnit < 10 ? 1 : 0)} {u.distanceUnit}</span>
-                      )}
-                      {route.energyAtArrival != null && (
-                        <span className="tabular-nums">
-                          <span className="text-[#22c55e]">{Math.round(route.energyAtArrival)}%</span> {t('home.tripAtArrival')}
-                        </span>
-                      )}
-                      {route.trafficDelay != null && route.trafficDelay > 0.5 && (
-                        <span className="tabular-nums text-[#eab308]">+{Math.round(route.trafficDelay)} min {t('home.tripTraffic')}</span>
-                      )}
-                    </div>
+
+                    {/* Arrival metrics block — distance remaining + battery on arrival. */}
+                    {(routeDistanceUserUnit != null || route.energyAtArrival != null) && (
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        {routeDistanceUserUnit != null && (
+                          <div>
+                            <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.tripDistanceAtArrival')}</div>
+                            <div className="text-sm font-bold tabular-nums text-white">
+                              {routeDistanceUserUnit.toFixed(routeDistanceUserUnit < 10 ? 1 : 0)}{' '}
+                              <span className="text-[10px] font-normal text-[#9ca3af]">{u.distanceUnit}</span>
+                            </div>
+                          </div>
+                        )}
+                        {route.energyAtArrival != null && (
+                          <div>
+                            <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">{t('home.tripBatteryAtArrival')}</div>
+                            <div className="text-sm font-bold tabular-nums text-[#22c55e]">
+                              {Math.round(route.energyAtArrival)}
+                              <span className="text-[10px] font-normal text-[#9ca3af]">%</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {route.trafficDelay != null && route.trafficDelay > 0.5 && (
+                      <div className="mt-1 text-xs text-[#eab308] tabular-nums">
+                        +{Math.round(route.trafficDelay)} min {t('home.tripTraffic')}
+                      </div>
+                    )}
                   </div>
                 )}
                 {!route && live?.activeRouteError && (
