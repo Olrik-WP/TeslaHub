@@ -332,19 +332,20 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
 
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
-      {/* Header row */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <span className="text-sm font-medium truncate">
-            <span>{utcDate(session.startDate).toLocaleDateString()}</span>
-            <span className="text-[#9ca3af] font-normal">
-              {' · '}
-              {fmtTime(session.startDate)}
-              {session.endDate ? ` → ${fmtTime(session.endDate)}` : ''}
-            </span>
+      {/* Header row — wraps the location name to the next line on narrow
+           screens instead of truncating it with an ellipsis. The right-side
+           controls keep their own width via flex-shrink-0, so they never
+           collide with the wrapped text. */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="min-w-0 flex-1 text-sm font-medium leading-snug break-words">
+          <span>{utcDate(session.startDate).toLocaleDateString()}</span>
+          <span className="text-[#9ca3af] font-normal">
             {' · '}
-            <span className={locationColorClass}>{locationName}</span>
+            {fmtTime(session.startDate)}
+            {session.endDate ? ` → ${fmtTime(session.endDate)}` : ''}
           </span>
+          {' · '}
+          <span className={locationColorClass}>{locationName}</span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {displayCost && (
