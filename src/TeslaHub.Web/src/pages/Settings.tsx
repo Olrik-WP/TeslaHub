@@ -241,12 +241,13 @@ export default function Settings({ carId }: Props) {
 
   const pricingBadge = (type: string) => {
     const map: Record<string, { bg: string; text: string; label: string }> = {
-      home: { bg: 'bg-[#3b82f6]/20', text: 'text-[#3b82f6]', label: t('settings.home') },
+      // Teal — "house" feel without colliding with AC blue or HC green.
+      home: { bg: 'bg-[#14b8a6]/15', text: 'text-[#2dd4bf]', label: t('settings.home') },
       subscription: { bg: 'bg-[#8b5cf6]/20', text: 'text-[#8b5cf6]', label: t('charging.subscription') },
       manual: { bg: 'bg-[#9ca3af]/20', text: 'text-[#9ca3af]', label: t('charging.manual') },
     };
     const s = map[type] ?? map.manual;
-    return <span className={`text-xs px-2 py-0.5 rounded ${s.bg} ${s.text}`}>{s.label}</span>;
+    return <span className={`text-xs px-2 py-0.5 rounded font-medium ${s.bg} ${s.text}`}>{s.label}</span>;
   };
 
   const tabButtonClass = (tab: SettingsTab) =>

@@ -318,15 +318,32 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
   const effPct = session.efficiency != null ? Math.round(session.efficiency * 100) : null;
   const effColor = effPct != null ? (effPct >= 95 ? COLORS.success : effPct >= 85 ? COLORS.warning : COLORS.danger) : COLORS.textMuted;
 
+  // Compact local-time formatter — sessions come back as UTC, utcDate normalises that.
+  const fmtTime = (iso: string) =>
+    utcDate(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+
+  const locationName =
+    costOverride?.location?.name ?? session.geofenceName ?? session.address?.split(',')[0] ?? t('charging.unknown');
+  const locationPricing = costOverride?.location?.pricingType;
+  const locationColorClass =
+    locationPricing === 'home' ? 'text-[#2dd4bf]'
+    : locationPricing === 'subscription' ? 'text-[#a78bfa]'
+    : '';
+
   return (
     <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4">
       {/* Header row */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-sm font-medium truncate">
-            {utcDate(session.startDate).toLocaleDateString()}
+            <span>{utcDate(session.startDate).toLocaleDateString()}</span>
+            <span className="text-[#9ca3af] font-normal">
+              {' · '}
+              {fmtTime(session.startDate)}
+              {session.endDate ? ` → ${fmtTime(session.endDate)}` : ''}
+            </span>
             {' · '}
-            {costOverride?.location?.name ?? session.geofenceName ?? session.address?.split(',')[0] ?? t('charging.unknown')}
+            <span className={locationColorClass}>{locationName}</span>
           </span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
