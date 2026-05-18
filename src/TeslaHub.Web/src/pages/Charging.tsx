@@ -251,6 +251,37 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
   };
 
   const isSubscription = costOverride?.location?.pricingType === 'subscription';
+  const isHomeHcHp = costOverride?.location?.pricingType === 'home';
+
+  // For HC/HP locations, decide which short tag to show next to the cost.
+  // Both nullable on legacy rows that pre-date the breakdown column — in that
+  // case we just don't render a tag rather than guessing.
+  const peakKwh = costOverride?.peakKwh ?? 0;
+  const offPeakKwh = costOverride?.offPeakKwh ?? 0;
+  const hcHpTag: 'mix' | 'hc' | 'hp' | null =
+    isHomeHcHp && !costOverride?.isFree && (peakKwh > 0 || offPeakKwh > 0)
+      ? peakKwh > 0 && offPeakKwh > 0 ? 'mix'
+        : offPeakKwh > 0 ? 'hc'
+        : 'hp'
+      : null;
+
+  const hcHpTagClass =
+    hcHpTag === 'mix' ? 'bg-[#a855f7]/20 text-[#a855f7]'
+    : hcHpTag === 'hc' ? 'bg-[#22c55e]/20 text-[#22c55e]'
+    : hcHpTag === 'hp' ? 'bg-[#f59e0b]/20 text-[#f59e0b]'
+    : '';
+
+  const hcHpTagLabel =
+    hcHpTag === 'mix' ? `${t('charging.offPeakShort')}+${t('charging.peakShort')}`
+    : hcHpTag === 'hc' ? t('charging.offPeakShort')
+    : hcHpTag === 'hp' ? t('charging.peakShort')
+    : '';
+
+  const hcHpTooltip =
+    hcHpTag === 'mix' ? t('charging.hcHpBreakdown', { offPeakKwh: offPeakKwh.toFixed(1), peakKwh: peakKwh.toFixed(1) })
+    : hcHpTag === 'hc' ? t('charging.hcOnly', { kwh: offPeakKwh.toFixed(1) })
+    : hcHpTag === 'hp' ? t('charging.hpOnly', { kwh: peakKwh.toFixed(1) })
+    : '';
 
   const displayCostRaw = isTeslaHub
     ? (costOverride
@@ -306,6 +337,14 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
               : 'text-white'
             }`}>
               {displayCost}
+            </span>
+          )}
+          {hcHpTag && (
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${hcHpTagClass}`}
+              title={hcHpTooltip}
+            >
+              {hcHpTagLabel}
             </span>
           )}
           <span className={`text-xs px-2 py-0.5 rounded ${chargeType === 'DC' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' : 'bg-[#3b82f6]/20 text-[#3b82f6]'}`}>
@@ -383,6 +422,19 @@ function SessionCard({ session, override: costOverride, carId, costSource }: {
             ? costOverride?.pricePerKwh != null && ` · ${costOverride.pricePerKwh.toFixed(2)} ${u.currencySymbol}/kWh`
             : session.costPerKwh != null && ` · ${session.costPerKwh.toFixed(2)} ${u.currencySymbol}/kWh`}
           {session.chargeRateKmPerHour != null && session.chargeRateKmPerHour > 0 && ` · ${Math.round(u.convertDistance(session.chargeRateKmPerHour)!)} ${u.distanceUnit}/h`}
+        </div>
+      )}
+
+      {/* HC/HP breakdown — only shown when the session straddles both windows. */}
+      {hcHpTag === 'mix' && costOverride?.location && (
+        <div className="text-xs text-[#9ca3af] mt-1">
+          {t('charging.hcHpBreakdown', {
+            offPeakKwh: offPeakKwh.toFixed(1),
+            peakKwh: peakKwh.toFixed(1),
+          })}
+          {costOverride.location.offPeakPricePerKwh != null
+            && costOverride.location.peakPricePerKwh != null
+            && ` · ${costOverride.location.offPeakPricePerKwh.toFixed(2)}/${costOverride.location.peakPricePerKwh.toFixed(2)} ${u.currencySymbol}/kWh`}
         </div>
       )}
 

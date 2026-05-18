@@ -199,6 +199,22 @@ public class ChargingCostOverride
     [MaxLength(500)]
     public string? Notes { get; set; }
 
+    /// <summary>
+    /// Energy (kWh) billed at the peak rate for "home" HC/HP locations.
+    /// Null when the location does not use HC/HP pricing or when the session
+    /// pre-dates the breakdown migration.
+    /// </summary>
+    [Column(TypeName = "decimal(10,4)")]
+    public decimal? PeakKwh { get; set; }
+
+    /// <summary>
+    /// Energy (kWh) billed at the off-peak rate for "home" HC/HP locations.
+    /// Null when the location does not use HC/HP pricing or when the session
+    /// pre-dates the breakdown migration.
+    /// </summary>
+    [Column(TypeName = "decimal(10,4)")]
+    public decimal? OffPeakKwh { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

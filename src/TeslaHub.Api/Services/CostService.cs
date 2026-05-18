@@ -48,6 +48,67 @@ public class CostService
         };
     }
 
+    /// <summary>
+    /// Compute the effective cost for a "home" HC/HP location by splitting the
+    /// session's energy proportionally between the time spent in peak (HP) and
+    /// off-peak (HC) windows. Without this split, a session that starts in HP
+    /// but charges mostly in HC (or vice-versa) would be billed entirely at
+    /// the start-time rate, which is wrong on long overnight sessions.
+    /// </summary>
+    /// <remarks>
+    /// We assume constant power across the session — accurate for AC home
+    /// charging where the charger holds a fixed amperage from start to taper
+    /// at very high SoC. For DC fast-charging this would be off, but DC fast
+    /// chargers are not typically on a HC/HP residential tariff anyway.
+    ///
+    /// Off-peak times are configured in local time by the user, while session
+    /// timestamps come back from TeslaMate as UTC. We convert to the API
+    /// container's local time (driven by the <c>TZ</c> env var) before
+    /// comparing — otherwise a 23:30 HC start would be compared against the
+    /// session's UTC clock and silently shift by the local offset.
+    /// </remarks>
+    public static HomeChargeCost CalculateHomeChargeCost(
+        ChargingLocation location, DateTime sessionStart, DateTime? sessionEnd, decimal totalKwh)
+    {
+        var peakRate = location.PeakPricePerKwh ?? 0;
+        var offPeakRate = location.OffPeakPricePerKwh ?? peakRate;
+
+        if (totalKwh <= 0)
+            return new HomeChargeCost(peakRate, 0, 0, 0);
+
+        if (location.OffPeakStart == null || location.OffPeakEnd == null
+            || sessionEnd == null || sessionEnd <= sessionStart)
+        {
+            var fallbackRate = IsOffPeak(location, sessionStart) ? offPeakRate : peakRate;
+            var fallbackCost = Math.Round(fallbackRate * totalKwh, 2);
+            return fallbackRate == offPeakRate
+                ? new HomeChargeCost(fallbackRate, fallbackCost, 0, totalKwh)
+                : new HomeChargeCost(fallbackRate, fallbackCost, totalKwh, 0);
+        }
+
+        var (offPeakMinutes, peakMinutes) = SplitMinutes(
+            sessionStart, sessionEnd.Value, location.OffPeakStart.Value, location.OffPeakEnd.Value);
+        var totalMinutes = offPeakMinutes + peakMinutes;
+
+        if (totalMinutes <= 0)
+        {
+            var rate = IsOffPeak(location, sessionStart) ? offPeakRate : peakRate;
+            var cost = Math.Round(rate * totalKwh, 2);
+            return rate == offPeakRate
+                ? new HomeChargeCost(rate, cost, 0, totalKwh)
+                : new HomeChargeCost(rate, cost, totalKwh, 0);
+        }
+
+        var offPeakKwh = Math.Round(totalKwh * offPeakMinutes / totalMinutes, 4);
+        var peakKwh = Math.Round(totalKwh - offPeakKwh, 4);
+        var totalCost = Math.Round(peakKwh * peakRate + offPeakKwh * offPeakRate, 2);
+        var avg = totalKwh > 0 ? Math.Round(totalCost / totalKwh, 4) : peakRate;
+        return new HomeChargeCost(avg, totalCost, peakKwh, offPeakKwh);
+    }
+
+    public readonly record struct HomeChargeCost(
+        decimal PricePerKwh, decimal TotalCost, decimal PeakKwh, decimal OffPeakKwh);
+
     public async Task<ChargingCostOverride> SetSessionCost(SessionCostDto dto)
     {
         var existing = await _db.ChargingCostOverrides
@@ -355,8 +416,13 @@ public class CostService
         var total = 0;
         foreach (var location in locations)
         {
-            var onlyNew = location.PricingType != PricingTypes.Subscription;
-            total += await ApplyLocationPricingAsync(location, onlyNewSessions: onlyNew, scopeCarId: carId);
+            // Always re-evaluate Home (HC/HP) and Subscription locations even
+            // for sessions that already have an auto-applied override. This
+            // fixes legacy rows that were billed under the old "start time
+            // only" rule and ensures rate or off-peak window edits propagate
+            // immediately. Sessions with a manual override (user-entered cost)
+            // are still left untouched by ApplyLocationPricingAsync.
+            total += await ApplyLocationPricingAsync(location, onlyNewSessions: false, scopeCarId: carId);
         }
 
         return total;
@@ -399,11 +465,22 @@ public class CostService
 
                 decimal? pricePerKwh;
                 decimal totalCost;
+                decimal? peakKwh = null;
+                decimal? offPeakKwh = null;
 
                 if (location.PricingType == PricingTypes.Subscription)
                 {
                     totalCost = 0;
                     pricePerKwh = 0;
+                }
+                else if (location.PricingType == PricingTypes.Home)
+                {
+                    var kwh = (decimal)(session.ChargeEnergyAdded ?? session.ChargeEnergyUsed ?? 0);
+                    var split = CalculateHomeChargeCost(location, session.StartDate, session.EndDate, kwh);
+                    pricePerKwh = split.PricePerKwh;
+                    totalCost = split.TotalCost;
+                    peakKwh = split.PeakKwh;
+                    offPeakKwh = split.OffPeakKwh;
                 }
                 else
                 {
@@ -417,10 +494,23 @@ public class CostService
 
                 if (existing != null)
                 {
+                    // Skip the write when nothing material has changed — keeps
+                    // page-load auto-apply quiet on a stable dataset.
+                    var unchanged = existing.PricePerKwh == pricePerKwh
+                        && existing.TotalCost == totalCost
+                        && existing.LocationId == location.Id
+                        && existing.PeakKwh == peakKwh
+                        && existing.OffPeakKwh == offPeakKwh
+                        && !existing.IsManualOverride;
+                    if (unchanged)
+                        continue;
+
                     existing.PricePerKwh = pricePerKwh;
                     existing.TotalCost = totalCost;
                     existing.LocationId = location.Id;
                     existing.IsManualOverride = false;
+                    existing.PeakKwh = peakKwh;
+                    existing.OffPeakKwh = offPeakKwh;
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
                 else
@@ -433,7 +523,9 @@ public class CostService
                         TotalCost = totalCost,
                         IsFree = false,
                         IsManualOverride = false,
-                        LocationId = location.Id
+                        LocationId = location.Id,
+                        PeakKwh = peakKwh,
+                        OffPeakKwh = offPeakKwh
                     });
                 }
 
@@ -450,10 +542,63 @@ public class CostService
         if (location.OffPeakStart == null || location.OffPeakEnd == null)
             return false;
 
-        var time = TimeOnly.FromDateTime(sessionStart);
-        if (location.OffPeakStart <= location.OffPeakEnd)
-            return time >= location.OffPeakStart && time < location.OffPeakEnd;
+        var time = TimeOnly.FromDateTime(ToLocal(sessionStart));
+        return IsTimeOffPeak(time, location.OffPeakStart.Value, location.OffPeakEnd.Value);
+    }
 
-        return time >= location.OffPeakStart || time < location.OffPeakEnd;
+    private static bool IsTimeOffPeak(TimeOnly time, TimeOnly offPeakStart, TimeOnly offPeakEnd)
+    {
+        if (offPeakStart <= offPeakEnd)
+            return time >= offPeakStart && time < offPeakEnd;
+        return time >= offPeakStart || time < offPeakEnd;
+    }
+
+    /// <summary>
+    /// Walk the [start, end] interval in minute-sized steps and tally how many
+    /// minutes fell inside the off-peak window vs. the peak window. Minute
+    /// granularity is plenty here — a 1-minute mis-attribution on a 5-hour
+    /// session is &lt;0.4 % error on the cost. Both timestamps are converted to
+    /// local time first because off-peak windows are configured in local time
+    /// while session timestamps come back as UTC.
+    /// </summary>
+    private static (int OffPeakMinutes, int PeakMinutes) SplitMinutes(
+        DateTime start, DateTime end, TimeOnly offPeakStart, TimeOnly offPeakEnd)
+    {
+        var localStart = ToLocal(start);
+        var localEnd = ToLocal(end);
+        if (localEnd <= localStart) return (0, 0);
+
+        var totalMinutes = (int)Math.Round((localEnd - localStart).TotalMinutes);
+        if (totalMinutes <= 0) return (0, 0);
+
+        // Cap iteration at 7 days to defend against malformed sessions —
+        // anything longer is almost certainly bad data, not a real charge.
+        const int maxMinutes = 7 * 24 * 60;
+        var iterations = Math.Min(totalMinutes, maxMinutes);
+
+        var offPeak = 0;
+        for (var i = 0; i < iterations; i++)
+        {
+            var t = TimeOnly.FromDateTime(localStart.AddMinutes(i));
+            if (IsTimeOffPeak(t, offPeakStart, offPeakEnd))
+                offPeak++;
+        }
+        return (offPeak, iterations - offPeak);
+    }
+
+    /// <summary>
+    /// Convert a database timestamp to local time using the API container's
+    /// configured time zone (driven by the <c>TZ</c> env var, e.g.
+    /// <c>Europe/Paris</c>). EF/Npgsql sometimes hands back DateTime values
+    /// with <see cref="DateTimeKind.Unspecified"/>, which would make
+    /// <see cref="TimeZoneInfo.ConvertTimeFromUtc"/> throw — so we coerce the
+    /// kind to UTC first.
+    /// </summary>
+    private static DateTime ToLocal(DateTime utc)
+    {
+        var asUtc = utc.Kind == DateTimeKind.Utc
+            ? utc
+            : DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+        return TimeZoneInfo.ConvertTimeFromUtc(asUtc, TimeZoneInfo.Local);
     }
 }

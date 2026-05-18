@@ -212,6 +212,10 @@ export interface CostOverride {
   locationId: number | null;
   location: ChargingLocation | null;
   notes: string | null;
+  /** kWh billed at the peak (HP) rate. Set only for "home" HC/HP locations. */
+  peakKwh: number | null;
+  /** kWh billed at the off-peak (HC) rate. Set only for "home" HC/HP locations. */
+  offPeakKwh: number | null;
 }
 
 export interface CostSummary {
