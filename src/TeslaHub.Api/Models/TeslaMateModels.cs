@@ -42,6 +42,8 @@ public record VehicleDto
     public double? PassengerTempSetting { get; init; }
     public bool? IsFrontDefrosterOn { get; init; }
     public bool? IsRearDefrosterOn { get; init; }
+    // 0 = off, 2 = max defrost. Set by the Fleet API snapshot overlay only.
+    public int? DefrostMode { get; init; }
 
     // TPMS warnings (MQTT live only)
     public bool? TpmsSoftWarningFl { get; init; }

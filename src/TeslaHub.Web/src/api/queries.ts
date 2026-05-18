@@ -48,6 +48,10 @@ export interface VehicleStatus {
   passengerTempSetting: number | null;
   isFrontDefrosterOn: boolean | null;
   isRearDefrosterOn: boolean | null;
+  // 0 = off, 2 = max-defrost. Only this signal reliably indicates the
+  // user pressed "Dégivrage" — the per-defroster booleans above flip on
+  // whenever the HVAC simply heats the windshield to reach the setpoint.
+  defrostMode: number | null;
 
   // TPMS warnings (MQTT live)
   tpmsSoftWarningFl: boolean | null;

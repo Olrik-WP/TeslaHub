@@ -108,6 +108,7 @@ public static class VehicleEndpoints
             // recent Fleet refresh yet — backwards-compatible.
             IsFrontDefrosterOn = live?.IsFrontDefrosterOn ?? vehicle.IsFrontDefrosterOn,
             IsRearDefrosterOn = live?.IsRearDefrosterOn ?? vehicle.IsRearDefrosterOn,
+            DefrostMode = live?.DefrostMode ?? vehicle.DefrostMode,
             ChargePortDoorOpen = live?.ChargePortDoorOpen ?? vehicle.ChargePortDoorOpen,
             PluggedIn = live?.PluggedIn ?? vehicle.PluggedIn,
             BatteryLevel = live?.BatteryLevel ?? vehicle.BatteryLevel,

@@ -40,6 +40,14 @@ public class MqttLiveData
     // force-refresh re-runs (which invalidates the ['vehicle'] cache).
     public bool? IsFrontDefrosterOn { get; set; }
     public bool? IsRearDefrosterOn { get; set; }
+    // Tesla's `defrost_mode` (0 = off, 2 = max). Only `2` means the user
+    // actively engaged "set_preconditioning_max" — the per-defroster
+    // booleans above also flip true when the HVAC is merely warming the
+    // cabin, so the Home quick-action pill must read this field instead
+    // (mirrors ClimateCard's `isMaxDefrost` logic on the Control page).
+    // Populated exclusively by OverlayFromFleetSnapshot — TeslaMate's
+    // MQTT firehose does not expose `defrost_mode`.
+    public int? DefrostMode { get; set; }
     public bool? ChargePortDoorOpen { get; set; }
     public bool? PluggedIn { get; set; }
 
@@ -271,6 +279,7 @@ public class MqttLiveDataService : BackgroundService
             var defrostMode = TryGetInt(root, "defrost_mode");
             if (defrostMode.HasValue)
             {
+                data.DefrostMode = defrostMode.Value;
                 if (data.IsFrontDefrosterOn is null) data.IsFrontDefrosterOn = defrostMode.Value != 0;
                 if (data.IsRearDefrosterOn is null) data.IsRearDefrosterOn = defrostMode.Value != 0;
                 changed = true;

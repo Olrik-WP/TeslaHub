@@ -231,6 +231,8 @@
       "climate": "Klima",
       "defrost": "Entfrosten",
       "chargePort": "Klappe",
+      "chargePortClose": "Klappe zu",
+      "unlockCable": "Entriegeln",
       "charge": "Laden",
       "chargeStop": "Stopp",
       "frunk": "Frunk",

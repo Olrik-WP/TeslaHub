@@ -115,9 +115,11 @@ export default function HomeQuickActions({ vehicle }: Props) {
     optimistic: vehiclePatch(carId, () => ({ isClimateOn: !isClimateOn })),
   });
   const defrost = useControlMutation<{ on: boolean }>(vehicleId, 'climate/precondition', {
-    // Mirrors HomeQuickActions' `defrostActive` heuristic: max-defrost
-    // always cranks both windshield defrosters at the same time.
+    // Patch all three signals so the "Dégivrage" pill reflects the new
+    // state immediately AND keeps reflecting it after the 5s force-refresh
+    // (which sets defrostMode authoritatively from vehicle_data).
     optimistic: vehiclePatch<{ on: boolean }>(carId, (_prev, body) => ({
+      defrostMode: body.on ? 2 : 0,
       isFrontDefrosterOn: body.on,
       isRearDefrosterOn: body.on,
     })),
@@ -149,12 +151,15 @@ export default function HomeQuickActions({ vehicle }: Props) {
   const windowsOpen = vehicle.windowsOpen ?? false;
   const portOpen = vehicle.chargePortDoorOpen ?? false;
   const pluggedIn = vehicle.pluggedIn ?? false;
-  // MQTT doesn't expose defrost_mode (Tesla telemetry channel) so we
-  // approximate the "Dégivrage actif" state with the windshield-side
-  // defrosters. Front defroster ON means max-defrost was requested in
-  // virtually every real-world scenario; the Control page still shows
-  // the authoritative defrost_mode from vehicle_data.
-  const defrostActive = (vehicle.isFrontDefrosterOn ?? false) || (vehicle.isRearDefrosterOn ?? false);
+  // Authoritative "Dégivrage actif" signal — same logic as ClimateCard.
+  // `isFrontDefrosterOn` / `isRearDefrosterOn` are deliberately NOT used:
+  // Tesla flips them on whenever the HVAC heats the windshield to reach
+  // the setpoint, which made the pill glow yellow as soon as Climate was
+  // turned on. `defrostMode === 2` only flips when the user actually
+  // engages `set_preconditioning_max` (= "Dégivrage du véhicule"). When
+  // the overlay hasn't run yet (defrostMode null) we stay off — better
+  // to under-report than to lie.
+  const defrostActive = (vehicle.defrostMode ?? 0) === 2;
   const caps = teslaVehicle.capabilities;
   // Show frunk/trunk chips by default (every modern Tesla actuates
   // both lids). Only hide when vehicle_config explicitly says false.
@@ -217,10 +222,24 @@ export default function HomeQuickActions({ vehicle }: Props) {
           icon={<DefrostGlyph />}
         />
         {showChargePort && (
+          // Mirrors ChargeCard's three-state behaviour:
+          //   - plugged in           → "Déverrouiller câble" (info)
+          //   - port already open    → "Fermer trappe"        (warning)
+          //   - otherwise            → "Trappe"               (neutral)
+          // When plugged we ALWAYS send { on: true } — Tesla's
+          // charge_port_door_open command doubles as "release cable
+          // latch" when a connector is detected, matching the official
+          // app's behaviour.
           <ControlButton
-            label={t('home.quickActions.chargePort')}
-            state={portOpen ? 'warning' : 'neutral'}
-            onClick={() => chargePort.mutate({ on: !portOpen })}
+            label={
+              pluggedIn
+                ? t('home.quickActions.unlockCable')
+                : portOpen
+                  ? t('home.quickActions.chargePortClose')
+                  : t('home.quickActions.chargePort')
+            }
+            state={pluggedIn ? 'info' : portOpen ? 'warning' : 'neutral'}
+            onClick={() => chargePort.mutate({ on: pluggedIn ? true : !portOpen })}
             loading={chargePort.isPending}
             wakingHint={chargePort.wakingHint}
             icon={<ChargePortGlyph />}
