@@ -111,6 +111,43 @@ export default function Costs({ carId }: Props) {
   const fleetTotalDist = fleetSummaries.reduce((s, c) => s + (c.summary?.totalDistanceKm ?? 0), 0);
   const fleetSessions = fleetSummaries.reduce((s, c) => s + (c.summary?.sessionCount ?? 0), 0);
 
+  // Per-car gas configs so we can compute a fleet-wide savings recap. Kept
+  // in a parallel `useQueries` (not folded into the cost-summary query) so
+  // staleTime can stay long: gas price / consumption are user-set and
+  // rarely change vs. the period-bound cost data above which re-runs on
+  // every navigation tick.
+  const carConfigQueries = useQueries({
+    queries: (cars ?? []).map((car) => ({
+      queryKey: ['carConfig', car.id],
+      queryFn: () => getCarConfig(car.id),
+      enabled: (cars?.length ?? 0) > 1,
+      staleTime: 5 * 60_000,
+    })),
+  });
+
+  // Fleet gas savings — same time window as `fleetSummaries` (period
+  // selector flows through `totalDistanceKm` / `totalCost`). Vehicles
+  // without a gas config are dropped from BOTH sides of the comparison
+  // so the headline number stays apples-to-apples.
+  const fleetGas = (cars ?? []).reduce(
+    (acc, car, i) => {
+      const cfg = carConfigQueries[i]?.data;
+      const sum = fleetSummaries[i]?.summary;
+      if (!cfg?.gasPricePerLiter || !cfg?.gasConsumptionLPer100Km) return acc;
+      const dist = sum?.totalDistanceKm ?? 0;
+      if (dist <= 0) return acc;
+      const gasEq = dist * (cfg.gasConsumptionLPer100Km / 100) * cfg.gasPricePerLiter;
+      return {
+        gasEquivalent: acc.gasEquivalent + gasEq,
+        teslaCost: acc.teslaCost + (sum?.totalCost ?? 0),
+        comparableDist: acc.comparableDist + dist,
+        comparableCars: acc.comparableCars + 1,
+      };
+    },
+    { gasEquivalent: 0, teslaCost: 0, comparableDist: 0, comparableCars: 0 },
+  );
+  const fleetSavings = fleetGas.gasEquivalent - fleetGas.teslaCost;
+
   const [gasPrice, setGasPrice] = useState<string>('');
   const [gasConso, setGasConso] = useState<string>('');
   const [gasName, setGasName] = useState<string>('');
@@ -339,6 +376,66 @@ export default function Costs({ carId }: Props) {
               );
             })}
           </div>
+
+          {/* Fleet gas savings — only shown when at least one vehicle has a
+              gas config AND has accumulated distance in the selected period.
+              Mirrors the single-car gas comparison panel further down, but
+              aggregates across the whole fleet so the user gets one headline
+              number that follows the period selector (mois / année / etc.). */}
+          {fleetGas.comparableCars > 0 && fleetGas.gasEquivalent > 0 && (
+            <div className="pt-3 border-t border-[#2a2a2a] space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] text-[#9ca3af] uppercase tracking-wider">
+                  {t('costs.fleetGasSavings')}
+                </div>
+                <div className="text-[10px] text-[#6b7280]">
+                  {fleetGas.comparableCars} / {cars?.length ?? 0} {t('costs.vehicles')}
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <StatCard
+                  label={t('costs.gasEquivalent')}
+                  value={fleetGas.gasEquivalent.toFixed(2)}
+                  unit={u.currencySymbol}
+                  color="#ef4444"
+                />
+                <StatCard
+                  label={t('costs.teslaCost')}
+                  value={fleetGas.teslaCost.toFixed(2)}
+                  unit={u.currencySymbol}
+                  color="#3b82f6"
+                />
+                <StatCard
+                  label={fleetSavings >= 0 ? t('costs.savings') : t('costs.savingsNegative')}
+                  value={Math.abs(fleetSavings).toFixed(2)}
+                  unit={u.currencySymbol}
+                  color={fleetSavings >= 0 ? '#22c55e' : '#ef4444'}
+                />
+              </div>
+              {/* Visual bar — Tesla cost as a fraction of the gas equivalent
+                  (same conventions as the single-car panel below). */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-5 rounded-full bg-[#1a1a1a] overflow-hidden relative">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min(100, (fleetGas.teslaCost / fleetGas.gasEquivalent) * 100)}%`,
+                        backgroundColor: '#3b82f6',
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs text-[#9ca3af] tabular-nums w-12 text-right">
+                    {((fleetGas.teslaCost / fleetGas.gasEquivalent) * 100).toFixed(0)}%
+                  </span>
+                </div>
+                <div className="flex justify-between text-[10px] text-[#6b7280]">
+                  <span>Tesla</span>
+                  <span>{t('costs.gasEquivalent')}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

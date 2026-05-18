@@ -400,7 +400,8 @@
     "savingsNegative": "Overcost",
     "configureGas": "Enter fuel price and consumption to see savings.",
     "fleetTotal": "Fleet total",
-    "vehicles": "vehicles"
+    "vehicles": "vehicles",
+    "fleetGasSavings": "Fleet savings vs gas"
   },
   "trips": {
     "title": "Trips",

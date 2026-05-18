@@ -400,7 +400,8 @@
     "savingsNegative": "Surcoût",
     "configureGas": "Renseignez le prix du carburant et la consommation pour voir les économies.",
     "fleetTotal": "Total flotte",
-    "vehicles": "véhicules"
+    "vehicles": "véhicules",
+    "fleetGasSavings": "Économies flotte vs essence"
   },
   "trips": {
     "title": "Trajets",

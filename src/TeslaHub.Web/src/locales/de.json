@@ -400,7 +400,8 @@
     "savingsNegative": "Mehrkosten",
     "configureGas": "Geben Sie Kraftstoffpreis und Verbrauch ein, um die Ersparnis zu sehen.",
     "fleetTotal": "Flotte gesamt",
-    "vehicles": "Fahrzeuge"
+    "vehicles": "Fahrzeuge",
+    "fleetGasSavings": "Flotten-Ersparnis vs. Benzin"
   },
   "trips": {
     "title": "Fahrten",
