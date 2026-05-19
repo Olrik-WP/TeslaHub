@@ -85,18 +85,18 @@ const WHEEL_ALLOY_MAT_RE = /^(aluminum|aluminium|chrome|metal_anodized|silver)/i
 const WHEEL_ALLOY_ROUGHNESS_MIN = 0.35;
 const WHEEL_ALLOY_ENVMAP_BOOST = 1.6;
 
-// ---- Always-on running lights --------------------------------------------
-// Tesla's daytime running lights stay lit whenever the car is awake. Until
-// we wire `vehicle.headlightsOn` from the API, we keep them subtly emissive
-// so the car doesn't feel "off". The warm tint matches the LED bar that
-// Tesla uses on the Model 3 Highland.
-//
-// Headlight LEDs use Light/LED_Strip/Illumination materials. We do NOT
-// touch Lens.material — that's the clear cover over the bulb, making it
-// emissive would create a fake glow square in front of the actual light.
-const RUNNING_LIGHT_MAT_RE = /^(light|led_strip|illumination)/i;
-const RUNNING_LIGHT_COLOR = 0xfff5cc; // warm white, matches Tesla DRL
-const RUNNING_LIGHT_INTENSITY = 1.2;
+// ---- Running lights (DISABLED for now) -----------------------------------
+// First attempt tried to emissive-boost `Light.material`, `LED_Strip.material`
+// and `Illumination1.material`. The emissive idea worked (turn signals lit
+// up amber and tail-lights glowed red because the albedo map tints the
+// emissive output), BUT those Tesla materials are SHARED between actual
+// LED elements AND nearby decorative trims:
+//   - Light.material → also painted the white outlines around taillights
+//   - Illumination1.material → also painted the charge port lid ring white
+// Doing this cleanly requires targeting by NODE NAME (e.g. Headlight_DRL,
+// LED_Bar, Charge_Port_Ring) instead of material name, and gating it on
+// real vehicle state (vehicle.headlightsOn, vehicle.chargeState, etc.).
+// We'll revisit this when wiring the Phase 2 dynamic state.
 
 function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
   const { scene } = useGLTF(MODEL_URL);
@@ -245,10 +245,8 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
     let roofFixed = 0;
     let windowFixed = 0;
     let paintFixed = 0;
-    let lightFixed = 0;
     const glassDebug: string[] = [];
     const paintDebug: string[] = [];
-    const lightDebug: string[] = [];
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -267,8 +265,6 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
           opacity?: number;
           side?: THREE.Side;
           color?: THREE.Color;
-          emissive?: THREE.Color;
-          emissiveIntensity?: number;
         };
         const matName = (mat as { name?: string }).name ?? '';
 
@@ -282,19 +278,6 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
           // stray trim that's painted by mistake (e.g. wipers/door
           // handles sharing a body material).
           paintDebug.push(`${pathOf(mesh)} mat="${matName}"`);
-        }
-
-        // Running lights (DRL) — drive the emissive channel so the LEDs
-        // glow without relying on a real light source. The albedo map of
-        // tail-light lenses is red, so for the same Light material the
-        // emissive gets multiplied by red and looks correct on rear lamps.
-        if (RUNNING_LIGHT_MAT_RE.test(matName) && mat.emissive) {
-          mat.emissive.setHex(RUNNING_LIGHT_COLOR);
-          mat.emissiveIntensity = RUNNING_LIGHT_INTENSITY;
-          lightFixed++;
-          if (lightDebug.length < 10) {
-            lightDebug.push(`${mesh.name || '(unnamed)'} mat="${matName}"`);
-          }
         }
 
         const matIsOuter = isOuter || OUTER_GLASS_MAT.test(matName);
@@ -325,10 +308,6 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
     if (paintFixed > 0) {
       // eslint-disable-next-line no-console
       console.log('[Poppyseed3D] painted meshes:', paintDebug);
-    }
-    if (lightFixed > 0) {
-      // eslint-disable-next-line no-console
-      console.log('[Poppyseed3D] running-light meshes:', lightDebug);
     }
 
     let wheelsAttached = 0;
@@ -391,7 +370,7 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
       `[Poppyseed3D] removed=${toRemove.length} | wheelsAvailable=${wheelsAvailable} | ` +
         `wheelsMode=${wheelMode} | wheelsAttached=${wheelsAttached}/4 | ` +
         `transparentFixed=${transparentFixed} | roofFixed=${roofFixed} | windowFixed=${windowFixed} | ` +
-        `paintFixed=${paintFixed} | lightFixed=${lightFixed} | ` +
+        `paintFixed=${paintFixed} | ` +
         `bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
         `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
     );
@@ -484,9 +463,11 @@ export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
               its auto observe so our manual refresh() after node cleanup is
               authoritative; otherwise the projection planes (visible during
               first frame) would inflate the initial fit. */}
-          {/* margin=1.0 = fit exactly inside canvas, margin>1 adds padding.
-              1.05 keeps the car close to the edges without clipping. */}
-          <Bounds fit clip margin={1.05}>
+          {/* margin=1.0 = fit exactly inside canvas, margin>1 adds padding,
+              margin<1 zooms in so the car slightly overflows. We can afford
+              0.95 because the top/bottom of the bbox is mostly air (sky
+              over the roof, tarmac under the wheels). */}
+          <Bounds fit clip margin={0.95}>
             {/* Wait until the wheel probe completes before mounting the
                 chassis. Otherwise the chassis loads twice via Suspense when
                 the wheel state flips from unknown → available. */}
