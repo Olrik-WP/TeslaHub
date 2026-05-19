@@ -114,6 +114,27 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     // planes and the car ends up tiny and off-center.
     toRemove.forEach((obj) => obj.parent?.remove(obj));
 
+    // Fix transparency sorting for the panoramic glass roof and tinted
+    // windows. Without this, three.js' depth buffer occasionally hides
+    // glass meshes (or shows the HDR environment through them with a
+    // greenish tint) depending on camera angle — a classic transparent
+    // sorting glitch. Disabling depthWrite + bumping renderOrder forces
+    // them to draw last and prevents the flicker.
+    let transparentFixed = 0;
+    scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of materials) {
+        const mat = m as THREE.Material & { opacity?: number };
+        if (mat.transparent || (mat.opacity !== undefined && mat.opacity < 1)) {
+          mat.depthWrite = false;
+          mesh.renderOrder = 1;
+          transparentFixed++;
+        }
+      }
+    });
+
     let wheelsAttached = 0;
     let wheelMode: 'anchor' | 'fallback' | 'none' = 'none';
     if (wheelsAvailable) {
@@ -173,6 +194,7 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     console.log(
       `[Poppyseed3D] removed=${toRemove.length} | wheelsAvailable=${wheelsAvailable} | ` +
         `wheelsMode=${wheelMode} | wheelsAttached=${wheelsAttached}/4 | ` +
+        `transparentFixed=${transparentFixed} | ` +
         `bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
         `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
     );
