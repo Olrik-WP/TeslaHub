@@ -142,39 +142,68 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     //    roof never disappears regardless of viewing angle, plus a higher
     //    renderOrder so it draws after every other glass piece.
     // Walk up the parent chain — Windows_Top is a Group in Godot, so the
-    // actual mesh inside has an auto-generated name. Same for the material.
-    const ROOF_PATTERN = /windows_top|glass_skybox|sunroof|roof_glass/i;
-    const isInsideRoof = (start: THREE.Object3D): boolean => {
+    // actual mesh inside has an auto-generated name. Same for the windows
+    // and windshields wrapped in Window_LF, Window_RF, Front_Screen etc.
+    //
+    // OUTER_GLASS_NODE matches the parent Groups in the model hierarchy.
+    // OUTER_GLASS_MAT matches Tesla's *_Skybox materials (used for any
+    // exterior glass surface that should reflect the environment).
+    const OUTER_GLASS_NODE =
+      /windows_top|window_l[fr]|window_r[fr]|front_screen|rear_screen|sunroof/i;
+    const OUTER_GLASS_MAT = /glass.*skybox|glass_lights/i;
+    const isInsideOuterGlass = (start: THREE.Object3D): boolean => {
       let cur: THREE.Object3D | null = start;
       while (cur) {
-        if (ROOF_PATTERN.test(cur.name)) return true;
+        if (OUTER_GLASS_NODE.test(cur.name)) return true;
         cur = cur.parent;
       }
       return false;
     };
 
+    // Tesla's Model 3 Highland has factory-tinted glass (toit panoramique
+    // dark bronze, side windows lightly tinted, custodes dark). We darken
+    // the original colors via multiplyScalar — keeps existing reflectance
+    // and HDR highlights, just lowers the diffuse intensity.
+    const ROOF_TINT = 0.15; // very dark (panoramic roof)
+    const WINDOW_TINT = 0.45; // moderate (side windows / windshields)
+
     let transparentFixed = 0;
     let roofFixed = 0;
-    const roofDebug: string[] = [];
+    let windowFixed = 0;
+    const glassDebug: string[] = [];
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
-      const isRoofGlass = isInsideRoof(mesh);
+      const isRoof = (() => {
+        let cur: THREE.Object3D | null = mesh;
+        while (cur) {
+          if (/windows_top|sunroof/i.test(cur.name)) return true;
+          cur = cur.parent;
+        }
+        return false;
+      })();
+      const isOuter = isRoof || isInsideOuterGlass(mesh);
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const m of materials) {
         const mat = m as THREE.Material & {
           opacity?: number;
           side?: THREE.Side;
+          color?: THREE.Color;
         };
         const matName = (mat as { name?: string }).name ?? '';
-        if (isRoofGlass || ROOF_PATTERN.test(matName)) {
+        const matIsOuter = isOuter || OUTER_GLASS_MAT.test(matName);
+        if (matIsOuter) {
           mat.transparent = true;
           mat.depthWrite = false;
           mat.side = THREE.DoubleSide;
           mesh.renderOrder = 2;
-          roofFixed++;
-          if (roofDebug.length < 5) {
-            roofDebug.push(`${mesh.name || '(unnamed)'} mat="${matName}"`);
+          if (mat.color) mat.color.multiplyScalar(isRoof ? ROOF_TINT : WINDOW_TINT);
+          if (isRoof) roofFixed++;
+          else windowFixed++;
+          if (glassDebug.length < 8) {
+            glassDebug.push(
+              `${isRoof ? 'ROOF' : 'WIN'} ${mesh.name || '(unnamed)'} mat="${matName}"`,
+            );
           }
         } else if (mat.transparent || (mat.opacity !== undefined && mat.opacity < 1)) {
           mat.depthWrite = false;
@@ -183,9 +212,9 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
         }
       }
     });
-    if (roofFixed > 0) {
+    if (roofFixed + windowFixed > 0) {
       // eslint-disable-next-line no-console
-      console.log('[Poppyseed3D] roof meshes:', roofDebug);
+      console.log('[Poppyseed3D] glass meshes:', glassDebug);
     }
 
     let wheelsAttached = 0;
@@ -247,7 +276,7 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     console.log(
       `[Poppyseed3D] removed=${toRemove.length} | wheelsAvailable=${wheelsAvailable} | ` +
         `wheelsMode=${wheelMode} | wheelsAttached=${wheelsAttached}/4 | ` +
-        `transparentFixed=${transparentFixed} | roofFixed=${roofFixed} | ` +
+        `transparentFixed=${transparentFixed} | roofFixed=${roofFixed} | windowFixed=${windowFixed} | ` +
         `bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
         `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
     );
