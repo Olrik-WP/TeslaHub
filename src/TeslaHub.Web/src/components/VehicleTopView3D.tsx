@@ -46,14 +46,21 @@ const WHEEL_ANCHORS = [
 //   18" wheel radius 343 mm → wheel center y = 0.343 m
 //   Axes: X = longitudinal (+ forward), Y = up, Z = lateral (+ right)
 //
-// `rotate180` flips the wheel 180° around its geometric center (handled
-// via a wrapper group below) so the cap faces outward. Whether the right
-// or the left side needs rotation depends on the GLB's native orientation.
+// `flipZ` applies a `scale.z = -1` on a wrapper group so the wheel cap
+// faces the desired side. We use scale-flip rather than Y-rotation because
+// the Godot-exported wheel sometimes has internal transforms that cancel
+// a parent rotation, while a negative scale always reflects the geometry.
+// Three.js automatically reverses face winding for negative scales so
+// normals stay correct.
+//
+// DEBUG: flipZ is forced on ALL 4 wheels in this build so we can confirm
+// whether the wheel mesh is actually asymmetric on Z. If the appearance
+// changes vs the previous build, we'll set it only on the proper side.
 const WHEEL_FALLBACK_POSITIONS = [
-  { id: 'LF', x: +1.4875, y: 0.343, z: -0.85, rotate180: false },
-  { id: 'RF', x: +1.4875, y: 0.343, z: +0.85, rotate180: true },
-  { id: 'LR', x: -1.3875, y: 0.343, z: -0.85, rotate180: false },
-  { id: 'RR', x: -1.3875, y: 0.343, z: +0.85, rotate180: true },
+  { id: 'LF', x: +1.4875, y: 0.343, z: -0.78, flipZ: true },
+  { id: 'RF', x: +1.4875, y: 0.343, z: +0.78, flipZ: true },
+  { id: 'LR', x: -1.3875, y: 0.343, z: -0.78, flipZ: true },
+  { id: 'RR', x: -1.3875, y: 0.343, z: +0.78, flipZ: true },
 ] as const;
 
 function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
@@ -129,31 +136,30 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
           for (const pos of WHEEL_FALLBACK_POSITIONS) {
             const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
 
-            // The wheel's native origin from Godot export is not at its
-            // geometric center — it sits near the inner hub face. A naive
-            // rotation.y on the wheel itself would pivot around that
-            // offset origin and keep the cap visually on the same side.
-            // We measure the wheel's local bbox center, re-center it, and
-            // then put a wrapper Group at the anchor that we can safely
-            // rotate around the wheel's true center.
+            // Re-center the wheel on its geometric bbox center, so any
+            // reflection or rotation pivots around the true center and
+            // not the Godot-exported native origin (which sits offset).
             wheelClone.updateMatrixWorld(true);
             const wheelBox = new THREE.Box3().setFromObject(wheelClone);
             const wheelCenter = wheelBox.getCenter(new THREE.Vector3());
+            const wheelSize = wheelBox.getSize(new THREE.Vector3());
             wheelClone.position.sub(wheelCenter);
 
             const wrapper = new THREE.Group();
             wrapper.add(wheelClone);
             wrapper.position.set(pos.x, pos.y, pos.z);
-            if (pos.rotate180) wrapper.rotation.y = Math.PI;
+            if (pos.flipZ) wrapper.scale.z = -1;
             scene.add(wrapper);
 
             wheelsAttached++;
             if (wheelsAttached === 1) {
               // eslint-disable-next-line no-console
               console.log(
-                `[Poppyseed3D] wheel ${pos.id}: native center offset=` +
-                  `(${wheelCenter.x.toFixed(2)}, ${wheelCenter.y.toFixed(2)}, ` +
-                  `${wheelCenter.z.toFixed(2)})`,
+                `[Poppyseed3D] wheel native: ` +
+                  `size=(${wheelSize.x.toFixed(3)}, ${wheelSize.y.toFixed(3)}, ` +
+                  `${wheelSize.z.toFixed(3)}) ` +
+                  `center=(${wheelCenter.x.toFixed(3)}, ${wheelCenter.y.toFixed(3)}, ` +
+                  `${wheelCenter.z.toFixed(3)})`,
               );
             }
           }
