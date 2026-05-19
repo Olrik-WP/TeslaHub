@@ -63,31 +63,42 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     // planes and the car ends up tiny and off-center.
     toRemove.forEach((obj) => obj.parent?.remove(obj));
 
+    let wheelsAttached = 0;
     if (wheelsAvailable) {
       for (const { name, mirror } of WHEEL_ANCHORS) {
         const anchor = anchors[name];
-        if (!anchor) continue;
+        if (!anchor) {
+          // eslint-disable-next-line no-console
+          console.warn(`[Poppyseed3D] anchor not found in scene: ${name}`);
+          continue;
+        }
         const ALREADY = '__teslahub_wheel_attached';
         if ((anchor as unknown as Record<string, boolean>)[ALREADY]) continue;
         const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
         if (mirror) wheelClone.scale.x = -1;
         anchor.add(wheelClone);
         (anchor as unknown as Record<string, boolean>)[ALREADY] = true;
+        wheelsAttached++;
+        const worldPos = new THREE.Vector3();
+        anchor.getWorldPosition(worldPos);
+        // eslint-disable-next-line no-console
+        console.log(
+          `[Poppyseed3D] wheel attached → ${name} @ world(` +
+            `${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)})`,
+        );
       }
     }
 
-    if (import.meta.env.DEV) {
-      const box = new THREE.Box3().setFromObject(scene);
-      const size = box.getSize(new THREE.Vector3());
-      const center = box.getCenter(new THREE.Vector3());
-      // eslint-disable-next-line no-console
-      console.log(
-        `[Poppyseed3D] removed ${toRemove.length} parasite nodes, ` +
-          `wheels=${wheelsAvailable ? 'mounted' : 'skipped (asset missing)'}, ` +
-          `bbox size=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
-          `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
-      );
-    }
+    const box = new THREE.Box3().setFromObject(scene);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    // eslint-disable-next-line no-console
+    console.log(
+      `[Poppyseed3D] removed=${toRemove.length} | wheelsAvailable=${wheelsAvailable} | ` +
+        `wheelsAttached=${wheelsAttached}/${WHEEL_ANCHORS.length} | ` +
+        `bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
+        `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
+    );
     return scene;
   }, [scene, wheelGltf.scene, wheelsAvailable]);
 
@@ -118,9 +129,19 @@ function useAssetAvailable(url: string): boolean | null {
       .then((r) => {
         if (cancelled) return;
         const ct = r.headers.get('content-type') ?? '';
-        setAvailable(r.ok && !ct.startsWith('text/'));
+        const ok = r.ok && !ct.startsWith('text/');
+        // eslint-disable-next-line no-console
+        console.log(
+          `[Poppyseed3D] probe ${url} → status=${r.status} content-type="${ct}" → available=${ok}`,
+        );
+        setAvailable(ok);
       })
-      .catch(() => !cancelled && setAvailable(false));
+      .catch((err) => {
+        if (cancelled) return;
+        // eslint-disable-next-line no-console
+        console.warn(`[Poppyseed3D] probe ${url} failed:`, err);
+        setAvailable(false);
+      });
     return () => {
       cancelled = true;
     };
