@@ -75,6 +75,29 @@ const WHEEL_FALLBACK_POSITIONS = [
   { id: 'RR', x: -1.3875, y: 0.343, z: +0.78, flipZ: false },
 ] as const;
 
+// ---- D50 wheel polish -----------------------------------------------------
+// The Godot-exported D50 alloy ships with metalness ≈ 0.9 / roughness ≈ 0.1
+// (mirror chrome). Under a flat HDR environment with no nearby shiny
+// surfaces to reflect, polished metal renders almost black — physically
+// correct, visually disappointing. Bumping roughness toward a "brushed
+// alloy" feel and boosting envMapIntensity catches more diffuse light.
+const WHEEL_ALLOY_MAT_RE = /^(aluminum|aluminium|chrome|metal_anodized|silver)/i;
+const WHEEL_ALLOY_ROUGHNESS_MIN = 0.35;
+const WHEEL_ALLOY_ENVMAP_BOOST = 1.6;
+
+// ---- Always-on running lights --------------------------------------------
+// Tesla's daytime running lights stay lit whenever the car is awake. Until
+// we wire `vehicle.headlightsOn` from the API, we keep them subtly emissive
+// so the car doesn't feel "off". The warm tint matches the LED bar that
+// Tesla uses on the Model 3 Highland.
+//
+// Headlight LEDs use Light/LED_Strip/Illumination materials. We do NOT
+// touch Lens.material — that's the clear cover over the bulb, making it
+// emissive would create a fake glow square in front of the actual light.
+const RUNNING_LIGHT_MAT_RE = /^(light|led_strip|illumination)/i;
+const RUNNING_LIGHT_COLOR = 0xfff5cc; // warm white, matches Tesla DRL
+const RUNNING_LIGHT_INTENSITY = 1.2;
+
 function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
   const { scene } = useGLTF(MODEL_URL);
   const wheelGltf = useGLTF(wheelsAvailable ? WHEEL_URL : MODEL_URL);
@@ -84,6 +107,34 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
 
   const bounds = useBounds();
   const cleanedScene = useMemo(() => {
+    // Polish the wheel materials ONCE, on the original wheelGltf.scene.
+    // SkeletonUtils.clone preserves material references, so tweaks made
+    // here propagate to all 4 cloned wheels for free.
+    if (wheelsAvailable) {
+      const FLAG = '__teslahub_wheel_polished';
+      const wheelSceneRef = wheelGltf.scene as unknown as Record<string, boolean>;
+      if (!wheelSceneRef[FLAG]) {
+        let polishedCount = 0;
+        wheelGltf.scene.traverse((obj) => {
+          const mesh = obj as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          for (const m of mats) {
+            const mat = m as THREE.MeshStandardMaterial;
+            const matName = (mat as { name?: string }).name ?? '';
+            if (WHEEL_ALLOY_MAT_RE.test(matName)) {
+              mat.roughness = Math.max(mat.roughness ?? 0.5, WHEEL_ALLOY_ROUGHNESS_MIN);
+              mat.envMapIntensity = (mat.envMapIntensity ?? 1) * WHEEL_ALLOY_ENVMAP_BOOST;
+              polishedCount++;
+            }
+          }
+        });
+        wheelSceneRef[FLAG] = true;
+        // eslint-disable-next-line no-console
+        console.log(`[Poppyseed3D] polished ${polishedCount} alloy material(s) on wheel`);
+      }
+    }
+
     const toRemove: THREE.Object3D[] = [];
     const anchors: Record<string, THREE.Object3D> = {};
     const wheelCandidates: { name: string; type: string; path: string }[] = [];
@@ -194,8 +245,10 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
     let roofFixed = 0;
     let windowFixed = 0;
     let paintFixed = 0;
+    let lightFixed = 0;
     const glassDebug: string[] = [];
     const paintDebug: string[] = [];
+    const lightDebug: string[] = [];
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -214,6 +267,8 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
           opacity?: number;
           side?: THREE.Side;
           color?: THREE.Color;
+          emissive?: THREE.Color;
+          emissiveIntensity?: number;
         };
         const matName = (mat as { name?: string }).name ?? '';
 
@@ -227,6 +282,19 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
           // stray trim that's painted by mistake (e.g. wipers/door
           // handles sharing a body material).
           paintDebug.push(`${pathOf(mesh)} mat="${matName}"`);
+        }
+
+        // Running lights (DRL) — drive the emissive channel so the LEDs
+        // glow without relying on a real light source. The albedo map of
+        // tail-light lenses is red, so for the same Light material the
+        // emissive gets multiplied by red and looks correct on rear lamps.
+        if (RUNNING_LIGHT_MAT_RE.test(matName) && mat.emissive) {
+          mat.emissive.setHex(RUNNING_LIGHT_COLOR);
+          mat.emissiveIntensity = RUNNING_LIGHT_INTENSITY;
+          lightFixed++;
+          if (lightDebug.length < 10) {
+            lightDebug.push(`${mesh.name || '(unnamed)'} mat="${matName}"`);
+          }
         }
 
         const matIsOuter = isOuter || OUTER_GLASS_MAT.test(matName);
@@ -257,6 +325,10 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
     if (paintFixed > 0) {
       // eslint-disable-next-line no-console
       console.log('[Poppyseed3D] painted meshes:', paintDebug);
+    }
+    if (lightFixed > 0) {
+      // eslint-disable-next-line no-console
+      console.log('[Poppyseed3D] running-light meshes:', lightDebug);
     }
 
     let wheelsAttached = 0;
@@ -319,7 +391,7 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
       `[Poppyseed3D] removed=${toRemove.length} | wheelsAvailable=${wheelsAvailable} | ` +
         `wheelsMode=${wheelMode} | wheelsAttached=${wheelsAttached}/4 | ` +
         `transparentFixed=${transparentFixed} | roofFixed=${roofFixed} | windowFixed=${windowFixed} | ` +
-        `paintFixed=${paintFixed} | ` +
+        `paintFixed=${paintFixed} | lightFixed=${lightFixed} | ` +
         `bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
         `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
     );
@@ -385,14 +457,16 @@ export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
     <div className="relative w-full" style={{ height: 360 }}>
       <Canvas
         ref={canvasRef}
-        camera={{ position: [10, 6, 14], fov: 30 }}
+        camera={{ position: [8, 5, 11], fov: 35 }}
         dpr={[1, 1.5]}
         gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
         style={{ background: 'transparent' }}
         onCreated={({ gl }) => {
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 0.9;
+          // Slight overexposure helps brushed alloy wheels read against
+          // the dark windows and contact shadow.
+          gl.toneMappingExposure = 1.05;
         }}
       >
         <ambientLight intensity={0.35} />
@@ -410,7 +484,9 @@ export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
               its auto observe so our manual refresh() after node cleanup is
               authoritative; otherwise the projection planes (visible during
               first frame) would inflate the initial fit. */}
-          <Bounds fit clip margin={1.25}>
+          {/* margin=1.0 = fit exactly inside canvas, margin>1 adds padding.
+              1.05 keeps the car close to the edges without clipping. */}
+          <Bounds fit clip margin={1.05}>
             {/* Wait until the wheel probe completes before mounting the
                 chassis. Otherwise the chassis loads twice via Suspense when
                 the wheel state flips from unknown → available. */}
