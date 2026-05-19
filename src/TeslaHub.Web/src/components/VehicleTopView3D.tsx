@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas } from '@react-three/fiber';
 import {
   useGLTF,
   OrbitControls,
@@ -44,31 +44,29 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
   //   wheel asset is missing we reuse the main URL — its scene is then
   //   ignored by the wheel mounting code below.
 
-  // Refresh the Bounds fit once the scene has been cleaned/wheels mounted.
   const bounds = useBounds();
   const cleanedScene = useMemo(() => {
-    let hiddenCount = 0;
+    const toRemove: THREE.Object3D[] = [];
     const anchors: Record<string, THREE.Object3D> = {};
     scene.traverse((obj) => {
       if (HIDDEN_NODE_NAMES.has(obj.name)) {
-        obj.visible = false;
-        hiddenCount++;
+        toRemove.push(obj);
       }
-      // Collect wheel anchor nodes — they live under ROOT/Spatials.
       for (const a of WHEEL_ANCHORS) {
         if (obj.name === a.name) anchors[a.name] = obj;
       }
     });
 
-    // Attach a clone of the wheel mesh to each anchor. We mutate the loaded
-    // scene directly because R3F's `<primitive>` does not re-traverse on
-    // children additions; once attached as Object3D children, transforms
-    // inherit naturally from the anchor.
+    // Detach (not just hide) the parasite nodes — Three.js Box3.setFromObject
+    // includes invisible meshes when computing the bounding box, so without
+    // a real removal Bounds.fit() keeps cropping around the projection
+    // planes and the car ends up tiny and off-center.
+    toRemove.forEach((obj) => obj.parent?.remove(obj));
+
     if (wheelsAvailable) {
       for (const { name, mirror } of WHEEL_ANCHORS) {
         const anchor = anchors[name];
         if (!anchor) continue;
-        // Avoid double-attaching on Fast Refresh / re-render.
         const ALREADY = '__teslahub_wheel_attached';
         if ((anchor as unknown as Record<string, boolean>)[ALREADY]) continue;
         const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
@@ -79,16 +77,21 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     }
 
     if (import.meta.env.DEV) {
+      const box = new THREE.Box3().setFromObject(scene);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
       // eslint-disable-next-line no-console
       console.log(
-        `[Poppyseed3D] hidden ${hiddenCount} parasite nodes, ` +
-          `wheels=${wheelsAvailable ? 'mounted' : 'skipped (asset missing)'}`,
+        `[Poppyseed3D] removed ${toRemove.length} parasite nodes, ` +
+          `wheels=${wheelsAvailable ? 'mounted' : 'skipped (asset missing)'}, ` +
+          `bbox size=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
+          `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
       );
     }
     return scene;
   }, [scene, wheelGltf.scene, wheelsAvailable]);
 
-  // After mutating the scene, refit the camera so the cropped bbox is centered.
+  // Refit the camera once we've mutated the scene tree.
   useEffect(() => {
     if (bounds) bounds.refresh().fit();
   }, [cleanedScene, bounds]);
