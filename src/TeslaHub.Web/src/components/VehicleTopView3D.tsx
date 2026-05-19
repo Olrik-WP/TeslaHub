@@ -179,9 +179,16 @@ const WINDOW_TINT = 0.45; // moderate (side windows / windshields)
 //   Deep Blue Metallic     : 0x1B2A45
 //   Ultra Red              : 0xB81616
 const BODY_PAINT_COLOR = 0xf2f2f0;
-// Matches the materials Tesla applies to the painted body shell.
-// We exclude generic "Plastic_Black" / "Black_Anodized" / "Chrome" etc.
-const BODY_PAINT_MAT = /^(paint|exterior|paintskybox)/i;
+// Matches only Tesla's *named* paint materials. We deliberately exclude:
+//  - Exterior* (Exterior / Exterior_Fade / Exterior_Perf) — those are
+//    composite shells that bake black trims (wipers, rubber seals, mirror
+//    backs, plastic handles) into a single mesh using an albedo texture.
+//    Overriding their diffuse color tints the black trims too.
+//  - Plastic_*, Rubber_*, Chrome, Black_Anodized — obviously not paint.
+// Three.js MeshStandardMaterial.color is *multiplied* with the albedo map,
+// so for "real" paint materials Tesla uses a neutral/white texture and
+// drives the actual color via `mat.color`, which makes recoloring safe.
+const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
 
     let transparentFixed = 0;
     let roofFixed = 0;
@@ -216,9 +223,10 @@ const BODY_PAINT_MAT = /^(paint|exterior|paintskybox)/i;
         if (BODY_PAINT_MAT.test(matName) && mat.color) {
           mat.color.setHex(BODY_PAINT_COLOR);
           paintFixed++;
-          if (paintDebug.length < 5) {
-            paintDebug.push(`${mesh.name || '(unnamed)'} mat="${matName}"`);
-          }
+          // Log every single mesh→material assignment so we can spot a
+          // stray trim that's painted by mistake (e.g. wipers/door
+          // handles sharing a body material).
+          paintDebug.push(`${pathOf(mesh)} mat="${matName}"`);
         }
 
         const matIsOuter = isOuter || OUTER_GLASS_MAT.test(matName);
