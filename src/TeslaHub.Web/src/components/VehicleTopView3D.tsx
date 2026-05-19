@@ -39,21 +39,24 @@ const WHEEL_ANCHORS = [
 ] as const;
 
 // Fallback positions used when the empty anchors above were stripped at
-// export. Coordinates come from the real Tesla Model 3 Highland (Poppyseed)
-// dimensions: wheelbase 2875 mm, track 1580 mm, 18" wheel radius 343 mm.
-// We assume the model's origin is at chassis-ground center (verified via
-// bbox center y=0.72 with size y=1.45). Axes:
-//   X = longitudinal (front/back)
-//   Y = vertical (ground up)
-//   Z = lateral (left/right)
-// If the wheels appear swapped front/back, flip the sign of x. If swapped
-// left/right, flip the sign of z. Mirror is applied on Z so the cylindrical
-// wheel keeps its profile when reflected across the car centerline.
+// export. Coordinates derived from real Tesla Model 3 Highland (Poppyseed)
+// dimensions, then refined empirically against the actual GLB origin which
+// sits 17 cm forward of the visual chassis center.
+//   Wheelbase 2875 mm + 150 mm forward offset → x ±1.4375 ± 0.15
+//   Track 1580 mm widened to 1700 mm (tires sit outboard of chassis)
+//   18" wheel radius 343 mm → wheel center y = 0.343 m
+//   Axes: X = longitudinal (+ forward), Y = up, Z = lateral (+ right)
+//
+// The default wheel mesh in wheel_d50_highland.glb is oriented for the
+// LEFT side of the vehicle (outer cap face toward -Z). For the right side
+// we rotate 180° around Y rather than mirror-scale, which keeps normals
+// and face winding intact (mirror-scale inverts them and would show the
+// inner hub cap on the outside).
 const WHEEL_FALLBACK_POSITIONS = [
-  { id: 'LF', x: +1.4375, y: 0.343, z: -0.79, mirror: false },
-  { id: 'RF', x: +1.4375, y: 0.343, z: +0.79, mirror: true },
-  { id: 'LR', x: -1.4375, y: 0.343, z: -0.79, mirror: false },
-  { id: 'RR', x: -1.4375, y: 0.343, z: +0.79, mirror: true },
+  { id: 'LF', x: +1.5875, y: 0.343, z: -0.85, rotate180: false },
+  { id: 'RF', x: +1.5875, y: 0.343, z: +0.85, rotate180: true },
+  { id: 'LR', x: -1.2875, y: 0.343, z: -0.85, rotate180: false },
+  { id: 'RR', x: -1.2875, y: 0.343, z: +0.85, rotate180: true },
 ] as const;
 
 function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
@@ -121,7 +124,7 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
           for (const { name, mirror } of WHEEL_ANCHORS) {
             const anchor = anchors[name];
             const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
-            if (mirror) wheelClone.scale.z = -1;
+            if (mirror) wheelClone.rotation.y = Math.PI;
             anchor.add(wheelClone);
             wheelsAttached++;
           }
@@ -129,7 +132,7 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
           for (const pos of WHEEL_FALLBACK_POSITIONS) {
             const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
             wheelClone.position.set(pos.x, pos.y, pos.z);
-            if (pos.mirror) wheelClone.scale.z = -1;
+            if (pos.rotate180) wheelClone.rotation.y = Math.PI;
             scene.add(wheelClone);
             wheelsAttached++;
           }
