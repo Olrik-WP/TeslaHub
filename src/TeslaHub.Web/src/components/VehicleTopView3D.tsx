@@ -48,6 +48,18 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
   const cleanedScene = useMemo(() => {
     const toRemove: THREE.Object3D[] = [];
     const anchors: Record<string, THREE.Object3D> = {};
+    const wheelCandidates: { name: string; type: string; path: string }[] = [];
+
+    const pathOf = (obj: THREE.Object3D): string => {
+      const parts: string[] = [];
+      let cur: THREE.Object3D | null = obj;
+      while (cur) {
+        parts.unshift(cur.name || `(${cur.type})`);
+        cur = cur.parent;
+      }
+      return parts.join('/');
+    };
+
     scene.traverse((obj) => {
       if (HIDDEN_NODE_NAMES.has(obj.name)) {
         toRemove.push(obj);
@@ -55,7 +67,22 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
       for (const a of WHEEL_ANCHORS) {
         if (obj.name === a.name) anchors[a.name] = obj;
       }
+      // Diagnostic: collect anything that smells like a wheel anchor or
+      // mesh, so we can find the real names Godot used at GLB export.
+      if (/wheel/i.test(obj.name)) {
+        wheelCandidates.push({
+          name: obj.name,
+          type: obj.type,
+          path: pathOf(obj),
+        });
+      }
     });
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `[Poppyseed3D] found ${wheelCandidates.length} node(s) matching /wheel/i:`,
+      wheelCandidates,
+    );
 
     // Detach (not just hide) the parasite nodes — Three.js Box3.setFromObject
     // includes invisible meshes when computing the bounding box, so without
