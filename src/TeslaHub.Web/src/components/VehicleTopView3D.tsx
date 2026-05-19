@@ -160,17 +160,35 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
       return false;
     };
 
-    // Tesla's Model 3 Highland has factory-tinted glass (toit panoramique
-    // dark bronze, side windows lightly tinted, custodes dark). We darken
-    // the original colors via multiplyScalar — keeps existing reflectance
-    // and HDR highlights, just lowers the diffuse intensity.
-    const ROOF_TINT = 0.15; // very dark (panoramic roof)
-    const WINDOW_TINT = 0.45; // moderate (side windows / windshields)
+// Tesla's Model 3 Highland has factory-tinted glass (toit panoramique
+// dark bronze, side windows lightly tinted, custodes dark). We darken
+// the original colors via multiplyScalar — keeps existing reflectance
+// and HDR highlights, just lowers the diffuse intensity.
+const ROOF_TINT = 0.15; // very dark (panoramic roof)
+const WINDOW_TINT = 0.45; // moderate (side windows / windshields)
+
+// Body paint color override. Tesla shipped the demo model in a bright
+// blue; we override to Pearl White Multi-Coat. Later this could be driven
+// by `vehicle.exteriorColor` from the database (Tesla codes: PPSW=white,
+// PBSB=black, PMNG=midnight silver, PPMR=red, PPSR=signature red, etc.).
+// Hex maps:
+//   Pearl White Multi-Coat : 0xF2F2F0
+//   Solid Black            : 0x0A0A0A
+//   Stealth Grey           : 0x3D3D3D
+//   Midnight Silver Metal. : 0x4E5860
+//   Deep Blue Metallic     : 0x1B2A45
+//   Ultra Red              : 0xB81616
+const BODY_PAINT_COLOR = 0xf2f2f0;
+// Matches the materials Tesla applies to the painted body shell.
+// We exclude generic "Plastic_Black" / "Black_Anodized" / "Chrome" etc.
+const BODY_PAINT_MAT = /^(paint|exterior|paintskybox)/i;
 
     let transparentFixed = 0;
     let roofFixed = 0;
     let windowFixed = 0;
+    let paintFixed = 0;
     const glassDebug: string[] = [];
+    const paintDebug: string[] = [];
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -191,6 +209,18 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
           color?: THREE.Color;
         };
         const matName = (mat as { name?: string }).name ?? '';
+
+        // Body paint override — re-color only the actual painted shell,
+        // keeping reflectance/metalness from the original material so the
+        // HDR highlights still look like proper automotive paint.
+        if (BODY_PAINT_MAT.test(matName) && mat.color) {
+          mat.color.setHex(BODY_PAINT_COLOR);
+          paintFixed++;
+          if (paintDebug.length < 5) {
+            paintDebug.push(`${mesh.name || '(unnamed)'} mat="${matName}"`);
+          }
+        }
+
         const matIsOuter = isOuter || OUTER_GLASS_MAT.test(matName);
         if (matIsOuter) {
           mat.transparent = true;
@@ -215,6 +245,10 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     if (roofFixed + windowFixed > 0) {
       // eslint-disable-next-line no-console
       console.log('[Poppyseed3D] glass meshes:', glassDebug);
+    }
+    if (paintFixed > 0) {
+      // eslint-disable-next-line no-console
+      console.log('[Poppyseed3D] painted meshes:', paintDebug);
     }
 
     let wheelsAttached = 0;
@@ -277,6 +311,7 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
       `[Poppyseed3D] removed=${toRemove.length} | wheelsAvailable=${wheelsAvailable} | ` +
         `wheelsMode=${wheelMode} | wheelsAttached=${wheelsAttached}/4 | ` +
         `transparentFixed=${transparentFixed} | roofFixed=${roofFixed} | windowFixed=${windowFixed} | ` +
+        `paintFixed=${paintFixed} | ` +
         `bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
         `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
     );
