@@ -141,13 +141,25 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     //    We apply a stronger fix: force transparent + DoubleSide so the
     //    roof never disappears regardless of viewing angle, plus a higher
     //    renderOrder so it draws after every other glass piece.
-    const ROOF_PATTERN = /windows_top|glass_skybox/i;
+    // Walk up the parent chain — Windows_Top is a Group in Godot, so the
+    // actual mesh inside has an auto-generated name. Same for the material.
+    const ROOF_PATTERN = /windows_top|glass_skybox|sunroof|roof_glass/i;
+    const isInsideRoof = (start: THREE.Object3D): boolean => {
+      let cur: THREE.Object3D | null = start;
+      while (cur) {
+        if (ROOF_PATTERN.test(cur.name)) return true;
+        cur = cur.parent;
+      }
+      return false;
+    };
+
     let transparentFixed = 0;
     let roofFixed = 0;
+    const roofDebug: string[] = [];
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
-      const isRoofGlass = ROOF_PATTERN.test(obj.name);
+      const isRoofGlass = isInsideRoof(mesh);
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const m of materials) {
         const mat = m as THREE.Material & {
@@ -161,6 +173,9 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
           mat.side = THREE.DoubleSide;
           mesh.renderOrder = 2;
           roofFixed++;
+          if (roofDebug.length < 5) {
+            roofDebug.push(`${mesh.name || '(unnamed)'} mat="${matName}"`);
+          }
         } else if (mat.transparent || (mat.opacity !== undefined && mat.opacity < 1)) {
           mat.depthWrite = false;
           mesh.renderOrder = 1;
@@ -168,6 +183,10 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
         }
       }
     });
+    if (roofFixed > 0) {
+      // eslint-disable-next-line no-console
+      console.log('[Poppyseed3D] roof meshes:', roofDebug);
+    }
 
     let wheelsAttached = 0;
     let wheelMode: 'anchor' | 'fallback' | 'none' = 'none';
