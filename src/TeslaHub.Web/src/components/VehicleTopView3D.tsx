@@ -40,23 +40,20 @@ const WHEEL_ANCHORS = [
 
 // Fallback positions used when the empty anchors above were stripped at
 // export. Coordinates derived from real Tesla Model 3 Highland (Poppyseed)
-// dimensions, then refined empirically against the actual GLB origin which
-// sits 17 cm forward of the visual chassis center.
-//   Wheelbase 2875 mm + 150 mm forward offset → x ±1.4375 ± 0.15
+// dimensions:
+//   Wheelbase 2875 mm → x ±1.4375 with a +50 mm forward bias for the GLB
 //   Track 1580 mm widened to 1700 mm (tires sit outboard of chassis)
 //   18" wheel radius 343 mm → wheel center y = 0.343 m
 //   Axes: X = longitudinal (+ forward), Y = up, Z = lateral (+ right)
 //
-// The default wheel mesh in wheel_d50_highland.glb is oriented for the
-// LEFT side of the vehicle (outer cap face toward -Z). For the right side
-// we rotate 180° around Y rather than mirror-scale, which keeps normals
-// and face winding intact (mirror-scale inverts them and would show the
-// inner hub cap on the outside).
+// `rotate180` flips the wheel 180° around its geometric center (handled
+// via a wrapper group below) so the cap faces outward. Whether the right
+// or the left side needs rotation depends on the GLB's native orientation.
 const WHEEL_FALLBACK_POSITIONS = [
-  { id: 'LF', x: +1.5875, y: 0.343, z: -0.85, rotate180: false },
-  { id: 'RF', x: +1.5875, y: 0.343, z: +0.85, rotate180: true },
-  { id: 'LR', x: -1.2875, y: 0.343, z: -0.85, rotate180: false },
-  { id: 'RR', x: -1.2875, y: 0.343, z: +0.85, rotate180: true },
+  { id: 'LF', x: +1.4875, y: 0.343, z: -0.85, rotate180: false },
+  { id: 'RF', x: +1.4875, y: 0.343, z: +0.85, rotate180: true },
+  { id: 'LR', x: -1.3875, y: 0.343, z: -0.85, rotate180: false },
+  { id: 'RR', x: -1.3875, y: 0.343, z: +0.85, rotate180: true },
 ] as const;
 
 function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
@@ -131,10 +128,34 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
         } else {
           for (const pos of WHEEL_FALLBACK_POSITIONS) {
             const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
-            wheelClone.position.set(pos.x, pos.y, pos.z);
-            if (pos.rotate180) wheelClone.rotation.y = Math.PI;
-            scene.add(wheelClone);
+
+            // The wheel's native origin from Godot export is not at its
+            // geometric center — it sits near the inner hub face. A naive
+            // rotation.y on the wheel itself would pivot around that
+            // offset origin and keep the cap visually on the same side.
+            // We measure the wheel's local bbox center, re-center it, and
+            // then put a wrapper Group at the anchor that we can safely
+            // rotate around the wheel's true center.
+            wheelClone.updateMatrixWorld(true);
+            const wheelBox = new THREE.Box3().setFromObject(wheelClone);
+            const wheelCenter = wheelBox.getCenter(new THREE.Vector3());
+            wheelClone.position.sub(wheelCenter);
+
+            const wrapper = new THREE.Group();
+            wrapper.add(wheelClone);
+            wrapper.position.set(pos.x, pos.y, pos.z);
+            if (pos.rotate180) wrapper.rotation.y = Math.PI;
+            scene.add(wrapper);
+
             wheelsAttached++;
+            if (wheelsAttached === 1) {
+              // eslint-disable-next-line no-console
+              console.log(
+                `[Poppyseed3D] wheel ${pos.id}: native center offset=` +
+                  `(${wheelCenter.x.toFixed(2)}, ${wheelCenter.y.toFixed(2)}, ` +
+                  `${wheelCenter.z.toFixed(2)})`,
+              );
+            }
           }
         }
         (scene as unknown as Record<string, boolean>)[ALREADY] = true;
