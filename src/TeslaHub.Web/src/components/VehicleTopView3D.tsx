@@ -27,14 +27,33 @@ const HIDDEN_NODE_NAMES = new Set([
   'Ground_Plane',
 ]);
 
-// Wheel anchor names defined inside Poppyseed.tscn under ROOT/Spatials.
-// Tesla flagged the right-side wheels with a marker hint so we can apply a
-// mirror on the X axis when needed (the wheel mesh itself is symmetric).
+// Wheel anchor names from Poppyseed.tscn under ROOT/Spatials. Godot's
+// PackedSceneGLTF exporter strips empty Spatial nodes, so these usually
+// DON'T survive in the .glb. We keep the lookup as a best-effort first
+// pass — if any survived (custom export, edited mesh), they win.
 const WHEEL_ANCHORS = [
   { name: 'Wheel_LF_Spatial', mirror: false },
   { name: 'Wheel_LR_Spatial', mirror: false },
   { name: 'Wheel_RF_Spatial', mirror: true },
   { name: 'Wheel_RR_Spatial', mirror: true },
+] as const;
+
+// Fallback positions used when the empty anchors above were stripped at
+// export. Coordinates come from the real Tesla Model 3 Highland (Poppyseed)
+// dimensions: wheelbase 2875 mm, track 1580 mm, 18" wheel radius 343 mm.
+// We assume the model's origin is at chassis-ground center (verified via
+// bbox center y=0.72 with size y=1.45). Axes:
+//   X = longitudinal (front/back)
+//   Y = vertical (ground up)
+//   Z = lateral (left/right)
+// If the wheels appear swapped front/back, flip the sign of x. If swapped
+// left/right, flip the sign of z. Mirror is applied on Z so the cylindrical
+// wheel keeps its profile when reflected across the car centerline.
+const WHEEL_FALLBACK_POSITIONS = [
+  { id: 'LF', x: +1.4375, y: 0.343, z: -0.79, mirror: false },
+  { id: 'RF', x: +1.4375, y: 0.343, z: +0.79, mirror: true },
+  { id: 'LR', x: -1.4375, y: 0.343, z: -0.79, mirror: false },
+  { id: 'RR', x: -1.4375, y: 0.343, z: +0.79, mirror: true },
 ] as const;
 
 function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
@@ -91,28 +110,31 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     toRemove.forEach((obj) => obj.parent?.remove(obj));
 
     let wheelsAttached = 0;
+    let wheelMode: 'anchor' | 'fallback' | 'none' = 'none';
     if (wheelsAvailable) {
-      for (const { name, mirror } of WHEEL_ANCHORS) {
-        const anchor = anchors[name];
-        if (!anchor) {
-          // eslint-disable-next-line no-console
-          console.warn(`[Poppyseed3D] anchor not found in scene: ${name}`);
-          continue;
+      const anchorsFound = WHEEL_ANCHORS.filter((a) => anchors[a.name]).length;
+      wheelMode = anchorsFound === 4 ? 'anchor' : 'fallback';
+
+      const ALREADY = '__teslahub_wheels_attached';
+      if (!(scene as unknown as Record<string, boolean>)[ALREADY]) {
+        if (wheelMode === 'anchor') {
+          for (const { name, mirror } of WHEEL_ANCHORS) {
+            const anchor = anchors[name];
+            const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
+            if (mirror) wheelClone.scale.z = -1;
+            anchor.add(wheelClone);
+            wheelsAttached++;
+          }
+        } else {
+          for (const pos of WHEEL_FALLBACK_POSITIONS) {
+            const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
+            wheelClone.position.set(pos.x, pos.y, pos.z);
+            if (pos.mirror) wheelClone.scale.z = -1;
+            scene.add(wheelClone);
+            wheelsAttached++;
+          }
         }
-        const ALREADY = '__teslahub_wheel_attached';
-        if ((anchor as unknown as Record<string, boolean>)[ALREADY]) continue;
-        const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
-        if (mirror) wheelClone.scale.x = -1;
-        anchor.add(wheelClone);
-        (anchor as unknown as Record<string, boolean>)[ALREADY] = true;
-        wheelsAttached++;
-        const worldPos = new THREE.Vector3();
-        anchor.getWorldPosition(worldPos);
-        // eslint-disable-next-line no-console
-        console.log(
-          `[Poppyseed3D] wheel attached → ${name} @ world(` +
-            `${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)})`,
-        );
+        (scene as unknown as Record<string, boolean>)[ALREADY] = true;
       }
     }
 
@@ -122,7 +144,7 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     // eslint-disable-next-line no-console
     console.log(
       `[Poppyseed3D] removed=${toRemove.length} | wheelsAvailable=${wheelsAvailable} | ` +
-        `wheelsAttached=${wheelsAttached}/${WHEEL_ANCHORS.length} | ` +
+        `wheelsMode=${wheelMode} | wheelsAttached=${wheelsAttached}/4 | ` +
         `bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
         `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
     );
