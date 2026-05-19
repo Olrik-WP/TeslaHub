@@ -18,13 +18,27 @@ const WHEEL_URL = '/models/wheel_d50_highland.glb';
 
 // Nodes inside the Tesla model that visually pollute a "studio" view because
 // they are designed for the original Tesla mobile UI context (puddle lights
-// projected on the road, ground shadow plane, etc.). Hidden by default; some
-// will come back as dynamic props in Phase 2 (e.g. headlight projections when
-// vehicle.headlightsOn is true).
+// projected on the road, ground shadow plane, defrost/airflow overlays, etc.).
+// Hidden by default; some will come back as dynamic props in Phase 2 (e.g.
+// headlight projections when vehicle.headlightsOn is true, defrost when
+// vehicle.isDefrostOn is true, airflow overlays when climate is on).
 const HIDDEN_NODE_NAMES = new Set([
+  // Light cones projected on the floor (designed for top-down Tesla UI).
   'Headlights_Projections',
   'Stoplights_Projections',
+  // Ground shadow plane baked under the car (we use ContactShadows instead).
   'Ground_Plane',
+  // Tesla CSG overlays — flat planes on the windshields/dashboard used to
+  // visualise the defrost and the cabin airflow. They flicker against the
+  // glass roof when transparent and serve no purpose in a static view.
+  'Defrost_Front',
+  'Defrost_Rear',
+  'Airflow_left',
+  'Airflow_right',
+  // Plate viewport: a Godot Viewport that bakes a text label onto a quad
+  // (license plate text). Without the live Godot runtime it renders as a
+  // black square stuck on the rear bumper.
+  'Plate_Viewport',
 ]);
 
 // Wheel anchor names from Poppyseed.tscn under ROOT/Spatials. Godot's
