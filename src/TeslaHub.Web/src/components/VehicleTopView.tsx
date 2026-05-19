@@ -1,9 +1,34 @@
-import { useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useUnits } from '../hooks/useUnits';
 import type { VehicleStatus } from '../api/queries';
 
 const MQTT_HINT_KEY = 'teslahub:mqtt-hint-dismissed';
+const VIEW_MODE_KEY = 'teslahub:vehicle-view-mode';
+
+// Lazy-loaded 3D vehicle view. Three.js + R3F weigh ~600 KB gzip and live in
+// a separate `three-vendor` chunk (see vite.config.ts), so they only download
+// when the user actually enables the 3D mode.
+const VehicleTopView3D = lazy(() => import('./VehicleTopView3D'));
+
+// The 3D model file is NOT shipped in the public Docker image (Tesla assets
+// are proprietary). Operators who own a copy mount it as a volume — see
+// docker-compose.addon.yml. We probe its presence at runtime so the UI
+// automatically falls back to the SVG view for everyone else.
+const MODEL_PROBE_URL = '/models/poppyseed.glb';
+
+function detectWebGL(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const canvas = document.createElement('canvas');
+    return !!(
+      window.WebGLRenderingContext &&
+      (canvas.getContext('webgl2') || canvas.getContext('webgl'))
+    );
+  } catch {
+    return false;
+  }
+}
 
 interface Props {
   vehicle: VehicleStatus;
@@ -33,6 +58,48 @@ export default function VehicleTopView({ vehicle }: Props) {
   const u = useUnits();
   const [hintDismissed, setHintDismissed] = useState(() => localStorage.getItem(MQTT_HINT_KEY) === '1');
 
+  // 3D view requires both WebGL support and the .glb assets to be served by
+  // the operator (mounted via Docker volume). We probe the asset with a HEAD
+  // request: only when both conditions are met do we expose the 2D/3D toggle.
+  const [webglSupported] = useState(detectWebGL);
+  const [modelAvailable, setModelAvailable] = useState<boolean | null>(null);
+  const view3DAvailable = webglSupported && modelAvailable === true;
+
+  const [viewMode, setViewMode] = useState<'2d' | '3d'>(() => {
+    if (typeof window === 'undefined') return '2d';
+    const saved = localStorage.getItem(VIEW_MODE_KEY);
+    return saved === '3d' ? '3d' : '2d';
+  });
+  useEffect(() => {
+    localStorage.setItem(VIEW_MODE_KEY, viewMode);
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (!webglSupported) {
+      setModelAvailable(false);
+      return;
+    }
+    let cancelled = false;
+    fetch(MODEL_PROBE_URL, { method: 'HEAD', cache: 'force-cache' })
+      .then((r) => {
+        if (cancelled) return;
+        const ct = r.headers.get('content-type') ?? '';
+        // Caddy returns index.html (text/html) for unknown paths via try_files,
+        // so we also reject any non-binary response to avoid false positives.
+        setModelAvailable(r.ok && !ct.startsWith('text/'));
+      })
+      .catch(() => {
+        if (!cancelled) setModelAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [webglSupported]);
+
+  // If 3D was previously selected but the asset is gone (image rebuilt, volume
+  // unmounted), silently fall back to 2D without losing the saved preference.
+  const effectiveViewMode: '2d' | '3d' = view3DAvailable ? viewMode : '2d';
+
   const hasTpmsPressure = vehicle.tpmsPressureFl != null;
   const hasTpmsWarning = vehicle.tpmsSoftWarningFl != null;
   const hasTpms = hasTpmsPressure || hasTpmsWarning;
@@ -61,9 +128,54 @@ export default function VehicleTopView({ vehicle }: Props) {
       )}
 
       <div className="flex flex-col lg:flex-row gap-4">
-        {/* SVG vehicle top-down view — only when there is visual data to display */}
+        {/* Vehicle visualization — SVG top-down view or interactive 3D model.
+            Defaults to SVG; user can opt into 3D via the toggle if WebGL is
+            supported. The 3D component is lazy-loaded so it doesn't impact
+            initial bundle size for users who stay on SVG. */}
         {(hasTpms || hasBody || isCharging || hasChargePort) && (
-          <div className="flex-shrink-0 flex justify-center">
+          <div className="flex-shrink-0 flex flex-col items-center gap-2 w-full lg:w-auto">
+            {view3DAvailable && (
+              <div className="inline-flex rounded-lg bg-[#0a0a0a] border border-[#2a2a2a] p-0.5 text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('2d')}
+                  className={`px-3 py-1 rounded-md transition-colors ${
+                    effectiveViewMode === '2d'
+                      ? 'bg-[#2a2a2a] text-white'
+                      : 'text-[#9ca3af] hover:text-white'
+                  }`}
+                  aria-pressed={effectiveViewMode === '2d'}
+                >
+                  2D
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('3d')}
+                  className={`px-3 py-1 rounded-md transition-colors ${
+                    effectiveViewMode === '3d'
+                      ? 'bg-[#2a2a2a] text-white'
+                      : 'text-[#9ca3af] hover:text-white'
+                  }`}
+                  aria-pressed={effectiveViewMode === '3d'}
+                >
+                  3D
+                </button>
+              </div>
+            )}
+            {effectiveViewMode === '3d' ? (
+              <div className="w-full sm:w-[360px] lg:w-[420px]">
+                <Suspense
+                  fallback={
+                    <div className="h-[360px] flex items-center justify-center text-[#6b7280] text-xs">
+                      {t('vehicleView.loading3d', 'Loading 3D model...')}
+                    </div>
+                  }
+                >
+                  <VehicleTopView3D vehicle={vehicle} />
+                </Suspense>
+              </div>
+            ) : (
+              <div className="flex justify-center">
             <svg viewBox="0 0 300 470" className="w-[220px] sm:w-[260px]" xmlns="http://www.w3.org/2000/svg">
               {/* Vehicle body — Tesla Model 3/Y silhouette */}
               <path
@@ -237,6 +349,8 @@ export default function VehicleTopView({ vehicle }: Props) {
                 </text>
               )}
             </svg>
+              </div>
+            )}
           </div>
         )}
 

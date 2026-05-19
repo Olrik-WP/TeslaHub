@@ -12,6 +12,15 @@
 		reverse_proxy teslahub-api:8080
 	}
 
+	# Optional 3D vehicle models. Mounted as a bind volume by operators who
+	# own the assets. Serve them with aggressive caching (immutable filename
+	# pattern) and return a proper 404 instead of falling through to
+	# index.html, so the frontend's HEAD probe can detect absence reliably.
+	handle /models/* {
+		header Cache-Control "public, max-age=2592000, immutable"
+		file_server
+	}
+
 	handle {
 		try_files {path} /index.html
 		file_server

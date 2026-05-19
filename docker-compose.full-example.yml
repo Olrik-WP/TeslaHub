@@ -129,6 +129,16 @@ services:
       - "127.0.0.1:4002:80"
     depends_on:
       - teslahub-api
+    # Optional — Interactive 3D vehicle view.
+    # The official Docker image ships with the SVG top-down view only. If you
+    # have your own copy of Tesla 3D models (.glb files), drop them into a
+    # local folder and uncomment the volume below. The web UI will probe the
+    # file at runtime and expose a 2D/3D toggle automatically. Without this
+    # volume the SVG view stays the default and nothing else changes.
+    # Expected files inside the folder:
+    #   poppyseed.glb            (Model 3 Highland)
+    # volumes:
+    #   - ./teslahub-models:/srv/models:ro
   # ────────────────────────────────────────────────────────────────
 
 volumes:

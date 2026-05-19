@@ -34,3 +34,10 @@ Thumbs.db
 # Tesla upstream sources kept locally for reference, never committed
 vehicle-command-src/
 fleet-telemetry-src/
+
+# 3d tests
+Tesla-APK-Android/
+Tesla-Godot-Test/
+
+# Tesla 3D models (proprietary assets, never commit)
+src/TeslaHub.Web/public/models/*.glb
