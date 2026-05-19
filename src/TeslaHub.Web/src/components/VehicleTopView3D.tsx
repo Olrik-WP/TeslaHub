@@ -46,21 +46,19 @@ const WHEEL_ANCHORS = [
 //   18" wheel radius 343 mm → wheel center y = 0.343 m
 //   Axes: X = longitudinal (+ forward), Y = up, Z = lateral (+ right)
 //
-// `flipZ` applies a `scale.z = -1` on a wrapper group so the wheel cap
-// faces the desired side. We use scale-flip rather than Y-rotation because
-// the Godot-exported wheel sometimes has internal transforms that cancel
-// a parent rotation, while a negative scale always reflects the geometry.
-// Three.js automatically reverses face winding for negative scales so
-// normals stay correct.
-//
-// DEBUG: flipZ is forced on ALL 4 wheels in this build so we can confirm
-// whether the wheel mesh is actually asymmetric on Z. If the appearance
-// changes vs the previous build, we'll set it only on the proper side.
+// The Godot-exported wheel ships with its Photon cover face on +Z and the
+// open hub on -Z. So wheels on the right side of the vehicle (+Z) keep
+// the default orientation, and wheels on the left side (-Z) need a
+// `scale.z = -1` reflection so their cover also faces outward.
+// We use scale-flip rather than Y-rotation because Godot's exported wheel
+// has internal transforms that silently cancel any parent rotation,
+// while a negative scale always reflects the geometry. Three.js auto-
+// reverses face winding for negative scales so normals stay correct.
 const WHEEL_FALLBACK_POSITIONS = [
   { id: 'LF', x: +1.4875, y: 0.343, z: -0.78, flipZ: true },
-  { id: 'RF', x: +1.4875, y: 0.343, z: +0.78, flipZ: true },
+  { id: 'RF', x: +1.4875, y: 0.343, z: +0.78, flipZ: false },
   { id: 'LR', x: -1.3875, y: 0.343, z: -0.78, flipZ: true },
-  { id: 'RR', x: -1.3875, y: 0.343, z: +0.78, flipZ: true },
+  { id: 'RR', x: -1.3875, y: 0.343, z: +0.78, flipZ: false },
 ] as const;
 
 function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
