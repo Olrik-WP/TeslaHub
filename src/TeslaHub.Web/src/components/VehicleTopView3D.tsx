@@ -3,11 +3,8 @@ import { Canvas } from '@react-three/fiber';
 import {
   useGLTF,
   OrbitControls,
-  Bounds,
   Environment,
-  ContactShadows,
   Html,
-  useBounds,
 } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
@@ -22,12 +19,15 @@ const WHEEL_URL = '/models/wheel_d50_highland.glb';
 // Hidden by default; some will come back as dynamic props in Phase 2 (e.g.
 // headlight projections when vehicle.headlightsOn is true, defrost when
 // vehicle.isDefrostOn is true, airflow overlays when climate is on).
+// Tesla bakes the studio shadow into a horizontal quad named "Floor" in Godot
+// (also exported as "Ground_Plane" in some GLB builds). We keep it visible
+// and tune its material — do NOT hide it or replace with drei's ContactShadows.
+const FLOOR_NODE_NAMES = new Set(['Floor', 'Ground_Plane']);
+
 const HIDDEN_NODE_NAMES = new Set([
   // Light cones projected on the floor (designed for top-down Tesla UI).
   'Headlights_Projections',
   'Stoplights_Projections',
-  // Ground shadow plane baked under the car (we use ContactShadows instead).
-  'Ground_Plane',
   // Tesla CSG overlays — flat planes on the windshields/dashboard used to
   // visualise the defrost and the cabin airflow. They flicker against the
   // glass roof when transparent and serve no purpose in a static view.
@@ -75,6 +75,21 @@ const WHEEL_FALLBACK_POSITIONS = [
   { id: 'RR', x: -1.3875, y: 0.343, z: +0.78, flipZ: false },
 ] as const;
 
+// ---- Camera positioning ---------------------------------------------------
+// We don't use drei's <Bounds> auto-fit because Three.js's automatic bbox
+// computation picks up parasite nodes (anchor points at far X, charge cable
+// handles, etc.) and reports the scene as 6.58 × 1.45 × 4.21 m — way larger
+// than the real 4.72 × 1.44 × 1.85 m of a Tesla Model 3 Highland. That
+// makes <Bounds> zoom out 40 % too far. Instead we hard-code a camera pose
+// calibrated to the real car size and let OrbitControls handle user zoom.
+//
+// Frame composition: 3/4 front view, slight elevation, car centered.
+// Distance ~5.5 m gives a tight crop with the wheels touching the canvas
+// bottom edge and a small headroom for the roof.
+const CAMERA_POSITION: [number, number, number] = [4.5, 2.2, 5.8];
+const CAMERA_TARGET: [number, number, number] = [0, 0.7, 0]; // car center
+const CAMERA_FOV = 38;
+
 // ---- D50 wheel polish -----------------------------------------------------
 // The Godot-exported D50 alloy ships with metalness ≈ 0.9 / roughness ≈ 0.1
 // (mirror chrome). Under a flat HDR environment with no nearby shiny
@@ -105,7 +120,6 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
   //   wheel asset is missing we reuse the main URL — its scene is then
   //   ignored by the wheel mounting code below.
 
-  const bounds = useBounds();
   const cleanedScene = useMemo(() => {
     // Polish the wheel materials ONCE, on the original wheelGltf.scene.
     // SkeletonUtils.clone preserves material references, so tweaks made
@@ -210,6 +224,14 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
       }
       return false;
     };
+    const isOnFloor = (start: THREE.Object3D): boolean => {
+      let cur: THREE.Object3D | null = start;
+      while (cur) {
+        if (FLOOR_NODE_NAMES.has(cur.name)) return true;
+        cur = cur.parent;
+      }
+      return false;
+    };
 
 // Tesla's Model 3 Highland has factory-tinted glass (toit panoramique
 // dark bronze, side windows lightly tinted, custodes dark). We darken
@@ -245,6 +267,7 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
     let roofFixed = 0;
     let windowFixed = 0;
     let paintFixed = 0;
+    let floorFixed = 0;
     const glassDebug: string[] = [];
     const paintDebug: string[] = [];
     scene.traverse((obj) => {
@@ -267,6 +290,27 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
           color?: THREE.Color;
         };
         const matName = (mat as { name?: string }).name ?? '';
+
+        // Tesla studio floor — radial shadow baked into a textured quad.
+        // Godot names it "Floor" (see ground_shadow_path in Poppyseed.tscn);
+        // the GLB may also carry "Ground_Plane". Keep the albedo gradient map
+        // but force a deep-black multiply so the shadow reads correctly under
+        // ACES tone mapping (ContactShadows was too light/washed out).
+        if (isOnFloor(mesh)) {
+          const std = mat as THREE.MeshStandardMaterial;
+          std.transparent = true;
+          std.depthWrite = false;
+          std.side = THREE.DoubleSide;
+          std.metalness = 0;
+          std.roughness = 1;
+          std.color.setHex(0x000000);
+          std.emissive?.setHex(0x000000);
+          std.emissiveIntensity = 0;
+          if (std.map) std.map.colorSpace = THREE.SRGBColorSpace;
+          mesh.renderOrder = -10;
+          floorFixed++;
+          continue;
+        }
 
         // Body paint override — re-color only the actual painted shell,
         // keeping reflectance/metalness from the original material so the
@@ -308,6 +352,10 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
     if (paintFixed > 0) {
       // eslint-disable-next-line no-console
       console.log('[Poppyseed3D] painted meshes:', paintDebug);
+    }
+    if (floorFixed > 0) {
+      // eslint-disable-next-line no-console
+      console.log(`[Poppyseed3D] floor shadow meshes fixed: ${floorFixed}`);
     }
 
     let wheelsAttached = 0;
@@ -370,17 +418,12 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
       `[Poppyseed3D] removed=${toRemove.length} | wheelsAvailable=${wheelsAvailable} | ` +
         `wheelsMode=${wheelMode} | wheelsAttached=${wheelsAttached}/4 | ` +
         `transparentFixed=${transparentFixed} | roofFixed=${roofFixed} | windowFixed=${windowFixed} | ` +
-        `paintFixed=${paintFixed} | ` +
+        `paintFixed=${paintFixed} | floorFixed=${floorFixed} | ` +
         `bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
         `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
     );
     return scene;
   }, [scene, wheelGltf.scene, wheelsAvailable]);
-
-  // Refit the camera once we've mutated the scene tree.
-  useEffect(() => {
-    if (bounds) bounds.refresh().fit();
-  }, [cleanedScene, bounds]);
 
   return <primitive object={cleanedScene} />;
 }
@@ -436,7 +479,7 @@ export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
     <div className="relative w-full" style={{ height: 360 }}>
       <Canvas
         ref={canvasRef}
-        camera={{ position: [8, 5, 11], fov: 35 }}
+        camera={{ position: CAMERA_POSITION, fov: CAMERA_FOV }}
         dpr={[1, 1.5]}
         gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
         style={{ background: 'transparent' }}
@@ -459,33 +502,16 @@ export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
 
         <Suspense fallback={<Loader />}>
           <Environment preset="city" />
-          {/* Bounds re-fits the camera around the visible bbox. We disable
-              its auto observe so our manual refresh() after node cleanup is
-              authoritative; otherwise the projection planes (visible during
-              first frame) would inflate the initial fit. */}
-          {/* margin=1.0 = fit exactly inside canvas, margin>1 adds padding,
-              margin<1 zooms in so the car slightly overflows. We can afford
-              0.95 because the top/bottom of the bbox is mostly air (sky
-              over the roof, tarmac under the wheels). */}
-          <Bounds fit clip margin={0.95}>
-            {/* Wait until the wheel probe completes before mounting the
-                chassis. Otherwise the chassis loads twice via Suspense when
-                the wheel state flips from unknown → available. */}
-            {wheelsAvailable !== null && (
-              <PoppyseedModel wheelsAvailable={wheelsAvailable} />
-            )}
-          </Bounds>
-          <ContactShadows
-            position={[0, -0.01, 0]}
-            opacity={0.35}
-            scale={12}
-            blur={2.8}
-            far={4}
-            resolution={512}
-          />
+          {/* Wait until the wheel probe completes before mounting the
+              chassis. Otherwise the chassis loads twice via Suspense when
+              the wheel state flips from unknown → available. */}
+          {wheelsAvailable !== null && (
+            <PoppyseedModel wheelsAvailable={wheelsAvailable} />
+          )}
         </Suspense>
 
         <OrbitControls
+          target={CAMERA_TARGET}
           enablePan={false}
           enableZoom
           minDistance={4}
