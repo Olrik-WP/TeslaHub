@@ -128,20 +128,40 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     // planes and the car ends up tiny and off-center.
     toRemove.forEach((obj) => obj.parent?.remove(obj));
 
-    // Fix transparency sorting for the panoramic glass roof and tinted
-    // windows. Without this, three.js' depth buffer occasionally hides
-    // glass meshes (or shows the HDR environment through them with a
-    // greenish tint) depending on camera angle — a classic transparent
-    // sorting glitch. Disabling depthWrite + bumping renderOrder forces
-    // them to draw last and prevents the flicker.
+    // Fix two distinct transparency issues from the Godot → GLB export:
+    //
+    // 1) GENERIC transparents (side windows, tinted glass, etc.): three.js'
+    //    depth sorting flickers them depending on camera angle. Disabling
+    //    depthWrite + bumping renderOrder forces them to draw last.
+    //
+    // 2) THE PANORAMIC GLASS ROOF specifically: Tesla's original Godot 3.2
+    //    material relied on a Godot-specific depth_draw_mode that broke
+    //    starting from Godot 3.5 — the user confirmed the same flicker
+    //    exists in Godot 3.5 itself, so the bug is baked into the GLB.
+    //    We apply a stronger fix: force transparent + DoubleSide so the
+    //    roof never disappears regardless of viewing angle, plus a higher
+    //    renderOrder so it draws after every other glass piece.
+    const ROOF_PATTERN = /windows_top|glass_skybox/i;
     let transparentFixed = 0;
+    let roofFixed = 0;
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
+      const isRoofGlass = ROOF_PATTERN.test(obj.name);
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const m of materials) {
-        const mat = m as THREE.Material & { opacity?: number };
-        if (mat.transparent || (mat.opacity !== undefined && mat.opacity < 1)) {
+        const mat = m as THREE.Material & {
+          opacity?: number;
+          side?: THREE.Side;
+        };
+        const matName = (mat as { name?: string }).name ?? '';
+        if (isRoofGlass || ROOF_PATTERN.test(matName)) {
+          mat.transparent = true;
+          mat.depthWrite = false;
+          mat.side = THREE.DoubleSide;
+          mesh.renderOrder = 2;
+          roofFixed++;
+        } else if (mat.transparent || (mat.opacity !== undefined && mat.opacity < 1)) {
           mat.depthWrite = false;
           mesh.renderOrder = 1;
           transparentFixed++;
@@ -208,7 +228,7 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     console.log(
       `[Poppyseed3D] removed=${toRemove.length} | wheelsAvailable=${wheelsAvailable} | ` +
         `wheelsMode=${wheelMode} | wheelsAttached=${wheelsAttached}/4 | ` +
-        `transparentFixed=${transparentFixed} | ` +
+        `transparentFixed=${transparentFixed} | roofFixed=${roofFixed} | ` +
         `bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
         `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
     );
