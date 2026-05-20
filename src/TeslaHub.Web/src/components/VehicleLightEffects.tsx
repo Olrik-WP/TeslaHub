@@ -68,19 +68,22 @@ const HEADLIGHT_NODES = ['Headlights', 'DRL'] as const;
  *    +Y = up
  *    +Z = right (passenger side)
  *
- *  Model 3 Highland has FOUR Sentry cameras (no B-pillar cams, no fender
- *  repeaters — those are turn signals, not cameras):
+ *  Model 3 Highland has FOUR Sentry cameras. The SIDE cameras are NOT
+ *  in the side mirrors — they're the tiny black lenses integrated into
+ *  the FENDER turn-signal repeater grille, just behind the front-wheel
+ *  arch (same physical part that houses the side LED turn signal).
+ *
  *    1. Front  — top centre of windshield, behind rear-view mirror
- *    2. Left   — embedded in left side mirror
- *    3. Right  — embedded in right side mirror
+ *    2. Left   — left front fender repeater (turn-signal grille area)
+ *    3. Right  — right front fender repeater (turn-signal grille area)
  *    4. Rear   — above license plate
  *
- *  Calibrated by eye against the real car (camera lens positions on body).
+ *  Calibrated by eye against the real car body lines.
  */
 const SENTRY_CAMERA_POSITIONS: ReadonlyArray<[number, number, number]> = [
   [+0.40, 1.32, 0],      // front (top of windshield)
-  [+0.85, 1.08, -1.00],  // left side mirror
-  [+0.85, 1.08, +1.00],  // right side mirror
+  [+1.25, 0.85, -0.97],  // left fender turn-signal / side camera
+  [+1.25, 0.85, +0.97],  // right fender turn-signal / side camera
   [-2.00, 0.95, 0],      // rear (above license plate)
 ];
 
