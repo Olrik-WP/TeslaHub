@@ -181,6 +181,40 @@ export interface VehicleModelConfig {
   bodyPaintColor: number;
 
   // ───────────────────────────────────────────────────────────────────
+  // Interior material overrides — recolour Tesla's placeholder colours
+  // ───────────────────────────────────────────────────────────────────
+  /** Some Tesla GLB exports ship interior materials as untextured flat
+   *  colours used as authoring placeholders (the Model Y Bayberry ships
+   *  `Decor` = bright purple and `cupholder` = bright blue!). Override
+   *  those by name here. Each entry mutates the matching MeshStandard
+   *  material's `color` in place — shared materials are still shared,
+   *  so a single override repaints every mesh that uses the material.
+   *  Set to an empty array for models with proper interior textures. */
+  interiorOverrides?: ReadonlyArray<{
+    /** Match the material's `name` property exactly (case-insensitive). */
+    matchName: RegExp;
+    /** RGB hex to assign to `mat.color`. */
+    color: number;
+    /** Optional override of `mat.roughness` (0..1). */
+    roughness?: number;
+    /** Optional override of `mat.metalness` (0..1). */
+    metalness?: number;
+  }>;
+
+  // ───────────────────────────────────────────────────────────────────
+  // Privacy-glass nodes — extra-tinted rear windows (Tesla factory)
+  // ───────────────────────────────────────────────────────────────────
+  /** Node names whose `(no mat)` outer-glass primitives must be tinted
+   *  darker than the front windows. Tesla's Model Y rear doors ship
+   *  with privacy glass (~15-25 % light transmission) but the GLB only
+   *  exposes them as an untextured primitive paired with the
+   *  `Glass_Interior` inner pane — the inner pane alone can't carry the
+   *  full tint. List the parent group names of those windows here and
+   *  the NOMAT handler will boost their opacity. Empty array = no
+   *  special rear-window treatment (Highland-style equal tint). */
+  privacyGlassNodes?: ReadonlyArray<RegExp>;
+
+  // ───────────────────────────────────────────────────────────────────
   // Callout overlay tuning
   // ───────────────────────────────────────────────────────────────────
   /** Vertical lift (metres) of each floating callout above its anchor.
@@ -479,6 +513,36 @@ export const BayberryConfig: VehicleModelConfig = {
   bodyPaintColor: 0xf2f2f0,  // Pearl White Multi-Coat (same as M3 default)
   calloutHeight: 0.50,        // +5 cm vs M3 — Y is taller, callouts need
                               // more lift to clear the higher roofline
+
+  // Tesla shipped the Bayberry GLB with several interior materials left
+  // as untextured placeholder colours that bleed through the windows:
+  //   - `Decor`     rgba(0.20, 0.00, 0.80) = bright purple → magenta
+  //                 panels visible inside every door
+  //   - `cupholder` rgba(0.00, 0.04, 0.80) = bright blue → blue cup-
+  //                 holder pad in the centre console
+  //   - `Wing`      rgba(0.93, 0.96, 1.00) = near-white → blank backrest
+  //                 placeholder (also confused with the white interior)
+  //   - `Interior2` rgba(0.80, 0.80, 0.80) = light grey → ALL seats,
+  //                 dashboard and door panels read as bright white.
+  // Tesla intentionally ships them flat — there ARE no proper textures
+  // in the GLB to substitute (verified by extracting via gltf-transform).
+  // Best we can do is repaint them to Tesla "Black Interior" charcoal so
+  // the cabin reads as a normal dark Tesla interior. Slight roughness
+  // bump on Decor/cupholder removes the plasticky highlight too.
+  interiorOverrides: [
+    { matchName: /^Interior2$/i, color: 0x1a1a1a, roughness: 0.7 },
+    { matchName: /^Decor$/i, color: 0x1a1a1a, roughness: 0.7 },
+    { matchName: /^cupholder$/i, color: 0x1a1a1a, roughness: 0.7 },
+    { matchName: /^Wing$/i, color: 0x1a1a1a, roughness: 0.7 },
+  ],
+
+  // Tesla MY Juniper ships privacy glass on the rear doors (much darker
+  // than the front side windows). In the GLB the rear-window geometry
+  // is paired as `(no mat)` outer + `Glass_Interior` inner — without an
+  // explicit privacy-glass material to tint, the NOMAT handler has no
+  // way to know it should be darker than the front-door windows. Listing
+  // the parent group names here tells it to boost opacity.
+  privacyGlassNodes: [/^Window_R[LR]$/i],
 };
 
 export const VEHICLE_MODELS: Record<VehicleModelKey, VehicleModelConfig> = {

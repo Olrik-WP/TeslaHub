@@ -432,13 +432,28 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           );
         })();
         if (isGltfDefaultMat) {
+          // Some Tesla models (Y Juniper) ship rear-door windows as
+          // privacy glass — much darker than the front side windows.
+          // The GLB only marks them by parent node name, so we look up
+          // the chain and boost opacity when we land inside one of the
+          // configured privacy-glass groups.
+          const isPrivacyGlass = (() => {
+            const patterns = cfg.privacyGlassNodes;
+            if (!patterns || patterns.length === 0) return false;
+            let c: THREE.Object3D | null = mesh;
+            while (c) {
+              if (patterns.some((p) => p.test(c!.name))) return true;
+              c = c.parent;
+            }
+            return false;
+          })();
           const glass = new THREE.MeshStandardMaterial({
-            name: '__TeslaHub_NoMat_Glass',
-            color: 0x111111,
+            name: isPrivacyGlass ? '__TeslaHub_NoMat_PrivacyGlass' : '__TeslaHub_NoMat_Glass',
+            color: isPrivacyGlass ? 0x080808 : 0x111111,
             metalness: 0,
-            roughness: 0.45,
+            roughness: isPrivacyGlass ? 0.55 : 0.45,
             transparent: true,
-            opacity: 0.55,
+            opacity: isPrivacyGlass ? 0.85 : 0.55,
             depthWrite: false,
             side: THREE.DoubleSide,
             envMapIntensity: 0.25,
@@ -451,10 +466,38 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           }
           mesh.renderOrder = Math.max(mesh.renderOrder ?? 0, 2);
           if (glassDebug.length < 48) {
-            glassDebug.push(`NOMAT→glass ${pathOf(mesh)}`);
+            glassDebug.push(
+              `NOMAT→${isPrivacyGlass ? 'privacy' : 'glass'} ${pathOf(mesh)}`,
+            );
           }
           transparentFixed++;
           continue;
+        }
+
+        // ──────────────────────────────────────────────────────────────
+        // Interior placeholder overrides — Tesla ships Bayberry with a
+        // few materials left as authoring placeholders (bright purple
+        // `Decor`, blue `cupholder`, near-white `Interior2` / `Wing`).
+        // Repaint them in place so the cabin reads as a normal Tesla
+        // black interior instead of bleeding random saturated colour
+        // through the window glass.
+        //   - We mutate the shared material (no clone) on purpose:
+        //     every mesh that referenced it should pick up the new
+        //     colour automatically. Subsequent passes (body paint,
+        //     glass, etc.) still see the overridden colour, which is
+        //     fine because the patterns target different material
+        //     names anyway.
+        // ──────────────────────────────────────────────────────────────
+        const interiorOverrides = cfg.interiorOverrides;
+        if (interiorOverrides && interiorOverrides.length > 0) {
+          for (const ov of interiorOverrides) {
+            if (!ov.matchName.test(matName)) continue;
+            const std = mat as THREE.MeshStandardMaterial;
+            if (std.color) std.color.setHex(ov.color);
+            if (ov.roughness !== undefined) std.roughness = ov.roughness;
+            if (ov.metalness !== undefined) std.metalness = ov.metalness;
+            break;
+          }
         }
 
         // Body paint override — re-color only the actual painted shell,
