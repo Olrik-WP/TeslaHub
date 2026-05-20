@@ -393,6 +393,52 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       console.log('[Poppyseed3D] Static_Exterior dump:', staticExteriorDump);
     }
 
+    // ──────────────────────────────────────────────────────────────────
+    // TEMPORARY DEBUG: paint every Static_Exterior sub-mesh a distinct
+    // fluorescent colour so the user can identify which primitive holds
+    // the windshield geometry. The legend is logged so screenshots can
+    // be cross-referenced to material names.
+    // ──────────────────────────────────────────────────────────────────
+    const debugPalette = [
+      { name: 'mesh_45', hex: 0xff0000, label: 'RED    (Paint shell)' },
+      { name: 'mesh_45_1', hex: 0xff7700, label: 'ORANGE (Trim)' },
+      { name: 'mesh_45_2', hex: 0xffff00, label: 'YELLOW (Cover)' },
+      { name: 'mesh_45_3', hex: 0x00ff00, label: 'GREEN  (no mat / frit band)' },
+      { name: 'mesh_45_4', hex: 0x00ffff, label: 'CYAN   (Glass_Interior)' },
+      { name: 'mesh_45_5', hex: 0x0077ff, label: 'BLUE   (PaintRough)' },
+      { name: 'mesh_45_6', hex: 0x0000ff, label: 'INDIGO (Metal)' },
+      { name: 'mesh_45_7', hex: 0xff00ff, label: 'MAGENTA(Reflector)' },
+      { name: 'mesh_45_8', hex: 0xff0099, label: 'PINK   (Glass)' },
+      { name: 'mesh_45_9', hex: 0xffffff, label: 'WHITE  (Cover2)' },
+      { name: 'mesh_45_10', hex: 0x000000, label: 'BLACK  (DarkRed)' },
+    ];
+    const debugLegend: string[] = [];
+    for (const slot of debugPalette) {
+      const target = scene.getObjectByName(slot.name) as THREE.Mesh | undefined;
+      if (!target || !target.isMesh) {
+        debugLegend.push(`${slot.label} → NOT FOUND`);
+        continue;
+      }
+      const dbgMat = new THREE.MeshStandardMaterial({
+        name: `__DBG_${slot.name}`,
+        color: slot.hex,
+        emissive: slot.hex,
+        emissiveIntensity: 0.5,
+        metalness: 0,
+        roughness: 1,
+        transparent: false,
+        depthWrite: true,
+        side: THREE.DoubleSide,
+        envMapIntensity: 0,
+      });
+      target.material = dbgMat;
+      debugLegend.push(slot.label);
+    }
+    if (debugLegend.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log('[Poppyseed3D] Static_Exterior DEBUG palette:', debugLegend);
+    }
+
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -589,7 +635,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
 
           if (isRoof) roofFixed++;
           else windowFixed++;
-          if (glassDebug.length < 16) {
+          if (glassDebug.length < 48) {
             glassDebug.push(
               `${isRoof ? 'ROOF' : 'WIN'} ${mesh.name || '(unnamed)'} mat="${matName}" ` +
                 `opacity=${effectiveOpacity.toFixed(2)}→${isEffectivelyOpaque ? 'OPAQUE' : (std.opacity ?? 1).toFixed(2)}`,
