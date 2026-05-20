@@ -1,5 +1,5 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, type ThreeEvent } from '@react-three/fiber';
+import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import {
   useGLTF,
   OrbitControls,
@@ -20,9 +20,23 @@ import {
   OPENING_LABELS,
   type OpeningId,
 } from './vehicleOpenings';
+import { ChargingCable } from './ChargingCable';
 
 const MODEL_URL = '/models/poppyseed.glb';
 const WHEEL_URL = '/models/wheel_d50_highland.glb';
+const HANDLE_URL = '/models/charger_handle.glb';
+
+// Charge port pivot inside the Poppyseed scene. Same node used by the
+// `charge_port` opening animation (see vehicleOpenings.ts).
+const CHARGE_PORT_NODE = 'Charge_Cap_Spatial';
+
+// When the live cable is mounted but we can't find the charge port anchor,
+// we fall back to these hardcoded world positions — measured on the Poppyseed
+// Model 3 Highland: port sits rear-left, ~85cm high.
+const CHARGE_PORT_FALLBACK_WORLD = new THREE.Vector3(-0.87, 0.83, -1.95);
+// Cable rises from the ground ~60cm to the left of the rear-left tire,
+// roughly where the in-app screenshot shows it coming out.
+const CABLE_GROUND_WORLD = new THREE.Vector3(-1.5, 0, -1.7);
 
 // Nodes inside the Tesla model that visually pollute a "studio" view because
 // they are designed for the original Tesla mobile UI context (puddle lights
@@ -489,6 +503,58 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
   );
 }
 
+// ---------------------------------------------------------------------------
+// Live charging cable - mounted on demand from the overlay rail.
+// ---------------------------------------------------------------------------
+
+export type CableMode = 'off' | 'plugged' | 'charging';
+
+interface LiveChargingCableProps {
+  mode: CableMode;
+  handleAvailable: boolean;
+}
+
+/**
+ * Reads the Charge_Cap_Spatial world position from the loaded Poppyseed scene
+ * and renders the <ChargingCable /> connected to it. Falls back to a hardcoded
+ * Model 3 Highland position if the anchor is not found (e.g. older Tesla
+ * scene names). Re-resolves whenever the openings change so the cable end
+ * tracks the charge port trapdoor when it opens.
+ */
+function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
+  const { scene } = useThree();
+  const { targets } = useOpeningsContext();
+  const chargePortOpenness = targets.charge_port ?? 0;
+
+  const endWorld = useMemo(() => {
+    const anchor = scene.getObjectByName(CHARGE_PORT_NODE);
+    if (!anchor) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[Poppyseed3D] charge port anchor "${CHARGE_PORT_NODE}" not found - ` +
+          'falling back to hardcoded Model 3 Highland world position.',
+      );
+      return CHARGE_PORT_FALLBACK_WORLD.clone();
+    }
+    const w = new THREE.Vector3();
+    anchor.getWorldPosition(w);
+    return w;
+    // chargePortOpenness intentionally re-runs the effect when the trapdoor
+    // animates open/closed - the anchor world position changes with it.
+  }, [scene, chargePortOpenness]);
+
+  if (mode === 'off') return null;
+
+  return (
+    <ChargingCable
+      startWorld={CABLE_GROUND_WORLD}
+      endWorld={endWorld}
+      charging={mode === 'charging'}
+      handleUrl={handleAvailable ? HANDLE_URL : undefined}
+    />
+  );
+}
+
 function Loader() {
   return (
     <Html center>
@@ -535,10 +601,17 @@ interface Props {
 export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null!);
   const wheelsAvailable = useAssetAvailable(WHEEL_URL);
+  const handleAvailable = useAssetAvailable(HANDLE_URL);
   // Auto-rotate OFF by default — was distracting and made clicking on a
   // moving target frustrating. The user enables it via the overlay toggle
   // when they want a showroom-style turntable.
   const [autoRotate, setAutoRotate] = useState(false);
+  // Cable cycles off → plugged (idle grey pulse) → charging (green flow).
+  // Phase 2 will replace this user toggle with vehicle.chargingState mapping.
+  const [cableMode, setCableMode] = useState<CableMode>('off');
+  const cycleCable = useCallback(() => {
+    setCableMode((m) => (m === 'off' ? 'plugged' : m === 'plugged' ? 'charging' : 'off'));
+  }, []);
 
   return (
     <OpeningsProvider>
@@ -574,6 +647,10 @@ export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
             {wheelsAvailable !== null && (
               <PoppyseedModel wheelsAvailable={wheelsAvailable} />
             )}
+            {/* Live charging cable - only mounted when user toggles it on. */}
+            {cableMode !== 'off' && handleAvailable !== null && (
+              <LiveChargingCable mode={cableMode} handleAvailable={handleAvailable} />
+            )}
           </Suspense>
 
           <OrbitControls
@@ -593,6 +670,8 @@ export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
         <OpeningsOverlay
           autoRotate={autoRotate}
           onToggleAutoRotate={() => setAutoRotate((v) => !v)}
+          cableMode={cableMode}
+          onCycleCable={cycleCable}
         />
       </div>
     </OpeningsProvider>
@@ -606,7 +685,15 @@ export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
 interface OpeningsOverlayProps {
   autoRotate: boolean;
   onToggleAutoRotate: () => void;
+  cableMode: CableMode;
+  onCycleCable: () => void;
 }
+
+const CABLE_LABELS: Record<CableMode, string> = {
+  off: 'Brancher le câble de charge',
+  plugged: 'Câble branché (cliquer pour démarrer la charge)',
+  charging: 'Charge en cours (cliquer pour débrancher)',
+};
 
 /**
  * Right-side floating control rail.
@@ -620,7 +707,12 @@ interface OpeningsOverlayProps {
  * State is intentionally NOT persisted: each viewer mount starts collapsed
  * so first impression is "see the car", not "see a UI panel".
  */
-function OpeningsOverlay({ autoRotate, onToggleAutoRotate }: OpeningsOverlayProps) {
+function OpeningsOverlay({
+  autoRotate,
+  onToggleAutoRotate,
+  cableMode,
+  onCycleCable,
+}: OpeningsOverlayProps) {
   const { toggle, setAll, targets } = useOpeningsContext();
   const [expanded, setExpanded] = useState(false);
 
@@ -698,6 +790,13 @@ function OpeningsOverlay({ autoRotate, onToggleAutoRotate }: OpeningsOverlayProp
           title={autoRotate ? 'Stopper la rotation' : 'Lancer la rotation'}
           glyph="↻"
         />
+        <RailButton
+          onClick={onCycleCable}
+          active={cableMode !== 'off'}
+          accent={cableMode === 'charging' ? 'green' : undefined}
+          title={CABLE_LABELS[cableMode]}
+          glyph="⚡"
+        />
         {openCount > 0 && (
           <RailButton
             onClick={() => setAll(0)}
@@ -715,9 +814,12 @@ interface RailButtonProps {
   title: string;
   glyph: string;
   active?: boolean;
+  accent?: 'green';
 }
 
-function RailButton({ onClick, title, glyph, active }: RailButtonProps) {
+function RailButton({ onClick, title, glyph, active, accent }: RailButtonProps) {
+  const activeClass =
+    accent === 'green' ? 'bg-emerald-500/80 text-white' : 'bg-blue-500/80 text-white';
   return (
     <button
       type="button"
@@ -725,9 +827,7 @@ function RailButton({ onClick, title, glyph, active }: RailButtonProps) {
       title={title}
       className={
         'w-7 h-7 rounded-sm flex items-center justify-center text-sm transition-colors ' +
-        (active
-          ? 'bg-blue-500/80 text-white'
-          : 'text-white/70 hover:bg-white/15 hover:text-white')
+        (active ? activeClass : 'text-white/70 hover:bg-white/15 hover:text-white')
       }
     >
       {glyph}
