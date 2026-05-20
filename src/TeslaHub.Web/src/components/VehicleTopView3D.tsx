@@ -289,6 +289,50 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     let floorFixed = 0;
     const glassDebug: string[] = [];
     const paintDebug: string[] = [];
+
+    // ──────────────────────────────────────────────────────────────────
+    // Pre-pass: detect mesh-level glass role.
+    //
+    // Tesla reuses the SAME `Glass_Interior` material on meshes that
+    // play very different visual roles:
+    //   • windshield + front door windows : Glass_Interior sits BEHIND
+    //     an outer Glass/Glass_Windows pane → role 'mixed'
+    //   • rear door windows on the Y      : Glass_Interior is the
+    //     ONLY pane on the mesh           → role 'inner-only'
+    //
+    // We need opposite treatments for the two roles:
+    //   - mixed      → KILL the mirror (rough+env) and lower opacity so
+    //                  the cabin shows through the layered glass.
+    //   - inner-only → KEEP the reflection — it's the only thing that
+    //                  reads as "tinted glass" instead of a black panel.
+    //
+    // Because the material is shared, mutating it in-place for one role
+    // pollutes the other. We record the role per-mesh first, then clone
+    // the material per-mesh inside the main pass.
+    // ──────────────────────────────────────────────────────────────────
+    type GlassRole = 'mixed' | 'inner-only' | 'outer-only' | 'none';
+    const meshGlassRole = new WeakMap<THREE.Mesh, GlassRole>();
+    scene.traverse((obj) => {
+      const m = obj as THREE.Mesh;
+      if (!m.isMesh) return;
+      const mats = Array.isArray(m.material) ? m.material : [m.material];
+      let hasOuterMat = false;
+      let hasInnerMat = false;
+      for (const mat of mats) {
+        if (!mat) continue;
+        const n = (mat as { name?: string }).name ?? '';
+        if (OUTER_GLASS_MAT.test(n)) hasOuterMat = true;
+        if (INNER_GLASS_MAT.test(n)) hasInnerMat = true;
+      }
+      const outerByNode = isInsideOuterGlass(m);
+      const isOuter = hasOuterMat || outerByNode;
+      let role: GlassRole = 'none';
+      if (isOuter && hasInnerMat) role = 'mixed';
+      else if (hasInnerMat) role = 'inner-only';
+      else if (isOuter) role = 'outer-only';
+      meshGlassRole.set(m, role);
+    });
+
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -431,33 +475,57 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             );
           }
         } else if (INNER_GLASS_MAT.test(matName)) {
-          // INNER cabin-side pane of a layered Tesla glass surface.
-          // Tesla ships this with rough=0.01 (perfect mirror) which
-          // reflects the HDR `Environment preset="city"` straight back
-          // through the outer Glass pane (alpha=0.16, too transparent
-          // to mask the inner mirror). Result: bright white windshield
-          // despite the outer being correctly tinted dark.
-          //
-          // We don't tint the colour (it's already pitch black) and
-          // we keep its opacity untouched — the inner pane is supposed
-          // to be there. We just kill the mirror by bumping roughness
-          // (scatters reflections wide) and slashing envMapIntensity
-          // (less HDR sky bouncing off). Outer glass tint now shows
-          // through naturally.
-          const std = mat as THREE.MeshStandardMaterial;
-          std.roughness = Math.max(std.roughness ?? 0.5, 0.7);
-          if ('envMapIntensity' in std) {
-            std.envMapIntensity = (std.envMapIntensity ?? 1) * 0.05;
+          // Tesla's `Glass_Interior` (rough=0.01, alpha=0.78, black) is
+          // a SHARED material reused across meshes with very different
+          // physical meaning. We must treat it per-mesh, which means
+          // we clone it here so mutations don't bleed across meshes.
+          const original = mat as THREE.MeshStandardMaterial;
+          const cloned = original.clone();
+          const role = meshGlassRole.get(mesh) ?? 'none';
+
+          if (role === 'mixed') {
+            // Inner cabin-side pane behind an outer Glass/Glass_Windows
+            // pane (windshield, front door windows). The rough=0.01
+            // mirror reflects the HDR sky through the semi-transparent
+            // outer pane → bright white windshield. Kill the mirror
+            // hard AND lower the opacity so the cabin shows through
+            // the layered sandwich (otherwise composite reads as solid
+            // grey with no depth).
+            cloned.roughness = Math.max(cloned.roughness ?? 0.5, 0.7);
+            if ('envMapIntensity' in cloned) {
+              cloned.envMapIntensity = (cloned.envMapIntensity ?? 1) * 0.05;
+            }
+            cloned.opacity = Math.min(cloned.opacity ?? 1, 0.35);
+            mesh.renderOrder = 1;
+          } else {
+            // SOLO pane: Tesla modeled the rear door windows with only
+            // `Glass_Interior` (no outer Glass_Windows layer). Killing
+            // the reflection here turns them into flat black panels —
+            // the mirror IS what reads as "tinted glass". Keep a
+            // softened reflection and the factory opacity so they look
+            // like the heavily tinted rear windows that ship on the Y.
+            cloned.roughness = Math.max(cloned.roughness ?? 0.5, 0.25);
+            if ('envMapIntensity' in cloned) {
+              cloned.envMapIntensity = (cloned.envMapIntensity ?? 1) * 0.6;
+            }
+            mesh.renderOrder = 2;
           }
-          // Mark transparent + depthWrite=false so it composites
-          // correctly behind the outer glass. Render order 1 puts it
-          // behind outer glass (renderOrder 2-3).
-          std.transparent = true;
-          std.depthWrite = false;
-          mesh.renderOrder = 1;
-          if (glassDebug.length < 16) {
+
+          cloned.transparent = true;
+          cloned.depthWrite = false;
+          cloned.side = THREE.DoubleSide;
+
+          if (Array.isArray(mesh.material)) {
+            const idx = mesh.material.indexOf(original);
+            if (idx >= 0) mesh.material[idx] = cloned;
+          } else {
+            mesh.material = cloned;
+          }
+
+          if (glassDebug.length < 24) {
             glassDebug.push(
-              `INNER ${mesh.name || '(unnamed)'} mat="${matName}" rough→${std.roughness}`,
+              `INNER(${role}) ${mesh.name || '(unnamed)'} mat="${matName}" ` +
+                `rough→${cloned.roughness?.toFixed(2)} opacity→${cloned.opacity?.toFixed(2)}`,
             );
           }
           transparentFixed++;
