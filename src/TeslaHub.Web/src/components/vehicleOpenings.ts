@@ -33,7 +33,16 @@ export type OpeningId =
   | 'window_LF'
   | 'window_LR'
   | 'window_RF'
-  | 'window_RR';
+  | 'window_RR'
+  // Mirror fold animations. Originally Tesla embedded these inside the
+  // door_LF / door_RF .tscn animations (so opening a front door also
+  // folded its mirror). That was wrong though — in real Teslas mirrors
+  // fold on LOCK (when the auto-fold setting is enabled), NOT on door
+  // open. We expose them as standalone openings so useVehicleVisualSync
+  // can drive them from `isLocked`. The same animation tracks are
+  // reused, just decoupled from the door triggers.
+  | 'mirror_LF'
+  | 'mirror_RF';
 
 export interface KeyframeRotation {
   /** Time in seconds (0 → length). */
@@ -70,22 +79,19 @@ export interface OpeningDefinition {
 }
 
 /**
- * Mirror unfold animations (anims/4 and anims/7 in .tscn). These are NOT
- * exposed as top-level openings in the UI — they auto-trigger when the
- * associated door opens, mimicking Tesla's real behaviour where the
- * mirror physically rotates inward when the door swings out.
- *
- * Internal opening ids prefixed with `_` to mark them as private.
+ * Mirror fold animations (anims/4 and anims/7 in .tscn). These are now
+ * top-level openings — see OpeningId type comment for why we decoupled
+ * them from the door animations.
  */
 export const MIRROR_TRACKS = {
-  _mirror_LF: {
+  mirror_LF: {
     node: 'Door_LF_Mirror_Spatial',
     rotation: [
       { t: 0, eul: [3.813, 0, 0] as [number, number, number] },
       { t: 1, eul: [2.75644, 43.7474, 2.6356] as [number, number, number] },
     ],
   } satisfies OpeningTrack,
-  _mirror_RF: {
+  mirror_RF: {
     node: 'Door_RF_Mirror_Spatial',
     rotation: [
       { t: 0, eul: [0, 0, 0] as [number, number, number] },
@@ -150,11 +156,13 @@ export const OPENINGS: OpeningDefinition[] = [
     ],
   },
 
-  // anims/3 + auto-followup anims/4 (LF mirror)
+  // anims/3 — driver-front door. The original .tscn embedded the LF
+  // mirror fold as a parallel track here, but mirrors don't fold when a
+  // door opens in real life (they fold on park/lock), so we've moved
+  // the mirror tracks to their own standalone openings.
   {
     id: 'door_LF',
     length: 1.5,
-    followUp: 'door_LF' as OpeningId, // sentinel — handled internally
     tracks: [
       {
         node: 'Door_LF_Spatial',
@@ -163,7 +171,6 @@ export const OPENINGS: OpeningDefinition[] = [
           { t: 1.5, eul: [0, -65, 0] },
         ],
       },
-      MIRROR_TRACKS._mirror_LF,
     ],
   },
 
@@ -182,7 +189,7 @@ export const OPENINGS: OpeningDefinition[] = [
     ],
   },
 
-  // anims/6 + auto-followup anims/7 (RF mirror)
+  // anims/6 — passenger-front door (RF). Same note as door_LF re: mirror.
   {
     id: 'door_RF',
     length: 1.5,
@@ -194,7 +201,6 @@ export const OPENINGS: OpeningDefinition[] = [
           { t: 1.5, eul: [0, 65, 0] },
         ],
       },
-      MIRROR_TRACKS._mirror_RF,
     ],
   },
 
@@ -315,6 +321,21 @@ export const OPENINGS: OpeningDefinition[] = [
       },
     ],
   },
+
+  // Mirror fold animations — extracted from anims/4 (LF) and anims/7
+  // (RF). Tied to `isLocked` by useVehicleVisualSync. Length kept at
+  // 1.0s (vs 1.5s for doors) because real Tesla mirrors fold faster
+  // than doors swing.
+  {
+    id: 'mirror_LF',
+    length: 1.0,
+    tracks: [MIRROR_TRACKS.mirror_LF],
+  },
+  {
+    id: 'mirror_RF',
+    length: 1.0,
+    tracks: [MIRROR_TRACKS.mirror_RF],
+  },
 ];
 
 /**
@@ -343,4 +364,6 @@ export const OPENING_LABELS: Record<OpeningId, string> = {
   window_LR: 'Vitre arrière gauche',
   window_RF: 'Vitre avant droite',
   window_RR: 'Vitre arrière droite',
+  mirror_LF: 'Rétroviseur gauche',
+  mirror_RF: 'Rétroviseur droit',
 };

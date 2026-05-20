@@ -1,5 +1,5 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Canvas, useThree } from '@react-three/fiber';
 import {
   useGLTF,
   OrbitControls,
@@ -12,15 +12,19 @@ import type { VehicleStatus } from '../api/queries';
 import {
   OpeningsProvider,
   VehicleOpeningsAnimator,
-  findOpeningForObject,
   useOpeningsContext,
 } from './useVehicleOpenings';
-import {
-  OPENINGS,
-  OPENING_LABELS,
-  type OpeningId,
-} from './vehicleOpenings';
 import { ChargingCable } from './ChargingCable';
+import { useVehicleVisualSync } from './VehicleVisualSync';
+import { VehicleCallouts, type CalloutAction, type CalloutsActions } from './VehicleCallouts';
+import { VehicleLightEffects } from './VehicleLightEffects';
+import type { CableMode } from './ShowroomControls';
+import {
+  presumeSupported,
+  useControlAvailability,
+  useControlMutation,
+  type OptimisticPatch,
+} from '../hooks/useVehicleControl';
 
 const MODEL_URL = '/models/poppyseed.glb';
 const WHEEL_URL = '/models/wheel_d50_highland.glb';
@@ -71,10 +75,11 @@ const CABLE_GROUND_WORLD = new THREE.Vector3(-3.5, 0, -1.5);
 // and tune its material — do NOT hide it or replace with drei's ContactShadows.
 const FLOOR_NODE_NAMES = new Set(['Floor', 'Ground_Plane']);
 
+// Permanently HIDDEN nodes — DETACHED from the scene graph (removed from
+// the parent's children list). These should never be visible regardless
+// of vehicle state, so we strip them entirely to keep the bounding box
+// tight and prevent any race condition that could re-show them.
 const HIDDEN_NODE_NAMES = new Set([
-  // Light cones projected on the floor (designed for top-down Tesla UI).
-  'Headlights_Projections',
-  'Stoplights_Projections',
   // Tesla CSG overlays — flat planes on the windshields/dashboard used to
   // visualise the defrost and the cabin airflow. They flicker against the
   // glass roof when transparent and serve no purpose in a static view.
@@ -86,6 +91,17 @@ const HIDDEN_NODE_NAMES = new Set([
   // (license plate text). Without the live Godot runtime it renders as a
   // black square stuck on the rear bumper.
   'Plate_Viewport',
+]);
+
+// CONDITIONALLY hidden nodes — kept in the scene graph but `visible=false`
+// by default. Their visibility is toggled at runtime by VehicleLightEffects
+// (lock flash) or by the parking-lights effect when shiftState changes.
+// We keep them in the graph so getObjectByName() can find them later.
+const CONDITIONALLY_HIDDEN_NODE_NAMES = new Set([
+  // Light cones projected on the floor (designed for top-down Tesla UI).
+  // Flashed during lock/unlock events; off the rest of the time.
+  'Headlights_Projections',
+  'Stoplights_Projections',
 ]);
 
 // Wheel anchor names from Poppyseed.tscn under ROOT/Spatials. Godot's
@@ -232,6 +248,10 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     scene.traverse((obj) => {
       if (HIDDEN_NODE_NAMES.has(obj.name)) {
         toRemove.push(obj);
+      } else if (CONDITIONALLY_HIDDEN_NODE_NAMES.has(obj.name)) {
+        // Keep in the graph but invisible — Light effects will toggle
+        // visibility on lock/shift events at runtime.
+        obj.visible = false;
       }
       for (const a of WHEEL_ANCHORS) {
         if (obj.name === a.name) anchors[a.name] = obj;
@@ -501,35 +521,29 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
     return scene;
   }, [scene, wheelGltf.scene, wheelsAvailable]);
 
-  const { toggle } = useOpeningsContext();
-  // Click anywhere on a mesh that belongs to an opening pivot → toggle it.
-  // R3F bubbles pointer events from the deepest mesh up the parent chain;
-  // we stop propagation once we've handled it so we don't trigger multiple
-  // openings when the doors overlap visually.
-  const handleClick = useCallback(
-    (event: ThreeEvent<MouseEvent>) => {
-      const id = findOpeningForObject(event.object);
-      if (id) {
-        event.stopPropagation();
-        toggle(id);
-      }
-    },
-    [toggle],
-  );
+  // Click handler intentionally OMITTED. The 3D viewer is read-only on Home:
+  // - State reflects live MQTT/TeslaMate signals via <useVehicleVisualSync>
+  // - Action affordances are surfaced as floating callouts (<VehicleCallouts>)
+  //   that route through the real Tesla command pipeline (useControlMutation)
+  // - The previous "click a door to open it locally" UX caused too many
+  //   accidental clicks (user dragging the orbit camera) and could not safely
+  //   coexist with the 3-state Tesla charge_port_door endpoint that doubles
+  //   as cable unlock when plugged in. See `VehicleCallouts` for the rebuilt
+  //   Tesla Car Browser-style UI.
 
   return (
     <>
-      <primitive object={cleanedScene} onClick={handleClick} />
+      <primitive object={cleanedScene} />
       <VehicleOpeningsAnimator scene={cleanedScene} />
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Live charging cable - mounted on demand from the overlay rail.
+// Live charging cable - driven by the live VehicleStatus (chargingState +
+// pluggedIn) via useVehicleVisualSync. The legacy showroom-style cycle
+// button now lives in ShowroomControls.tsx for the upcoming Settings tab.
 // ---------------------------------------------------------------------------
-
-export type CableMode = 'off' | 'plugged' | 'charging';
 
 interface LiveChargingCableProps {
   mode: CableMode;
@@ -669,20 +683,180 @@ interface Props {
   vehicle: VehicleStatus;
 }
 
-export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
+/**
+ * Builds an optimistic patch for the TeslaMate-fed `['vehicle', carId]`
+ * cache. Same pattern as HomeQuickActions — Tesla command endpoints
+ * never echo post-command state and TeslaMate MQTT lags 30-60s, so we
+ * patch the local cache immediately. Patches roll back on error.
+ */
+function vehiclePatch<TBody = void>(
+  carId: number | undefined,
+  update: (prev: VehicleStatus, body: TBody) => Partial<VehicleStatus>,
+): OptimisticPatch<TBody, VehicleStatus> | undefined {
+  if (!carId) return undefined;
+  return {
+    queryKey: ['vehicle', carId],
+    update: (prev, body) => (prev ? { ...prev, ...update(prev, body) } : prev),
+  };
+}
+
+export default function VehicleTopView3D({ vehicle }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null!);
   const wheelsAvailable = useAssetAvailable(WHEEL_URL);
   const handleAvailable = useAssetAvailable(HANDLE_URL);
-  // Auto-rotate OFF by default — was distracting and made clicking on a
-  // moving target frustrating. The user enables it via the overlay toggle
-  // when they want a showroom-style turntable.
+  // Auto-rotate OFF by default — was distracting and made clicking on
+  // a moving target frustrating. Toggle in top-right corner.
   const [autoRotate, setAutoRotate] = useState(false);
-  // Cable cycles off → plugged (idle grey pulse) → charging (green flow).
-  // Phase 2 will replace this user toggle with vehicle.chargingState mapping.
+  // Cable mode is now driven by the live VehicleStatus through
+  // <useVehicleVisualSync>. We keep it in local state so the cable
+  // mount/unmount is a fast local re-render rather than re-deriving in
+  // every effect downstream.
   const [cableMode, setCableMode] = useState<CableMode>('off');
-  const cycleCable = useCallback(() => {
-    setCableMode((m) => (m === 'off' ? 'plugged' : m === 'plugged' ? 'charging' : 'off'));
-  }, []);
+
+  // --- Fleet API wiring for callouts ---------------------------------------
+  // Same gating logic as HomeQuickActions: callouts surface action buttons
+  // only when MQTT + Fleet API + virtual key are ALL ready. Without that,
+  // the 3D viewer is purely observational (no callouts, animations only).
+  const { data: availability } = useControlAvailability();
+  const teslaVehicle = useMemo(() => {
+    if (!availability?.vehicles?.length || !vehicle.vin) return undefined;
+    const matches = availability.vehicles.filter((v) => v.vin === vehicle.vin);
+    return matches.find((v) => v.keyPaired) ?? matches[0];
+  }, [availability, vehicle.vin]);
+  const vehicleId = teslaVehicle?.id;
+  const carId = vehicle.carId;
+
+  // All mutations instantiated unconditionally to satisfy rules-of-hooks.
+  // When vehicleId is undefined they are noop-disabled (mutation throws,
+  // caught by useControlMutation, never shows a toast in `silent` mode).
+  const trunk = useControlMutation<{ which: string }>(vehicleId, 'access/trunk', {
+    optimistic: vehiclePatch<{ which: string }>(carId, (prev, body) =>
+      body.which === 'front'
+        ? { frunkOpen: !(prev.frunkOpen ?? false) }
+        : { trunkOpen: !(prev.trunkOpen ?? false) },
+    ),
+  });
+  const windowCmd = useControlMutation<{ command: string }>(vehicleId, 'access/window', {
+    optimistic: vehiclePatch<{ command: string }>(carId, (_prev, body) =>
+      body.command === 'close' ? { windowsOpen: false } : { windowsOpen: true },
+    ),
+  });
+  // charge/port-door is THE TRICKY ONE — same endpoint does three things:
+  //   - on:true  + port closed + not plugged → opens trapdoor
+  //   - on:false + port open   + not plugged → closes trapdoor
+  //   - on:true  + plugged                   → releases cable latch
+  // The callouts split this into two intents (closeChargePort / unlockCable)
+  // and pass the right `on` value depending on the source button.
+  const chargePort = useControlMutation<{ on: boolean }>(vehicleId, 'charge/port-door', {
+    optimistic: vehiclePatch<{ on: boolean }>(carId, (_prev, body) => ({
+      chargePortDoorOpen: body.on,
+    })),
+  });
+
+  // Callouts are gated on the same trinity HomeQuickActions uses. When any
+  // condition is missing we pass null → callouts render nothing at all.
+  const fleetReady = !!availability?.configured && !!availability?.connected;
+  const paired = !!teslaVehicle?.keyPaired;
+  const mqttAvailable = !!vehicle.mqttConnected;
+  const caps = teslaVehicle?.capabilities;
+  const showChargePortCallout = presumeSupported(caps, caps?.motorizedChargePort ?? false);
+  const showTrunkCallouts =
+    !caps?.carType || caps.canActuateTrunks; // permissive when capabilities not loaded yet
+
+  // `access/trunk` toggles whichever lid you ask for. We split into
+  // 4 logical actions (open/close × frunk/trunk) but they all map to
+  // the same endpoint with `which: front|rear`. The optimistic patch
+  // already flips the boolean so the 3D anim runs the right direction
+  // regardless of which logical action triggered it.
+  const trunkFrontPending =
+    trunk.isPending &&
+    (trunk.variables as { which?: string } | undefined)?.which === 'front';
+  const trunkRearPending =
+    trunk.isPending &&
+    (trunk.variables as { which?: string } | undefined)?.which === 'rear';
+  const portClosing =
+    chargePort.isPending &&
+    (chargePort.variables as { on?: boolean } | undefined)?.on === false;
+  const portOpening =
+    chargePort.isPending &&
+    (chargePort.variables as { on?: boolean } | undefined)?.on === true;
+  const windowVenting =
+    windowCmd.isPending &&
+    (windowCmd.variables as { command?: string } | undefined)?.command === 'vent';
+  const windowClosing =
+    windowCmd.isPending &&
+    (windowCmd.variables as { command?: string } | undefined)?.command === 'close';
+
+  const actions: CalloutsActions | null = useMemo(() => {
+    if (!vehicleId || !fleetReady || !paired || !mqttAvailable) return null;
+    return {
+      openFrunk: {
+        onClick: () => trunk.mutate({ which: 'front' }),
+        loading: trunkFrontPending,
+      },
+      openTrunk: {
+        onClick: () => trunk.mutate({ which: 'rear' }),
+        loading: trunkRearPending,
+      },
+      closeTrunk: {
+        onClick: () => trunk.mutate({ which: 'rear' }),
+        loading: trunkRearPending,
+      },
+      openChargePort: {
+        onClick: () => chargePort.mutate({ on: true }),
+        loading: portOpening,
+      },
+      closeChargePort: {
+        onClick: () => chargePort.mutate({ on: false }),
+        loading: portClosing,
+      },
+      unlockCable: {
+        // Same endpoint as openChargePort but semantically different —
+        // when plugged in, `on:true` releases the cable latch instead
+        // of toggling the trapdoor.
+        onClick: () => chargePort.mutate({ on: true }),
+        loading: portOpening,
+      },
+      ventWindows: {
+        onClick: () => windowCmd.mutate({ command: 'vent' }),
+        loading: windowVenting,
+      },
+      closeWindows: {
+        onClick: () => windowCmd.mutate({ command: 'close' }),
+        loading: windowClosing,
+      },
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    vehicleId,
+    fleetReady,
+    paired,
+    mqttAvailable,
+    trunkFrontPending,
+    trunkRearPending,
+    portClosing,
+    portOpening,
+    windowVenting,
+    windowClosing,
+  ]);
+
+  // Strip individual actions when capabilities tell us they don't apply.
+  const filteredActions = useMemo(() => {
+    if (!actions) return null;
+    const out = { ...actions };
+    const noop: CalloutAction = { onClick: () => {}, loading: false };
+    if (!showChargePortCallout) {
+      out.openChargePort = noop;
+      out.closeChargePort = noop;
+      out.unlockCable = noop;
+    }
+    if (!showTrunkCallouts) {
+      out.openFrunk = noop;
+      out.openTrunk = noop;
+      out.closeTrunk = noop;
+    }
+    return out;
+  }, [actions, showChargePortCallout, showTrunkCallouts]);
 
   return (
     <OpeningsProvider>
@@ -718,11 +892,25 @@ export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
             {wheelsAvailable !== null && (
               <PoppyseedModel wheelsAvailable={wheelsAvailable} />
             )}
-            {/* Live charging cable - only mounted when user toggles it on. */}
+            {/* Cable mounts only when the live state says we're plugged or
+                charging. Animated colour switches between grey-pulse and
+                green-flow inside <ChargingCable>. */}
             {cableMode !== 'off' && handleAvailable !== null && (
               <LiveChargingCable mode={cableMode} handleAvailable={handleAvailable} />
             )}
+            {/* Callouts mounted inside Canvas so they can read the scene
+                graph (anchor positions) via useThree.scene. They render
+                nothing when actions=null (Fleet API not ready). */}
+            <VehicleCallouts vehicle={vehicle} actions={filteredActions} />
+            {/* Phase 7 light effects: lock flash, brake/reverse lights,
+                sentry-mode camera pulses. Reads vehicle.* live state
+                and mutates scene nodes directly (no React props/state
+                churn). */}
+            <VehicleLightEffects vehicle={vehicle} />
           </Suspense>
+
+          {/* Read MQTT/TeslaMate state → drive openings + cableMode. */}
+          <VehicleStateSync vehicle={vehicle} onCableModeChange={setCableMode} />
 
           <OrbitControls
             target={CAMERA_TARGET}
@@ -738,195 +926,84 @@ export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
           />
         </Canvas>
 
-        <OpeningsOverlay
-          autoRotate={autoRotate}
-          onToggleAutoRotate={() => setAutoRotate((v) => !v)}
-          cableMode={cableMode}
-          onCycleCable={cycleCable}
-        />
+        {/* Top-right overlay: status badges + auto-rotate toggle. */}
+        <div className="absolute top-2 right-2 flex items-center gap-1.5">
+          {vehicle.sentryMode && <SentryBadge />}
+          {vehicle.isLocked != null && <LockBadge locked={vehicle.isLocked} />}
+          <button
+            type="button"
+            onClick={() => setAutoRotate((v) => !v)}
+            title={autoRotate ? 'Stopper la rotation' : 'Lancer la rotation'}
+            className={
+              'w-8 h-8 rounded-full text-sm flex items-center justify-center ' +
+              'border border-white/15 backdrop-blur-md transition-colors ' +
+              (autoRotate
+                ? 'bg-blue-500/80 text-white'
+                : 'bg-black/50 text-white/70 hover:text-white hover:bg-black/70')
+            }
+          >
+            ↻
+          </button>
+        </div>
       </div>
     </OpeningsProvider>
   );
 }
 
-// ---------------------------------------------------------------------------
-// UI overlay — collapsible side panel + always-visible quick toggles
-// ---------------------------------------------------------------------------
+// Small DOM badges that mirror the live vehicle state. Kept out of the
+// Canvas so they render at full resolution (no distanceFactor scaling)
+// and aren't subject to the 3D depth buffer.
 
-interface OpeningsOverlayProps {
-  autoRotate: boolean;
-  onToggleAutoRotate: () => void;
-  cableMode: CableMode;
-  onCycleCable: () => void;
-}
-
-const CABLE_LABELS: Record<CableMode, string> = {
-  off: 'Brancher le câble de charge',
-  plugged: 'Câble branché (cliquer pour démarrer la charge)',
-  charging: 'Charge en cours (cliquer pour débrancher)',
-};
-
-/**
- * Right-side floating control rail.
- *
- * - When COLLAPSED: only a thin vertical rail (32px wide) with three
- *   always-visible buttons (open panel, auto-rotate toggle, close all).
- *   The 3D model is unobstructed.
- * - When EXPANDED: the rail expands left to ~190px wide and shows all 11
- *   individual openings + "Tout ouvrir/fermer". User can hide it again.
- *
- * State is intentionally NOT persisted: each viewer mount starts collapsed
- * so first impression is "see the car", not "see a UI panel".
- */
-function OpeningsOverlay({
-  autoRotate,
-  onToggleAutoRotate,
-  cableMode,
-  onCycleCable,
-}: OpeningsOverlayProps) {
-  const { toggle, set, setAll, targets } = useOpeningsContext();
-  const [expanded, setExpanded] = useState(false);
-
-  // Cycling the cable also opens/closes the charge port trapdoor, mirroring
-  // the Tesla mobile app: plugging in opens the port, unplugging closes it.
-  const handleCableClick = useCallback(() => {
-    const next: CableMode =
-      cableMode === 'off' ? 'plugged' : cableMode === 'plugged' ? 'charging' : 'off';
-    set('charge_port', next === 'off' ? 0 : 1);
-    onCycleCable();
-  }, [cableMode, onCycleCable, set]);
-
-  const openCount = useMemo(
-    () => Object.values(targets).filter((v) => v === 1).length,
-    [targets],
-  );
-
+function SentryBadge() {
   return (
-    <div className="absolute top-2 right-2 bottom-2 flex items-start gap-1.5 pointer-events-none">
-      {/* Expanded panel — slides in/out via translate-x */}
-      <div
-        className={
-          'pointer-events-auto bg-black/70 backdrop-blur-md border border-white/10 rounded-lg p-2 ' +
-          'transition-all duration-200 origin-right ' +
-          (expanded
-            ? 'translate-x-0 opacity-100 scale-100'
-            : 'translate-x-4 opacity-0 scale-95 pointer-events-none')
-        }
-        style={{ width: 190 }}
-        aria-hidden={!expanded}
-      >
-        <div className="flex gap-1 mb-2">
-          <button
-            type="button"
-            onClick={() => setAll(1)}
-            className="flex-1 h-7 text-[11px] rounded bg-white/10 text-white/90 hover:bg-white/20"
-          >
-            Tout ouvrir
-          </button>
-          <button
-            type="button"
-            onClick={() => setAll(0)}
-            disabled={openCount === 0}
-            className="flex-1 h-7 text-[11px] rounded bg-white/10 text-white/90 hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Tout fermer
-          </button>
-        </div>
-
-        <div className="grid grid-cols-3 gap-1">
-          {OPENINGS.map((o) => {
-            const isOpen = targets[o.id] === 1;
-            return (
-              <button
-                key={o.id}
-                type="button"
-                onClick={() => toggle(o.id)}
-                title={OPENING_LABELS[o.id]}
-                className={
-                  'h-8 text-[10px] leading-tight rounded border transition-colors ' +
-                  (isOpen
-                    ? 'bg-blue-500/80 text-white border-blue-400'
-                    : 'bg-white/5 text-white/70 hover:bg-white/15 border-white/10')
-                }
-              >
-                {OPENING_SHORT[o.id]}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Always-visible vertical rail */}
-      <div className="pointer-events-auto flex flex-col gap-1 bg-black/50 backdrop-blur-sm border border-white/10 rounded-md p-1">
-        <RailButton
-          onClick={() => setExpanded((v) => !v)}
-          active={expanded}
-          title={expanded ? 'Replier' : 'Ouvertures'}
-          glyph={expanded ? '›' : '‹'}
-        />
-        <RailButton
-          onClick={onToggleAutoRotate}
-          active={autoRotate}
-          title={autoRotate ? 'Stopper la rotation' : 'Lancer la rotation'}
-          glyph="↻"
-        />
-        <RailButton
-          onClick={handleCableClick}
-          active={cableMode !== 'off'}
-          accent={cableMode === 'charging' ? 'green' : undefined}
-          title={CABLE_LABELS[cableMode]}
-          glyph="⚡"
-        />
-        {openCount > 0 && (
-          <RailButton
-            onClick={() => setAll(0)}
-            title={`Fermer (${openCount} ouvert${openCount > 1 ? 's' : ''})`}
-            glyph="✕"
-          />
-        )}
-      </div>
+    <div
+      title="Mode Sentinelle actif"
+      className={
+        'h-8 px-2.5 flex items-center gap-1.5 rounded-full backdrop-blur-md ' +
+        'bg-red-500/80 border border-red-300/40 text-white text-[10px] font-semibold ' +
+        'animate-pulse'
+      }
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+      <span>SENTINELLE</span>
     </div>
   );
 }
 
-interface RailButtonProps {
-  onClick: () => void;
-  title: string;
-  glyph: string;
-  active?: boolean;
-  accent?: 'green';
-}
-
-function RailButton({ onClick, title, glyph, active, accent }: RailButtonProps) {
-  const activeClass =
-    accent === 'green' ? 'bg-emerald-500/80 text-white' : 'bg-blue-500/80 text-white';
+function LockBadge({ locked }: { locked: boolean }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
+    <div
+      title={locked ? 'Voiture verrouillée' : 'Voiture déverrouillée'}
       className={
-        'w-7 h-7 rounded-sm flex items-center justify-center text-sm transition-colors ' +
-        (active ? activeClass : 'text-white/70 hover:bg-white/15 hover:text-white')
+        'w-8 h-8 flex items-center justify-center rounded-full backdrop-blur-md border ' +
+        (locked
+          ? 'bg-emerald-500/70 border-emerald-300/40 text-white'
+          : 'bg-amber-500/70 border-amber-300/40 text-black')
       }
     >
-      {glyph}
-    </button>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="5" y="11" width="14" height="10" rx="2" />
+        {locked ? <path d="M8 11V7a4 4 0 0 1 8 0v4" /> : <path d="M8 11V7a4 4 0 0 1 7-1" />}
+      </svg>
+    </div>
   );
 }
 
-const OPENING_SHORT: Record<OpeningId, string> = {
-  hood: 'Capot',
-  trunk: 'Coffre',
-  charge_port: 'Charge',
-  door_LF: 'P AvG',
-  door_LR: 'P ArG',
-  door_RF: 'P AvD',
-  door_RR: 'P ArD',
-  window_LF: 'V AvG',
-  window_LR: 'V ArG',
-  window_RF: 'V AvD',
-  window_RR: 'V ArD',
-};
+// Tiny child component whose sole job is to call the sync hook inside the
+// <OpeningsProvider> + <Canvas> tree. The hook can't be called from
+// VehicleTopView3D directly because that one renders ABOVE the provider.
+function VehicleStateSync({
+  vehicle,
+  onCableModeChange,
+}: {
+  vehicle: VehicleStatus;
+  onCableModeChange: (mode: CableMode) => void;
+}) {
+  useVehicleVisualSync({ vehicle, onCableModeChange });
+  return null;
+}
 
 useGLTF.preload(MODEL_URL);
