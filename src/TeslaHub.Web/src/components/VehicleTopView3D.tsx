@@ -86,19 +86,27 @@ const WHEEL_FALLBACK_POSITIONS = [
 // Frame composition: 3/4 front view, slight elevation, car centered.
 // Distance ~5.5 m gives a tight crop with the wheels touching the canvas
 // bottom edge and a small headroom for the roof.
-const CAMERA_POSITION: [number, number, number] = [4.5, 2.2, 5.8];
-const CAMERA_TARGET: [number, number, number] = [0, 0.7, 0]; // car center
+const CAMERA_POSITION: [number, number, number] = [3.85, 1.9, 4.95];
+const CAMERA_TARGET: [number, number, number] = [0, 0.6, 0]; // car center
 const CAMERA_FOV = 38;
 
-// ---- D50 wheel polish -----------------------------------------------------
-// The Godot-exported D50 alloy ships with metalness ≈ 0.9 / roughness ≈ 0.1
-// (mirror chrome). Under a flat HDR environment with no nearby shiny
-// surfaces to reflect, polished metal renders almost black — physically
-// correct, visually disappointing. Bumping roughness toward a "brushed
-// alloy" feel and boosting envMapIntensity catches more diffuse light.
+// ---- Wheel polish ---------------------------------------------------------
+// The D50 base wheel set on the Highland is actually a BLACK PLASTIC
+// hubcap (Photon-style cover), not an alloy. So most of our wheel meshes
+// use Plastic_Black_D50 / Rubber_D50 materials. Polished alloy treatment
+// stays in this file for later when we add real alloy variants (Glider,
+// Helix_19, Wishbone, ZeroG, etc).
+//
+//   ALLOY    → mat the brushed-aluminum look, boost env reflections so
+//              the dark chrome doesn't render as flat black.
+//   PLASTIC  → keep the matte-black plastic feel, but lift envMap a bit
+//              so the spoke design stays readable instead of pitch black.
 const WHEEL_ALLOY_MAT_RE = /^(aluminum|aluminium|chrome|metal_anodized|silver)/i;
 const WHEEL_ALLOY_ROUGHNESS_MIN = 0.35;
 const WHEEL_ALLOY_ENVMAP_BOOST = 1.6;
+const WHEEL_PLASTIC_MAT_RE = /^(plastic_black|rubber)/i;
+const WHEEL_PLASTIC_ROUGHNESS = 0.55;
+const WHEEL_PLASTIC_ENVMAP_BOOST = 1.5;
 
 // ---- Running lights (DISABLED for now) -----------------------------------
 // First attempt tried to emissive-boost `Light.material`, `LED_Strip.material`
@@ -128,7 +136,9 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
       const FLAG = '__teslahub_wheel_polished';
       const wheelSceneRef = wheelGltf.scene as unknown as Record<string, boolean>;
       if (!wheelSceneRef[FLAG]) {
-        let polishedCount = 0;
+        let alloyCount = 0;
+        let plasticCount = 0;
+        const seenMats: string[] = [];
         wheelGltf.scene.traverse((obj) => {
           const mesh = obj as THREE.Mesh;
           if (!mesh.isMesh) return;
@@ -136,16 +146,25 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
           for (const m of mats) {
             const mat = m as THREE.MeshStandardMaterial;
             const matName = (mat as { name?: string }).name ?? '';
+            if (seenMats.indexOf(matName) === -1) seenMats.push(matName);
             if (WHEEL_ALLOY_MAT_RE.test(matName)) {
               mat.roughness = Math.max(mat.roughness ?? 0.5, WHEEL_ALLOY_ROUGHNESS_MIN);
               mat.envMapIntensity = (mat.envMapIntensity ?? 1) * WHEEL_ALLOY_ENVMAP_BOOST;
-              polishedCount++;
+              alloyCount++;
+            } else if (WHEEL_PLASTIC_MAT_RE.test(matName)) {
+              mat.metalness = 0;
+              mat.roughness = WHEEL_PLASTIC_ROUGHNESS;
+              mat.envMapIntensity = (mat.envMapIntensity ?? 1) * WHEEL_PLASTIC_ENVMAP_BOOST;
+              plasticCount++;
             }
           }
         });
         wheelSceneRef[FLAG] = true;
         // eslint-disable-next-line no-console
-        console.log(`[Poppyseed3D] polished ${polishedCount} alloy material(s) on wheel`);
+        console.log(
+          `[Poppyseed3D] wheel polish: alloy=${alloyCount} plastic=${plasticCount} | ` +
+            `materials seen: ${seenMats.join(', ')}`,
+        );
       }
     }
 
@@ -293,20 +312,30 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
 
         // Tesla studio floor — radial shadow baked into a textured quad.
         // Godot names it "Floor" (see ground_shadow_path in Poppyseed.tscn);
-        // the GLB may also carry "Ground_Plane". Keep the albedo gradient map
-        // but force a deep-black multiply so the shadow reads correctly under
-        // ACES tone mapping (ContactShadows was too light/washed out).
+        // the GLB also carries "Ground_Plane". A MeshStandardMaterial gets
+        // lit by ambient+directional+HDR env which lightens the centre of
+        // the gradient (the bit that should be pitch black) to grey/white.
+        // Swap to an unlit MeshBasicMaterial so the texture acts as a pure
+        // alpha mask over a black quad — true shadow regardless of lighting.
         if (isOnFloor(mesh)) {
           const std = mat as THREE.MeshStandardMaterial;
-          std.transparent = true;
-          std.depthWrite = false;
-          std.side = THREE.DoubleSide;
-          std.metalness = 0;
-          std.roughness = 1;
-          std.color.setHex(0x000000);
-          std.emissive?.setHex(0x000000);
-          std.emissiveIntensity = 0;
-          if (std.map) std.map.colorSpace = THREE.SRGBColorSpace;
+          const tex = std.map ?? undefined;
+          if (tex) tex.colorSpace = THREE.SRGBColorSpace;
+          const basic = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            map: tex,
+            alphaMap: tex,
+            transparent: true,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            opacity: 0.9,
+          });
+          if (Array.isArray(mesh.material)) {
+            const idx = mesh.material.indexOf(mat as THREE.Material);
+            if (idx >= 0) mesh.material[idx] = basic;
+          } else {
+            mesh.material = basic;
+          }
           mesh.renderOrder = -10;
           floorFixed++;
           continue;
