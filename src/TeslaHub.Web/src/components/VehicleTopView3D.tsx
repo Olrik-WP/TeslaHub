@@ -67,7 +67,7 @@ const WHEEL_ANCHORS = [
 // export. Coordinates derived from real Tesla Model 3 Highland (Poppyseed)
 // dimensions:
 //   Wheelbase 2875 mm → x ±1.4375 with a +50 mm forward bias for the GLB
-//   Track 1580 mm widened to 1700 mm (tires sit outboard of chassis)
+//   Track 1580 mm (center-to-center) → ±0.79 m + tire outer edge ≈ ±0.815
 //   18" wheel radius 343 mm → wheel center y = 0.343 m
 //   Axes: X = longitudinal (+ forward), Y = up, Z = lateral (+ right)
 //
@@ -80,10 +80,10 @@ const WHEEL_ANCHORS = [
 // while a negative scale always reflects the geometry. Three.js auto-
 // reverses face winding for negative scales so normals stay correct.
 const WHEEL_FALLBACK_POSITIONS = [
-  { id: 'LF', x: +1.4875, y: 0.343, z: -0.78, flipZ: true },
-  { id: 'RF', x: +1.4875, y: 0.343, z: +0.78, flipZ: false },
-  { id: 'LR', x: -1.3875, y: 0.343, z: -0.78, flipZ: true },
-  { id: 'RR', x: -1.3875, y: 0.343, z: +0.78, flipZ: false },
+  { id: 'LF', x: +1.4875, y: 0.343, z: -0.815, flipZ: true },
+  { id: 'RF', x: +1.4875, y: 0.343, z: +0.815, flipZ: false },
+  { id: 'LR', x: -1.3875, y: 0.343, z: -0.815, flipZ: true },
+  { id: 'RR', x: -1.3875, y: 0.343, z: +0.815, flipZ: false },
 ] as const;
 
 // ---- Camera positioning ---------------------------------------------------
@@ -535,6 +535,10 @@ interface Props {
 export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null!);
   const wheelsAvailable = useAssetAvailable(WHEEL_URL);
+  // Auto-rotate OFF by default — was distracting and made clicking on a
+  // moving target frustrating. The user enables it via the overlay toggle
+  // when they want a showroom-style turntable.
+  const [autoRotate, setAutoRotate] = useState(false);
 
   return (
     <OpeningsProvider>
@@ -578,7 +582,7 @@ export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
             enableZoom
             minDistance={4}
             maxDistance={20}
-            autoRotate
+            autoRotate={autoRotate}
             autoRotateSpeed={0.6}
             minPolarAngle={Math.PI / 6}
             maxPolarAngle={Math.PI / 2.1}
@@ -586,76 +590,148 @@ export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
           />
         </Canvas>
 
-        <OpeningsOverlay />
+        <OpeningsOverlay
+          autoRotate={autoRotate}
+          onToggleAutoRotate={() => setAutoRotate((v) => !v)}
+        />
       </div>
     </OpeningsProvider>
   );
 }
 
 // ---------------------------------------------------------------------------
-// UI overlay — quick-access opening toggles, floats above the canvas
+// UI overlay — collapsible side panel + always-visible quick toggles
 // ---------------------------------------------------------------------------
 
+interface OpeningsOverlayProps {
+  autoRotate: boolean;
+  onToggleAutoRotate: () => void;
+}
+
 /**
- * Compact icon button row, grouped by category. Sits in the bottom-right
- * of the canvas, dark glass, mobile-friendly tap targets.
- * Future: animate the icon to reflect open/closed state, drive from API.
+ * Right-side floating control rail.
+ *
+ * - When COLLAPSED: only a thin vertical rail (32px wide) with three
+ *   always-visible buttons (open panel, auto-rotate toggle, close all).
+ *   The 3D model is unobstructed.
+ * - When EXPANDED: the rail expands left to ~190px wide and shows all 11
+ *   individual openings + "Tout ouvrir/fermer". User can hide it again.
+ *
+ * State is intentionally NOT persisted: each viewer mount starts collapsed
+ * so first impression is "see the car", not "see a UI panel".
  */
-function OpeningsOverlay() {
+function OpeningsOverlay({ autoRotate, onToggleAutoRotate }: OpeningsOverlayProps) {
   const { toggle, setAll, targets } = useOpeningsContext();
+  const [expanded, setExpanded] = useState(false);
+
   const openCount = useMemo(
     () => Object.values(targets).filter((v) => v === 1).length,
     [targets],
   );
 
-  // Small enough to fit on phones (sticky bottom-right). Buttons are
-  // square 36px with a 18px Lucide-style icon glyph rendered as text.
   return (
-    <div className="absolute bottom-2 right-2 flex flex-col items-end gap-1.5 pointer-events-none">
-      {/* Master row: open-all / close-all */}
-      <div className="flex gap-1 pointer-events-auto">
-        <button
-          type="button"
-          onClick={() => setAll(1)}
-          className="px-2 h-8 text-xs rounded-md bg-black/60 text-white/80 hover:bg-black/80 border border-white/10 backdrop-blur-sm"
-          title="Tout ouvrir"
-        >
-          Tout ouvrir
-        </button>
-        <button
-          type="button"
-          onClick={() => setAll(0)}
-          disabled={openCount === 0}
-          className="px-2 h-8 text-xs rounded-md bg-black/60 text-white/80 hover:bg-black/80 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 backdrop-blur-sm"
-          title="Tout fermer"
-        >
-          Tout fermer
-        </button>
+    <div className="absolute top-2 right-2 bottom-2 flex items-start gap-1.5 pointer-events-none">
+      {/* Expanded panel — slides in/out via translate-x */}
+      <div
+        className={
+          'pointer-events-auto bg-black/70 backdrop-blur-md border border-white/10 rounded-lg p-2 ' +
+          'transition-all duration-200 origin-right ' +
+          (expanded
+            ? 'translate-x-0 opacity-100 scale-100'
+            : 'translate-x-4 opacity-0 scale-95 pointer-events-none')
+        }
+        style={{ width: 190 }}
+        aria-hidden={!expanded}
+      >
+        <div className="flex gap-1 mb-2">
+          <button
+            type="button"
+            onClick={() => setAll(1)}
+            className="flex-1 h-7 text-[11px] rounded bg-white/10 text-white/90 hover:bg-white/20"
+          >
+            Tout ouvrir
+          </button>
+          <button
+            type="button"
+            onClick={() => setAll(0)}
+            disabled={openCount === 0}
+            className="flex-1 h-7 text-[11px] rounded bg-white/10 text-white/90 hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Tout fermer
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-1">
+          {OPENINGS.map((o) => {
+            const isOpen = targets[o.id] === 1;
+            return (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => toggle(o.id)}
+                title={OPENING_LABELS[o.id]}
+                className={
+                  'h-8 text-[10px] leading-tight rounded border transition-colors ' +
+                  (isOpen
+                    ? 'bg-blue-500/80 text-white border-blue-400'
+                    : 'bg-white/5 text-white/70 hover:bg-white/15 border-white/10')
+                }
+              >
+                {OPENING_SHORT[o.id]}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Individual openings */}
-      <div className="grid grid-cols-4 gap-1 pointer-events-auto">
-        {OPENINGS.map((o) => {
-          const isOpen = targets[o.id] === 1;
-          return (
-            <button
-              key={o.id}
-              type="button"
-              onClick={() => toggle(o.id)}
-              title={OPENING_LABELS[o.id]}
-              className={
-                'w-9 h-9 text-[10px] leading-tight rounded-md border backdrop-blur-sm transition-colors ' +
-                (isOpen
-                  ? 'bg-blue-500/80 text-white border-blue-400'
-                  : 'bg-black/60 text-white/70 hover:bg-black/80 border-white/10')
-              }
-            >
-              {OPENING_SHORT[o.id]}
-            </button>
-          );
-        })}
+      {/* Always-visible vertical rail */}
+      <div className="pointer-events-auto flex flex-col gap-1 bg-black/50 backdrop-blur-sm border border-white/10 rounded-md p-1">
+        <RailButton
+          onClick={() => setExpanded((v) => !v)}
+          active={expanded}
+          title={expanded ? 'Replier' : 'Ouvertures'}
+          glyph={expanded ? '›' : '‹'}
+        />
+        <RailButton
+          onClick={onToggleAutoRotate}
+          active={autoRotate}
+          title={autoRotate ? 'Stopper la rotation' : 'Lancer la rotation'}
+          glyph="↻"
+        />
+        {openCount > 0 && (
+          <RailButton
+            onClick={() => setAll(0)}
+            title={`Fermer (${openCount} ouvert${openCount > 1 ? 's' : ''})`}
+            glyph="✕"
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+interface RailButtonProps {
+  onClick: () => void;
+  title: string;
+  glyph: string;
+  active?: boolean;
+}
+
+function RailButton({ onClick, title, glyph, active }: RailButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={
+        'w-7 h-7 rounded-sm flex items-center justify-center text-sm transition-colors ' +
+        (active
+          ? 'bg-blue-500/80 text-white'
+          : 'text-white/70 hover:bg-white/15 hover:text-white')
+      }
+    >
+      {glyph}
+    </button>
   );
 }
 
