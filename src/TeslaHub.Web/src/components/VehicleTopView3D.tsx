@@ -353,6 +353,46 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       meshGlassRole.set(m, role);
     });
 
+    // ──────────────────────────────────────────────────────────────────
+    // TEMPORARY DEBUG: enumerate every sub-mesh of any node named
+    // "Static_Exterior" with its material name + bbox center. This tells
+    // us EXACTLY which primitive is the windshield and which materials
+    // are actually present (the standard pre-pass log may not surface
+    // all sub-meshes if they don't enter the glass branches).
+    // ──────────────────────────────────────────────────────────────────
+    const staticExteriorDump: string[] = [];
+    scene.traverse((obj) => {
+      let cur: THREE.Object3D | null = obj;
+      let underStatic = false;
+      while (cur) {
+        if (cur.name === 'Static_Exterior') {
+          underStatic = true;
+          break;
+        }
+        cur = cur.parent;
+      }
+      if (!underStatic) return;
+      const m = obj as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.updateMatrixWorld(true);
+      const bb = new THREE.Box3().setFromObject(m);
+      const sz = bb.getSize(new THREE.Vector3());
+      const ct = bb.getCenter(new THREE.Vector3());
+      const mats = Array.isArray(m.material) ? m.material : [m.material];
+      const matInfo = mats
+        .map((mt) => (mt as { name?: string } | null)?.name ?? '(null)')
+        .join(',');
+      staticExteriorDump.push(
+        `${m.name} mats=[${matInfo}] ` +
+          `size=(${sz.x.toFixed(2)},${sz.y.toFixed(2)},${sz.z.toFixed(2)}) ` +
+          `center=(${ct.x.toFixed(2)},${ct.y.toFixed(2)},${ct.z.toFixed(2)})`,
+      );
+    });
+    if (staticExteriorDump.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log('[Poppyseed3D] Static_Exterior dump:', staticExteriorDump);
+    }
+
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
