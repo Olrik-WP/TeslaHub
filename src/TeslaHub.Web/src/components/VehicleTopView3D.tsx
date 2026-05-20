@@ -753,12 +753,45 @@ export default function VehicleTopView3D({ vehicle }: Props) {
     })),
   });
 
-  // Callouts are gated on the same trinity HomeQuickActions uses. When any
+  // Callouts gated on the same trinity HomeQuickActions uses. When any
   // condition is missing we pass null → callouts render nothing at all.
+  // We deliberately MIRROR HomeQuickActions' gating exactly so the two
+  // surfaces (top quick actions row + 3D callouts) appear or disappear
+  // together — if the user can tap a button in Quick Actions, the same
+  // button must be reachable from the 3D, and vice versa.
   const fleetReady = !!availability?.configured && !!availability?.connected;
   const paired = !!teslaVehicle?.keyPaired;
   const mqttAvailable = !!vehicle.mqttConnected;
   const caps = teslaVehicle?.capabilities;
+
+  // One-shot debug log on each gating change, so we can diagnose why
+  // callouts don't appear (missing Fleet API config, virtual key not
+  // paired, MQTT disconnected, VIN mismatch between TeslaMate and Fleet).
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log('[VehicleTopView3D] callouts gating:', {
+      vin: vehicle.vin,
+      vehicleId,
+      fleetReady,
+      paired,
+      mqttAvailable,
+      availabilityConfigured: availability?.configured,
+      availabilityConnected: availability?.connected,
+      mqttConnected: vehicle.mqttConnected,
+      teslaVehicleFound: !!teslaVehicle,
+      callouts: vehicleId && fleetReady && paired && mqttAvailable ? 'ACTIVE' : 'DISABLED',
+    });
+  }, [
+    vehicle.vin,
+    vehicleId,
+    fleetReady,
+    paired,
+    mqttAvailable,
+    availability?.configured,
+    availability?.connected,
+    vehicle.mqttConnected,
+    teslaVehicle,
+  ]);
   const showChargePortCallout = presumeSupported(caps, caps?.motorizedChargePort ?? false);
   const showTrunkCallouts =
     !caps?.carType || caps.canActuateTrunks; // permissive when capabilities not loaded yet

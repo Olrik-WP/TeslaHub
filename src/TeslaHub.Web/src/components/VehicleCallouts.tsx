@@ -169,15 +169,24 @@ interface CalloutProps {
 function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
   const { scene } = useThree();
 
-  // Resolve the anchor once — the Poppyseed scene is static so the
-  // ref stays valid for the component's lifetime. If the anchor wasn't
-  // exported (rare, but possible after an asset reshuffle) we silently
-  // skip rendering rather than show a misplaced callout.
-  const anchor = useMemo(() => scene.getObjectByName(anchorName) ?? null, [scene, anchorName]);
+  // CRITICAL: lazy resolution via useFrame instead of useMemo.
+  //
+  // <VehicleCallouts> mounts INSIDE the same <Suspense> as <PoppyseedModel>.
+  // When the GLB resolves both components mount on the same render — but at
+  // useMemo time R3F hasn't yet committed the <primitive object={cleanedScene} />
+  // child into the scene graph. So getObjectByName() returns null on the
+  // first render. A useMemo([scene]) never re-runs (scene reference is
+  // stable) so the anchor stays null forever and the callout never appears.
+  //
+  // useFrame runs every frame AFTER R3F has finished its commit, so the
+  // child primitives ARE present in the scene graph by the time we look.
+  // We resolve once, cache the result in a ref, and skip future lookups.
+  // The render output is always present (line + group) so React doesn't
+  // need to re-render when the anchor resolves — useFrame just starts
+  // updating positions on the existing nodes.
+  const anchorRef = useRef<THREE.Object3D | null>(null);
+  const missingLoggedRef = useRef(false);
 
-  // Geometry buffers reused across frames. lineGeom carries the 2 ×
-  // (x,y,z) Float32 positions we mutate every frame; the group is moved
-  // to the same `top` point so the <Html> overlay tracks the leader.
   const lineGeom = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
@@ -187,8 +196,28 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
   const tip = useRef(new THREE.Vector3());
   const top = useRef(new THREE.Vector3());
 
-  useFrame(() => {
-    if (!anchor || !groupRef.current) return;
+  useFrame(({ clock }) => {
+    if (!anchorRef.current) {
+      anchorRef.current = scene.getObjectByName(anchorName) ?? null;
+      if (!anchorRef.current) {
+        // Log once after ~2s if still unresolved — helps spot a real
+        // missing anchor (renamed/removed in a GLB rebuild) vs a normal
+        // pre-load delay.
+        if (!missingLoggedRef.current && clock.getElapsedTime() > 2) {
+          missingLoggedRef.current = true;
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[VehicleCallouts] anchor "${anchorName}" not found in scene after 2s ` +
+              '(check the GLB export — node may have been stripped).',
+          );
+        }
+        return;
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[VehicleCallouts] anchor "${anchorName}" resolved`);
+    }
+    if (!groupRef.current) return;
+    const anchor = anchorRef.current;
     // matrixWorld is updated by R3F before frame callbacks fire, so we
     // can read the live world position even during opening animations.
     anchor.getWorldPosition(tip.current);
@@ -202,8 +231,6 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
     pos.setXYZ(1, top.current.x, top.current.y, top.current.z);
     pos.needsUpdate = true;
   });
-
-  if (!anchor) return null;
 
   // Visual variants:
   //   closed = "at rest, want to open" → small, discreet, white
