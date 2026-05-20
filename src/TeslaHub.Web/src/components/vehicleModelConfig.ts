@@ -176,6 +176,17 @@ export interface VehicleModelConfig {
      *  reflection so the outer glass tint can dominate. Match
      *  `Glass_Interior`, `Glass_Interior_Fade`, `Glass_Interior_*`. */
     innerGlassMaterial: RegExp;
+    /** Subset of inner-glass materials that must be DEMOTED to the
+     *  dimmed-inner-pane treatment (low opacity ≈ 0.08, kill mirror)
+     *  regardless of their parent node. The default OUTER/roof code
+     *  path bumps inner-pane opacity to 0.90 — that's what makes M3
+     *  panoramic roof and door windows look properly tinted. But the
+     *  Bayberry windshield (Fade mesh) is also paired with an inner
+     *  pane named `Glass_Interior_Fade`, and Tesla wants the windshield
+     *  translucent (not opaque grey). List those exceptions here.
+     *  Undefined / empty → all inner panes follow the default OUTER
+     *  treatment (correct for M3 Highland). */
+    dimmedInnerGlassMaterial?: RegExp;
   };
   /** RGB hex applied to every material matching `materialPatterns.bodyPaint`. */
   bodyPaintColor: number;
@@ -509,6 +520,12 @@ export const BayberryConfig: VehicleModelConfig = {
     // straight through the very transparent outer Glass (alpha 0.16),
     // making the windshield read as bright white. Detect and dampen.
     innerGlassMaterial: /^glass_interior/i,
+    // Only the windshield's inner pane (`Glass_Interior_Fade`, used by
+    // the Fade mesh) gets the dimmed treatment. The door-window inner
+    // panes (`Glass_Interior` on Window_FL/FR/RL/RR + Static_Exterior)
+    // must stay opaque so Tesla's factory tint reads correctly and the
+    // rear privacy glass looks black, not grey.
+    dimmedInnerGlassMaterial: /^glass_interior_fade$/i,
   },
   bodyPaintColor: 0xf2f2f0,  // Pearl White Multi-Coat (same as M3 default)
   calloutHeight: 0.50,        // +5 cm vs M3 — Y is taller, callouts need

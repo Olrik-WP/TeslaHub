@@ -354,6 +354,15 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     });
 
 
+    // Tesla GLBs reuse a single Material instance across many meshes
+    // (e.g. `Glass_Interior` is shared between every door window). The
+    // OUTER glass branch mutates `mat.color` and `mat.envMapIntensity`
+    // in place, so the SAME material would be re-multiplied for every
+    // mesh that references it — each pass making it darker. Track which
+    // materials have already had their non-idempotent tweaks applied so
+    // we don't compound the mutation.
+    const tintedOuterGlass = new WeakSet<THREE.Material>();
+
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -512,16 +521,22 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           paintDebug.push(`${pathOf(mesh)} mat="${matName}"`);
         }
 
-        // INNER FIRST: any material whose name starts with
-        // `Glass_Interior` is conceptually an inner cabin-side pane,
-        // regardless of whether its mesh sits under a `Fade` node that
-        // would otherwise mark it as outer. This is essential for the
-        // Bayberry windshield: Tesla pairs `Glass_Windows_Fade` (outer)
-        // with `Glass_Interior_Fade` (inner — must get the
-        // kill-mirror, low-opacity treatment so the cabin is visible
-        // through the layered glass instead of a reflective grey wall).
-        const isInnerMat = INNER_GLASS_MAT.test(matName);
-        const matIsOuter = !isInnerMat && (isOuter || OUTER_GLASS_MAT.test(matName));
+        // OUTER routing — covers the vast majority of glass. Inner panes
+        // (`Glass_Interior*`) intentionally fall into this branch too:
+        // Tesla layers door windows and panoramic roofs as outer+inner
+        // pairs where the inner pane carries most of the tint (alpha
+        // 0.78 black). The OUTER branch keeps that tint visible.
+        //
+        // EXCEPTION: a config-scoped subset of inner panes must be
+        // demoted to the dimmed-inner treatment (kill mirror, opacity
+        // ≈ 0.08) — namely Bayberry's `Glass_Interior_Fade` which sits
+        // behind the windshield. Without this exception, OUTER+roof
+        // would stack the inner at 0.90 on top of the outer at 0.55
+        // and the windshield reads as an opaque grey wall.
+        const isDimmedInner =
+          cfg.materialPatterns.dimmedInnerGlassMaterial?.test(matName) ?? false;
+        const matIsOuter =
+          !isDimmedInner && (isOuter || OUTER_GLASS_MAT.test(matName));
         if (matIsOuter) {
           const std = mat as THREE.MeshStandardMaterial;
 
@@ -578,28 +593,28 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             }
           }
 
-          // Dampen environment reflections on ALL outer glass (opaque
-          // or transparent). With three.js's `Environment preset="city"`
-          // the HDR sky bounces hard off the glass and tints it bright
-          // white, which is exactly what the user reported on the Y
-          // windshield. Scaling envMapIntensity by 0.3 keeps a hint of
-          // chrome-ish realism without washing the tint away.
-          if ('envMapIntensity' in std) {
-            std.envMapIntensity = (std.envMapIntensity ?? 1) * 0.3;
-          }
-
-          // Diffuse colour tint. For materials with near-black baseColor
-          // (Tesla's `Glass` = 0.01 grey, `Glass_Windows` = 0 black)
-          // multiplyScalar is a no-op (anything × 0.45 ≈ 0), so set
-          // an explicit visible dark-glass colour instead. Otherwise
-          // multiply to preserve any pre-existing tint texture intent.
-          if (std.color) {
-            const c = std.color;
-            if (c.r < 0.05 && c.g < 0.05 && c.b < 0.05) {
-              const baseV = isRoof ? 0.05 : 0.10;
-              c.setRGB(baseV, baseV, baseV);
-            } else {
-              c.multiplyScalar(isRoof ? ROOF_TINT : WINDOW_TINT);
+          // Dampen environment reflections + apply the diffuse tint —
+          // BUT only once per material instance. Tesla reuses the same
+          // `Glass_Interior` (and `Glass_Windows`) across multiple door
+          // windows; mutating in place on every traversal would
+          // multiply by 0.3 / 0.45 N times and drive the material to
+          // near-black after a few iterations. Mesh-level state
+          // (renderOrder, transparent, depthWrite) above must run for
+          // every mesh; only the material colour/env multipliers need
+          // the guard.
+          if (!tintedOuterGlass.has(std)) {
+            tintedOuterGlass.add(std);
+            if ('envMapIntensity' in std) {
+              std.envMapIntensity = (std.envMapIntensity ?? 1) * 0.3;
+            }
+            if (std.color) {
+              const c = std.color;
+              if (c.r < 0.05 && c.g < 0.05 && c.b < 0.05) {
+                const baseV = isRoof ? 0.05 : 0.10;
+                c.setRGB(baseV, baseV, baseV);
+              } else {
+                c.multiplyScalar(isRoof ? ROOF_TINT : WINDOW_TINT);
+              }
             }
           }
 
