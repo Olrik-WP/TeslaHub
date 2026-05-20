@@ -68,23 +68,23 @@ const HEADLIGHT_NODES = ['Headlights', 'DRL'] as const;
  *    +Y = up
  *    +Z = right (passenger side)
  *
- *  Model 3 Highland has FOUR Sentry cameras. The SIDE cameras are NOT
- *  in the side mirrors — they're the tiny black lenses integrated into
- *  the FENDER turn-signal repeater grille, just behind the front-wheel
- *  arch (same physical part that houses the side LED turn signal).
- *
- *    1. Front  — top centre of windshield, behind rear-view mirror
- *    2. Left   — left front fender repeater (turn-signal grille area)
- *    3. Right  — right front fender repeater (turn-signal grille area)
- *    4. Rear   — above license plate
+ *  Model 3 Highland physically has SIX Sentry cameras:
+ *    1. Front       — top centre of windshield, behind rear-view mirror
+ *    2/3. Fenders   — tiny lens in the front-fender turn-signal grille
+ *                     (forward-looking side cams, also used by Autopilot)
+ *    4/5. B-pillars — rear-looking side cams, just behind the front-door
+ *                     window cutout
+ *    6. Rear        — above license plate, on the trunk lid
  *
  *  Calibrated by eye against the real car body lines.
  */
 const SENTRY_CAMERA_POSITIONS: ReadonlyArray<[number, number, number]> = [
-  [+0.40, 1.32, 0],      // front (top of windshield)
-  [+1.25, 0.85, -0.97],  // left fender turn-signal / side camera
-  [+1.25, 0.85, +0.97],  // right fender turn-signal / side camera
-  [-2.00, 0.95, 0],      // rear (above license plate)
+  [+0.40, 1.32, 0],      // 1. front (top of windshield)
+  [+1.10, 0.72, -0.97],  // 2. left front fender (turn-signal lens)
+  [+1.10, 0.72, +0.97],  // 3. right front fender (turn-signal lens)
+  [-0.18, 1.20, -0.97],  // 4. left B-pillar (rear-looking)
+  [-0.18, 1.20, +0.97],  // 5. right B-pillar (rear-looking)
+  [-2.00, 0.95, 0],      // 6. rear (above license plate)
 ];
 
 // ---------------------------------------------------------------------------
@@ -94,10 +94,54 @@ const SENTRY_CAMERA_POSITIONS: ReadonlyArray<[number, number, number]> = [
 export function VehicleLightEffects({ vehicle }: VehicleLightEffectsProps) {
   const { scene } = useThree();
 
+  // Order matters here. useGroundProjections sets the STEADY visibility
+  // (on while driving / reversing), useLockFlash transiently overrides
+  // it for the chirp pattern then restores the snapshot at cleanup. By
+  // mounting projections FIRST we guarantee that when lock-flash's
+  // restore() runs it reads the correct steady-state value.
+  useGroundProjections(scene, vehicle?.shiftState ?? null);
   useLockFlash(scene, vehicle?.isLocked ?? null);
   useBrakeAndReverseLights(scene, vehicle?.shiftState ?? null);
 
   return <SentryIndicators active={vehicle?.sentryMode === true} />;
+}
+
+// ---------------------------------------------------------------------------
+// Ground projections — repurpose the floor-projection meshes as ambient
+// headlight / brake-light beams while in drive gears.
+// ---------------------------------------------------------------------------
+//
+// Tesla ships two textured quads anchored under the car: Headlights_Projections
+// (white fan in front) and Stoplights_Projections (red glow behind). They
+// were designed for the top-down view in the Tesla mobile app, but they
+// double brilliantly as ambient ground light when the car "has its lights
+// on". We turn them on while shifted in D/R, and use them as the chirp
+// surface for lock/unlock flashes (see useLockFlash below).
+
+const HEADLIGHT_PROJECTION_NODE = 'Headlights_Projections';
+const STOPLIGHT_PROJECTION_NODE = 'Stoplights_Projections';
+
+function useGroundProjections(scene: THREE.Object3D, shiftState: string | null) {
+  const shift = (shiftState ?? '').toUpperCase();
+  const driving = shift === 'D' || shift === 'R';
+  // Tesla doesn't expose a "brakes pressed" signal via MQTT; the closest
+  // proxy is reverse gear (always brake-lit by the hardware) plus drive
+  // (treated as "lights on, ready to brake"). When we later wire a real
+  // brake-press signal we can scope this tighter.
+  const stoplightOn = driving;
+
+  useEffect(() => {
+    const head = scene.getObjectByName(HEADLIGHT_PROJECTION_NODE);
+    const stop = scene.getObjectByName(STOPLIGHT_PROJECTION_NODE);
+    if (head) head.visible = driving;
+    if (stop) stop.visible = stoplightOn;
+    return () => {
+      // Revert to hidden — useLockFlash's snapshot reads the current
+      // value so revert-on-cleanup must mirror the default state.
+      if (head) head.visible = false;
+      if (stop) stop.visible = false;
+    };
+  }, [scene, driving, stoplightOn]);
 }
 
 // ---------------------------------------------------------------------------
@@ -118,11 +162,16 @@ function useLockFlash(scene: THREE.Object3D, isLocked: boolean | null) {
     const prev = prevLockedRef.current;
     prevLockedRef.current = isLocked;
 
-    // Skip the first render and any "null → null" re-renders (no real
-    // transition, just stale data still loading).
+    // Skip the first render and any "no data → data" hops. The very
+    // first time MQTT delivers a value, isLocked transitions from
+    // null → true (or false), which would be misread as a real lock
+    // event and trigger a flash on page load. By bailing out when
+    // EITHER side of the transition is null/undefined we ensure we
+    // only flash on a genuine state CHANGE while we have data.
     if (prev === undefined) return;
-    if (prev === isLocked) return;
-    if (isLocked === null) return; // unknown state, don't flash
+    if (prev === null) return;             // first real data load
+    if (prev === isLocked) return;          // not a transition
+    if (isLocked === null) return;          // we lost data, ignore
 
     const flashes = isLocked ? 1 : 2; // 1 chirp on lock, 2 on unlock
 
@@ -136,14 +185,24 @@ function useLockFlash(scene: THREE.Object3D, isLocked: boolean | null) {
       return;
     }
 
+    // Snapshot the CURRENT visibility so we can restore it cleanly
+    // when the chirp finishes — useGroundProjections may have set them
+    // to `true` if we're in D/R, and we must not stomp that on cleanup.
+    const originalVisible = projections.map((n) => n.visible);
+
     let cancelled = false;
     const timers: number[] = [];
 
     const setVisible = (visible: boolean) => {
       for (const node of projections) node.visible = visible;
     };
+    const restoreOriginal = () => {
+      for (let i = 0; i < projections.length; i++) {
+        projections[i].visible = originalVisible[i];
+      }
+    };
 
-    // Sequence: ON, OFF, ON, OFF, ... ending OFF.
+    // Sequence: ON, RESTORE, ON, RESTORE, ... ending RESTORE.
     for (let i = 0; i < flashes; i++) {
       const tOn = i * (FLASH_ON_MS + FLASH_GAP_MS);
       const tOff = tOn + FLASH_ON_MS;
@@ -154,7 +213,7 @@ function useLockFlash(scene: THREE.Object3D, isLocked: boolean | null) {
       );
       timers.push(
         window.setTimeout(() => {
-          if (!cancelled) setVisible(false);
+          if (!cancelled) restoreOriginal();
         }, tOff),
       );
     }
@@ -162,9 +221,10 @@ function useLockFlash(scene: THREE.Object3D, isLocked: boolean | null) {
     return () => {
       cancelled = true;
       for (const t of timers) window.clearTimeout(t);
-      // Force back to hidden if we got cancelled mid-flash, so we never
-      // leave the projections lit.
-      setVisible(false);
+      // If we got cancelled mid-flash, snap back to the steady state
+      // (which might be ON in drive mode) so we never leave projections
+      // in an inconsistent state.
+      restoreOriginal();
     };
   }, [scene, isLocked]);
 }
