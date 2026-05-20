@@ -487,15 +487,21 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             // Inner cabin-side pane behind an outer Glass/Glass_Windows
             // pane (windshield, front door windows). The rough=0.01
             // mirror reflects the HDR sky through the semi-transparent
-            // outer pane → bright white windshield. Kill the mirror
-            // hard AND lower the opacity so the cabin shows through
-            // the layered sandwich (otherwise composite reads as solid
-            // grey with no depth).
+            // outer pane → bright white windshield. The composite is
+            // also too opaque (outer 55% + inner 78% = 90% blocking)
+            // so we see no cabin even after killing the reflection.
+            //
+            // Solution: collapse the inner pane to a faint tint veil.
+            // The outer Glass already carries the tint colour and the
+            // see-through quality (matches the trunk hatch which uses
+            // only the outer pane and reads correctly). Driving the
+            // inner opacity near zero makes the windshield render like
+            // the trunk: outer-glass-only, 55% opaque, 45% see-through.
             cloned.roughness = Math.max(cloned.roughness ?? 0.5, 0.7);
             if ('envMapIntensity' in cloned) {
-              cloned.envMapIntensity = (cloned.envMapIntensity ?? 1) * 0.05;
+              cloned.envMapIntensity = (cloned.envMapIntensity ?? 1) * 0.02;
             }
-            cloned.opacity = Math.min(cloned.opacity ?? 1, 0.35);
+            cloned.opacity = 0.08;
             mesh.renderOrder = 1;
           } else {
             // SOLO pane: Tesla modeled the rear door windows with only
