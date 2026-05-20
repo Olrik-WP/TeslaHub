@@ -1,5 +1,5 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Canvas, type ThreeEvent } from '@react-three/fiber';
 import {
   useGLTF,
   OrbitControls,
@@ -9,6 +9,17 @@ import {
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import type { VehicleStatus } from '../api/queries';
+import {
+  OpeningsProvider,
+  VehicleOpeningsAnimator,
+  findOpeningForObject,
+  useOpeningsContext,
+} from './useVehicleOpenings';
+import {
+  OPENINGS,
+  OPENING_LABELS,
+  type OpeningId,
+} from './vehicleOpenings';
 
 const MODEL_URL = '/models/poppyseed.glb';
 const WHEEL_URL = '/models/wheel_d50_highland.glb';
@@ -454,7 +465,28 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
     return scene;
   }, [scene, wheelGltf.scene, wheelsAvailable]);
 
-  return <primitive object={cleanedScene} />;
+  const { toggle } = useOpeningsContext();
+  // Click anywhere on a mesh that belongs to an opening pivot → toggle it.
+  // R3F bubbles pointer events from the deepest mesh up the parent chain;
+  // we stop propagation once we've handled it so we don't trigger multiple
+  // openings when the doors overlap visually.
+  const handleClick = useCallback(
+    (event: ThreeEvent<MouseEvent>) => {
+      const id = findOpeningForObject(event.object);
+      if (id) {
+        event.stopPropagation();
+        toggle(id);
+      }
+    },
+    [toggle],
+  );
+
+  return (
+    <>
+      <primitive object={cleanedScene} onClick={handleClick} />
+      <VehicleOpeningsAnimator scene={cleanedScene} />
+    </>
+  );
 }
 
 function Loader() {
@@ -505,55 +537,140 @@ export default function VehicleTopView3D({ vehicle: _vehicle }: Props) {
   const wheelsAvailable = useAssetAvailable(WHEEL_URL);
 
   return (
-    <div className="relative w-full" style={{ height: 360 }}>
-      <Canvas
-        ref={canvasRef}
-        camera={{ position: CAMERA_POSITION, fov: CAMERA_FOV }}
-        dpr={[1, 1.5]}
-        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
-        style={{ background: 'transparent' }}
-        onCreated={({ gl }) => {
-          gl.outputColorSpace = THREE.SRGBColorSpace;
-          gl.toneMapping = THREE.ACESFilmicToneMapping;
-          // Slight overexposure helps brushed alloy wheels read against
-          // the dark windows and contact shadow.
-          gl.toneMappingExposure = 1.05;
-        }}
-      >
-        <ambientLight intensity={0.35} />
-        <directionalLight
-          position={[10, 15, 10]}
-          intensity={0.9}
-          castShadow
-          shadow-mapSize={[1024, 1024]}
-        />
-        <directionalLight position={[-8, 6, -8]} intensity={0.25} />
+    <OpeningsProvider>
+      <div className="relative w-full" style={{ height: 360 }}>
+        <Canvas
+          ref={canvasRef}
+          camera={{ position: CAMERA_POSITION, fov: CAMERA_FOV }}
+          dpr={[1, 1.5]}
+          gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+          style={{ background: 'transparent' }}
+          onCreated={({ gl }) => {
+            gl.outputColorSpace = THREE.SRGBColorSpace;
+            gl.toneMapping = THREE.ACESFilmicToneMapping;
+            // Slight overexposure helps brushed alloy wheels read against
+            // the dark windows and contact shadow.
+            gl.toneMappingExposure = 1.05;
+          }}
+        >
+          <ambientLight intensity={0.35} />
+          <directionalLight
+            position={[10, 15, 10]}
+            intensity={0.9}
+            castShadow
+            shadow-mapSize={[1024, 1024]}
+          />
+          <directionalLight position={[-8, 6, -8]} intensity={0.25} />
 
-        <Suspense fallback={<Loader />}>
-          <Environment preset="city" />
-          {/* Wait until the wheel probe completes before mounting the
-              chassis. Otherwise the chassis loads twice via Suspense when
-              the wheel state flips from unknown → available. */}
-          {wheelsAvailable !== null && (
-            <PoppyseedModel wheelsAvailable={wheelsAvailable} />
-          )}
-        </Suspense>
+          <Suspense fallback={<Loader />}>
+            <Environment preset="city" />
+            {/* Wait until the wheel probe completes before mounting the
+                chassis. Otherwise the chassis loads twice via Suspense when
+                the wheel state flips from unknown → available. */}
+            {wheelsAvailable !== null && (
+              <PoppyseedModel wheelsAvailable={wheelsAvailable} />
+            )}
+          </Suspense>
 
-        <OrbitControls
-          target={CAMERA_TARGET}
-          enablePan={false}
-          enableZoom
-          minDistance={4}
-          maxDistance={20}
-          autoRotate
-          autoRotateSpeed={0.6}
-          minPolarAngle={Math.PI / 6}
-          maxPolarAngle={Math.PI / 2.1}
-          makeDefault
-        />
-      </Canvas>
+          <OrbitControls
+            target={CAMERA_TARGET}
+            enablePan={false}
+            enableZoom
+            minDistance={4}
+            maxDistance={20}
+            autoRotate
+            autoRotateSpeed={0.6}
+            minPolarAngle={Math.PI / 6}
+            maxPolarAngle={Math.PI / 2.1}
+            makeDefault
+          />
+        </Canvas>
+
+        <OpeningsOverlay />
+      </div>
+    </OpeningsProvider>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// UI overlay — quick-access opening toggles, floats above the canvas
+// ---------------------------------------------------------------------------
+
+/**
+ * Compact icon button row, grouped by category. Sits in the bottom-right
+ * of the canvas, dark glass, mobile-friendly tap targets.
+ * Future: animate the icon to reflect open/closed state, drive from API.
+ */
+function OpeningsOverlay() {
+  const { toggle, setAll, targets } = useOpeningsContext();
+  const openCount = useMemo(
+    () => Object.values(targets).filter((v) => v === 1).length,
+    [targets],
+  );
+
+  // Small enough to fit on phones (sticky bottom-right). Buttons are
+  // square 36px with a 18px Lucide-style icon glyph rendered as text.
+  return (
+    <div className="absolute bottom-2 right-2 flex flex-col items-end gap-1.5 pointer-events-none">
+      {/* Master row: open-all / close-all */}
+      <div className="flex gap-1 pointer-events-auto">
+        <button
+          type="button"
+          onClick={() => setAll(1)}
+          className="px-2 h-8 text-xs rounded-md bg-black/60 text-white/80 hover:bg-black/80 border border-white/10 backdrop-blur-sm"
+          title="Tout ouvrir"
+        >
+          Tout ouvrir
+        </button>
+        <button
+          type="button"
+          onClick={() => setAll(0)}
+          disabled={openCount === 0}
+          className="px-2 h-8 text-xs rounded-md bg-black/60 text-white/80 hover:bg-black/80 disabled:opacity-40 disabled:cursor-not-allowed border border-white/10 backdrop-blur-sm"
+          title="Tout fermer"
+        >
+          Tout fermer
+        </button>
+      </div>
+
+      {/* Individual openings */}
+      <div className="grid grid-cols-4 gap-1 pointer-events-auto">
+        {OPENINGS.map((o) => {
+          const isOpen = targets[o.id] === 1;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => toggle(o.id)}
+              title={OPENING_LABELS[o.id]}
+              className={
+                'w-9 h-9 text-[10px] leading-tight rounded-md border backdrop-blur-sm transition-colors ' +
+                (isOpen
+                  ? 'bg-blue-500/80 text-white border-blue-400'
+                  : 'bg-black/60 text-white/70 hover:bg-black/80 border-white/10')
+              }
+            >
+              {OPENING_SHORT[o.id]}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
+
+const OPENING_SHORT: Record<OpeningId, string> = {
+  hood: 'Capot',
+  trunk: 'Coffre',
+  charge_port: 'Charge',
+  door_LF: 'P AvG',
+  door_LR: 'P ArG',
+  door_RF: 'P AvD',
+  door_RR: 'P ArD',
+  window_LF: 'V AvG',
+  window_LR: 'V ArG',
+  window_RF: 'V AvD',
+  window_RR: 'V ArD',
+};
 
 useGLTF.preload(MODEL_URL);
