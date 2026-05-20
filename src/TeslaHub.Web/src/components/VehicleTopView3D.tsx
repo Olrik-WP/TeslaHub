@@ -389,13 +389,28 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         // GLTFLoader's default material — bright white CHROME (metalness=1).
         // Tesla exports the Bayberry windshield as a primitive WITHOUT a
         // material reference inside Static_Exterior. GLTFLoader silently
-        // assigns its cached `'glTF Default Material'` (color=white,
-        // metalness=1, roughness=1) to all such primitives. Combined with
+        // assigns a cached MeshStandardMaterial (color=white, metalness=1,
+        // roughness=1, NO name) to all such primitives — see
+        // createDefaultMaterial() in three.js GLTFLoader.js. Combined with
         // the HDR `Environment preset="city"`, the windshield becomes a
         // bright chrome mirror reflecting the sky — exactly the "mur gris"
-        // the user reported. Replace each occurrence with a sensible dark
+        // the user reported. Detect by fingerprint (the loader doesn't tag
+        // it with a name) and replace each occurrence with a sensible dark
         // tinted glass material so it reads as windshield, not chrome.
-        if (matName === 'glTF Default Material') {
+        const isGltfDefaultMat = (() => {
+          if (matName !== '') return false;
+          const std = mat as THREE.MeshStandardMaterial;
+          if (!(std as unknown as { isMeshStandardMaterial?: boolean }).isMeshStandardMaterial) return false;
+          if (!std.color) return false;
+          return (
+            std.color.r >= 0.99 &&
+            std.color.g >= 0.99 &&
+            std.color.b >= 0.99 &&
+            (std.metalness ?? 0) >= 0.99 &&
+            (std.roughness ?? 0) >= 0.99
+          );
+        })();
+        if (isGltfDefaultMat) {
           const glass = new THREE.MeshStandardMaterial({
             name: '__TeslaHub_NoMat_Glass',
             color: 0x111111,
