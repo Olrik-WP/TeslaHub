@@ -354,7 +354,19 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           mat.transparent = true;
           mat.depthWrite = false;
           mat.side = THREE.DoubleSide;
-          mesh.renderOrder = 2;
+          // Stable draw order to avoid z-fighting flicker between glass
+          // surfaces during orbit. three.js sorts equal-renderOrder
+          // transparents by depth, but two near-coplanar surfaces (Y
+          // panoramic roof + windshield at the roof line) flicker as
+          // the camera moves and the depth sort flips between them.
+          // Forcing distinct renderOrders breaks the tie deterministically:
+          //   - roof first (3) — drawn last visually but on top of body
+          //   - door windows + side glass (2)
+          //   - generic transparents (1)
+          // Higher renderOrder draws AFTER → appears in front when
+          // overlapping. Roof getting the topmost slot reads as "thicker"
+          // glass overlay; in practice it removes the flick completely.
+          mesh.renderOrder = isRoof ? 3 : 2;
           if (mat.color) mat.color.multiplyScalar(isRoof ? ROOF_TINT : WINDOW_TINT);
           if (isRoof) roofFixed++;
           else windowFixed++;

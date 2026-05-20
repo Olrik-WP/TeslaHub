@@ -444,10 +444,15 @@ export const BayberryConfig: VehicleModelConfig = {
     // walk logic, so listing Fade here makes its descendants get the
     // transparency/depth-sort fix applied like the door windows.
     outerGlassNode: /^(window_(fl|fr|rl|rr)|fade)$/i,
-    // Bayberry uses `Glass_Windows` + `Glass_Windows_Fade` for the
-    // outer glass; `Glass_Interior*` is the dashboard glass and stays
-    // untouched. Fade roof uses Glass_Windows_Fade so this catches it.
-    outerGlassMaterial: /^glass_windows/i,
+    // Bayberry uses FOUR distinct glass materials:
+    //   - `Glass`                → windshield + rear hatch glass
+    //   - `Glass_Windows`        → door windows
+    //   - `Glass_Windows_Fade`   → panoramic roof (Fade node)
+    //   - `Glass_Interior*`      → dashboard / cabin glass (DON'T tint)
+    // The negative lookahead catches the first three and skips the
+    // interior set, which would otherwise look pitch black through the
+    // tinted outer glass.
+    outerGlassMaterial: /^glass(?!_interior)/i,
     // Roof gets the darker tint. Y's roof IS the `Fade` mesh (not the
     // M3 `Windows_Top` / `Sunroof`). Both patterns kept for safety
     // even though only Fade exists in Bayberry.
