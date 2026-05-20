@@ -25,92 +25,26 @@ import {
   useControlMutation,
   type OptimisticPatch,
 } from '../hooks/useVehicleControl';
-import { ACTIVE_VEHICLE_MODEL } from './vehicleModelConfig';
+import {
+  PoppyseedConfig,
+  VehicleModelContext,
+  pickModelForVin,
+  useActiveModel,
+  type VehicleModelConfig,
+} from './vehicleModelConfig';
 
-// All car-specific values (URLs, node names, camera pose, charge port
-// geometry, wheel positions, scene cleanup) live in vehicleModelConfig.ts
-// — see ACTIVE_VEHICLE_MODEL. The constants below are LOCAL CACHES of
-// those values to keep call sites readable without re-piping the config
-// through every helper. To support a new car, edit vehicleModelConfig.ts;
-// this file does NOT need to change.
-const CFG = ACTIVE_VEHICLE_MODEL;
-
-const MODEL_URL = CFG.modelUrl;
-const WHEEL_URL = CFG.wheelUrl;
 // Charging handle is universal across Tesla models — same physical part
-// regardless of which car it's plugged into.
+// regardless of which car it's plugged into. Not in the per-model config.
 const HANDLE_URL = '/models/charger_handle.glb';
-
-const CHARGE_PORT_NODE = CFG.chargePort.nodeName;
-const CHARGE_PORT_ALT_NAMES = CFG.chargePort.alternateNames;
-const CHARGE_PORT_FALLBACK_WORLD = new THREE.Vector3(...CFG.chargePort.fallbackWorld);
-const PORT_FROM_PIVOT_OFFSET = new THREE.Vector3(...CFG.chargePort.pivotToSocketOffset);
-const POPPYSEED_PLUG_DIRECTION = new THREE.Vector3(...CFG.chargePort.plugDirection);
-const CABLE_GROUND_WORLD = new THREE.Vector3(...CFG.cableGroundAnchor);
-
-// Nodes inside the Tesla model that visually pollute a "studio" view because
-// they are designed for the original Tesla mobile UI context (puddle lights
-// projected on the road, ground shadow plane, defrost/airflow overlays, etc.).
-// Hidden by default; some will come back as dynamic props in Phase 2 (e.g.
-// headlight projections when vehicle.headlightsOn is true, defrost when
-// vehicle.isDefrostOn is true, airflow overlays when climate is on).
-// Tesla bakes the studio shadow into a horizontal quad named "Floor" in Godot
-// (also exported as "Ground_Plane" in some GLB builds). We keep it visible
-// and tune its material — do NOT hide it or replace with drei's ContactShadows.
-const FLOOR_NODE_NAMES = new Set(CFG.floorNodes);
-
-// Permanently HIDDEN nodes — DETACHED from the scene graph (removed from
-// the parent's children list). These should never be visible regardless
-// of vehicle state, so we strip them entirely to keep the bounding box
-// tight and prevent any race condition that could re-show them.
-const HIDDEN_NODE_NAMES = new Set(CFG.hiddenNodes);
-
-// CONDITIONALLY hidden nodes — kept in the scene graph but `visible=false`
-// by default. Their visibility is toggled at runtime by VehicleLightEffects
-// (lock flash, ground projections in drive mode). We keep them in the
-// graph so getObjectByName() can find them later.
-const CONDITIONALLY_HIDDEN_NODE_NAMES = new Set([
-  CFG.groundProjectionNodes.headlights,
-  CFG.groundProjectionNodes.stoplights,
-]);
-
-// Wheel anchor empties. Godot's PackedSceneGLTF exporter strips empty
-// Spatial nodes, so these usually DON'T survive in the .glb. We keep the
-// lookup as a best-effort first pass — if any survived (custom export,
-// edited mesh), they win.
-const WHEEL_ANCHORS = CFG.wheelAnchorNames;
-
-// Fallback wheel positions used when the empty anchors above were stripped
-// at export. Per-model (wheelbase, track, tyre radius all vary). See the
-// vehicleModelConfig comments for the dimensional reasoning.
-//
-// The Godot-exported wheel ships with its Photon cover face on +Z and the
-// open hub on -Z. So wheels on the right side of the vehicle (+Z) keep
-// the default orientation, and wheels on the left side (-Z) need a
-// `scale.z = -1` reflection so their cover also faces outward.
-// We use scale-flip rather than Y-rotation because Godot's exported wheel
-// has internal transforms that silently cancel any parent rotation,
-// while a negative scale always reflects the geometry. Three.js auto-
-// reverses face winding for negative scales so normals stay correct.
-const WHEEL_FALLBACK_POSITIONS = CFG.wheelFallbackPositions;
-
-// ---- Camera positioning ---------------------------------------------------
-// We don't use drei's <Bounds> auto-fit because Three.js's automatic bbox
-// computation picks up parasite nodes (anchor points at far X, charge cable
-// handles, etc.) and reports the scene as 6.58 × 1.45 × 4.21 m — way larger
-// than the real 4.72 × 1.44 × 1.85 m of a Tesla Model 3 Highland. That
-// makes <Bounds> zoom out 40 % too far. Instead we hard-code a camera pose
-// calibrated per-model and let OrbitControls handle user zoom.
-const CAMERA_POSITION: [number, number, number] = CFG.cameraPose.position;
-const CAMERA_TARGET: [number, number, number] = CFG.cameraPose.target;
-const CAMERA_FOV = CFG.cameraPose.fov;
 
 // ---- Wheel polish ---------------------------------------------------------
 // The D50 base wheel set on the Highland is actually a BLACK PLASTIC
 // hubcap (Photon-style cover), not an alloy. So most of our wheel meshes
 // use Plastic_Black_D50 / Rubber_D50 materials. Polished alloy treatment
 // stays in this file for later when we add real alloy variants (Glider,
-// Helix_19, Wishbone, ZeroG, etc).
+// Helix_19, Wishbone, ZeroG, etc). Tesla reuses these material names
+// (`Aluminum_*`, `Plastic_Black_*`, `Rubber_*`) verbatim across every
+// Godot scene we've inspected, hence file-level regex.
 //
 //   ALLOY    → mat the brushed-aluminum look, boost env reflections so
 //              the dark chrome doesn't render as flat black.
@@ -122,6 +56,37 @@ const WHEEL_ALLOY_ENVMAP_BOOST = 1.6;
 const WHEEL_PLASTIC_MAT_RE = /^(plastic_black|rubber)/i;
 const WHEEL_PLASTIC_ROUGHNESS = 0.55;
 const WHEEL_PLASTIC_ENVMAP_BOOST = 1.5;
+
+// ---- Per-model derived constants -----------------------------------------
+// Returns the same shape as the old file-level CFG block, but driven by
+// the React Context-provided `useActiveModel()`. Memoised on the config
+// reference so it only rebuilds when the user switches car (rare). The
+// Vector3s / Sets are constructed ONCE per swap, not per render.
+function useModelConsts() {
+  const cfg = useActiveModel();
+  return useMemo(
+    () => ({
+      cfg,
+      MODEL_URL: cfg.modelUrl,
+      WHEEL_URL: cfg.wheelUrl,
+      CHARGE_PORT_NODE: cfg.chargePort.nodeName,
+      CHARGE_PORT_ALT_NAMES: cfg.chargePort.alternateNames,
+      CHARGE_PORT_FALLBACK_WORLD: new THREE.Vector3(...cfg.chargePort.fallbackWorld),
+      PORT_FROM_PIVOT_OFFSET: new THREE.Vector3(...cfg.chargePort.pivotToSocketOffset),
+      PLUG_DIRECTION: new THREE.Vector3(...cfg.chargePort.plugDirection),
+      CABLE_GROUND_WORLD: new THREE.Vector3(...cfg.cableGroundAnchor),
+      FLOOR_NODE_NAMES: new Set(cfg.floorNodes),
+      HIDDEN_NODE_NAMES: new Set(cfg.hiddenNodes),
+      CONDITIONALLY_HIDDEN_NODE_NAMES: new Set([
+        cfg.groundProjectionNodes.headlights,
+        cfg.groundProjectionNodes.stoplights,
+      ]),
+      WHEEL_ANCHORS: cfg.wheelAnchorNames,
+      WHEEL_FALLBACK_POSITIONS: cfg.wheelFallbackPositions,
+    }),
+    [cfg],
+  );
+}
 
 // ---- Running lights (DISABLED for now) -----------------------------------
 // First attempt tried to emissive-boost `Light.material`, `LED_Strip.material`
@@ -137,6 +102,15 @@ const WHEEL_PLASTIC_ENVMAP_BOOST = 1.5;
 // We'll revisit this when wiring the Phase 2 dynamic state.
 
 function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
+  const {
+    MODEL_URL,
+    WHEEL_URL,
+    HIDDEN_NODE_NAMES,
+    CONDITIONALLY_HIDDEN_NODE_NAMES,
+    FLOOR_NODE_NAMES,
+    WHEEL_ANCHORS,
+    WHEEL_FALLBACK_POSITIONS,
+  } = useModelConsts();
   const { scene } = useGLTF(MODEL_URL);
   const wheelGltf = useGLTF(wheelsAvailable ? WHEEL_URL : MODEL_URL);
   // ^ trick: useGLTF must be called unconditionally (hook rule). When the
@@ -513,6 +487,14 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
   const { scene } = useThree();
   const { targets } = useOpeningsContext();
   const chargePortOpenness = targets.charge_port ?? 0;
+  const {
+    CHARGE_PORT_NODE,
+    CHARGE_PORT_ALT_NAMES,
+    CHARGE_PORT_FALLBACK_WORLD,
+    PORT_FROM_PIVOT_OFFSET,
+    PLUG_DIRECTION,
+    CABLE_GROUND_WORLD,
+  } = useModelConsts();
 
   const endWorld = useMemo(() => {
     // Try the main name then several known alternates in order.
@@ -532,8 +514,8 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
     if (!anchor) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[Poppyseed3D] charge port anchor not found (tried: ${candidates.join(', ')}) - ` +
-          'falling back to hardcoded Model 3 Highland world position.',
+        `[Vehicle3D] charge port anchor not found (tried: ${candidates.join(', ')}) - ` +
+          'falling back to per-model world position.',
       );
       return CHARGE_PORT_FALLBACK_WORLD.clone();
     }
@@ -547,13 +529,21 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
     const w = pivotWorld.clone().add(PORT_FROM_PIVOT_OFFSET);
     // eslint-disable-next-line no-console
     console.log(
-      `[Poppyseed3D] charge port anchor: "${usedName}" pivot=(${pivotWorld.x.toFixed(3)}, ${pivotWorld.y.toFixed(3)}, ${pivotWorld.z.toFixed(3)}) ` +
+      `[Vehicle3D] charge port anchor: "${usedName}" pivot=(${pivotWorld.x.toFixed(3)}, ${pivotWorld.y.toFixed(3)}, ${pivotWorld.z.toFixed(3)}) ` +
         `plug=(${w.x.toFixed(3)}, ${w.y.toFixed(3)}, ${w.z.toFixed(3)})`,
     );
     return w;
     // chargePortOpenness intentionally re-runs the effect when the trapdoor
     // animates open/closed - the anchor world position changes with it.
-  }, [scene, chargePortOpenness]);
+    // CHARGE_PORT_*/PORT_FROM_PIVOT_OFFSET only change on VIN swap.
+  }, [
+    scene,
+    chargePortOpenness,
+    CHARGE_PORT_NODE,
+    CHARGE_PORT_ALT_NAMES,
+    CHARGE_PORT_FALLBACK_WORLD,
+    PORT_FROM_PIVOT_OFFSET,
+  ]);
 
   if (mode === 'off') return null;
 
@@ -567,7 +557,7 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
       <ChargingCable
         startWorld={CABLE_GROUND_WORLD}
         endWorld={endWorld}
-        plugDirection={POPPYSEED_PLUG_DIRECTION}
+        plugDirection={PLUG_DIRECTION}
         charging={mode === 'charging'}
         handleUrl={handleAvailable ? HANDLE_URL : undefined}
       />
@@ -649,8 +639,26 @@ function vehiclePatch<TBody = void>(
 }
 
 export default function VehicleTopView3D({ vehicle }: Props) {
+  // Resolve the per-model config from the live VIN. This is the SINGLE
+  // place where the picker fires — every descendant reads the result via
+  // `useActiveModel()` (or `useModelConsts()`) through the Provider below,
+  // so swapping between his Model 3 and her Model Y is just a re-render.
+  const modelConfig = useMemo<VehicleModelConfig>(
+    () => pickModelForVin(vehicle.vin),
+    [vehicle.vin],
+  );
+
+  return (
+    <VehicleModelContext.Provider value={modelConfig}>
+      <VehicleTopView3DInner vehicle={vehicle} />
+    </VehicleModelContext.Provider>
+  );
+}
+
+function VehicleTopView3DInner({ vehicle }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null!);
-  const wheelsAvailable = useAssetAvailable(WHEEL_URL);
+  const cfg = useActiveModel();
+  const wheelsAvailable = useAssetAvailable(cfg.wheelUrl);
   const handleAvailable = useAssetAvailable(HANDLE_URL);
   // Auto-rotate OFF by default — was distracting and made clicking on
   // a moving target frustrating. Toggle in top-right corner.
@@ -844,7 +852,7 @@ export default function VehicleTopView3D({ vehicle }: Props) {
       <div className="relative w-full" style={{ height: 360 }}>
         <Canvas
           ref={canvasRef}
-          camera={{ position: CAMERA_POSITION, fov: CAMERA_FOV }}
+          camera={{ position: cfg.cameraPose.position, fov: cfg.cameraPose.fov }}
           dpr={[1, 1.5]}
           gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
           style={{ background: 'transparent' }}
@@ -894,7 +902,7 @@ export default function VehicleTopView3D({ vehicle }: Props) {
           <VehicleStateSync vehicle={vehicle} onCableModeChange={setCableMode} />
 
           <OrbitControls
-            target={CAMERA_TARGET}
+            target={cfg.cameraPose.target}
             enablePan={false}
             enableZoom
             minDistance={4}
@@ -987,4 +995,7 @@ function VehicleStateSync({
   return null;
 }
 
-useGLTF.preload(MODEL_URL);
+// Preload the most-likely default chassis so the very first paint after
+// login isn't blocked by a network round-trip. Per-model preload happens
+// implicitly on first useGLTF call inside <PoppyseedModel>.
+useGLTF.preload(PoppyseedConfig.modelUrl);

@@ -34,17 +34,17 @@
  *     optimistic patches, same wakingHint, same toast feedback).
  */
 import type { ReactNode } from 'react';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { VehicleStatus } from '../api/queries';
-import { ACTIVE_VEHICLE_MODEL } from './vehicleModelConfig';
+import { useActiveModel } from './vehicleModelConfig';
 
 // Anchor names live in the model config so a future Y/S/X swap is just
-// a config update (vehicleModelConfig.ts). Most Tesla cars reuse the
-// same names but having the indirection costs nothing.
-const ANCHORS = ACTIVE_VEHICLE_MODEL.actionAnchors;
+// a config update (vehicleModelConfig.ts). The active config is picked
+// per-VIN one level up by <VehicleTopView3D> and supplied through
+// Context — we read it via `useActiveModel()` inside the component.
 
 // Height (in metres) of the leader line above each anchor. 0.45 keeps
 // the callout clear of the car silhouette on the standard camera pose
@@ -89,6 +89,7 @@ interface VehicleCalloutsProps {
  * we render NOTHING — the 3D animation alone communicates the state.
  */
 export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
+  const ANCHORS = useActiveModel().actionAnchors;
   if (!vehicle || !actions) return null;
 
   const frunkOpen = !!vehicle.frunkOpen;
@@ -199,6 +200,16 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
   const anchorRef = useRef<THREE.Object3D | null>(null);
   const missingLoggedRef = useRef(false);
 
+  // Reset the cached anchor whenever the target node name changes — this
+  // happens on VIN swap (Model 3 → Y) when the per-model config supplies
+  // a different anchor name. Without this, the ref would still point at
+  // the detached object from the previous GLB and the callout would
+  // float at a stale position.
+  useEffect(() => {
+    anchorRef.current = null;
+    missingLoggedRef.current = false;
+  }, [anchorName]);
+
   const lineGeom = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
@@ -209,6 +220,16 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
   const top = useRef(new THREE.Vector3());
 
   useFrame(({ clock }) => {
+    // Self-healing for VIN-swap with anchor-name reuse: if the cached
+    // Object3D got detached (PoppyseedModel re-mounted with the new GLB
+    // and the previous primitive was removed from the scene graph), the
+    // ref still points at a stranded object whose getWorldPosition()
+    // returns the model's local-origin (= world origin). Reset and
+    // re-resolve to grab the freshly-mounted node with the same name.
+    if (anchorRef.current && !anchorRef.current.parent) {
+      anchorRef.current = null;
+      missingLoggedRef.current = false;
+    }
     if (!anchorRef.current) {
       anchorRef.current = scene.getObjectByName(anchorName) ?? null;
       if (!anchorRef.current) {

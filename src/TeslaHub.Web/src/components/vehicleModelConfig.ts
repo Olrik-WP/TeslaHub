@@ -252,13 +252,30 @@ export const PoppyseedConfig: VehicleModelConfig = {
 //   - Y wheelbase identical (2875 mm) but track wider (~+30 mm)
 //   - Y charge port also rear-left fender, similar height (~+5 cm)
 //   - Y has 7 cameras same as 3 but slightly different positions
-//   - Y default wheel is Gemini Dark 19", different mesh
+//
+// "Bayberry" is Tesla's codename for the Model Y Juniper (2025+ refresh).
+// Three body variants ship in the APK, all Juniper-platform:
+//   - Bayberry.glb         → MY Juniper PERFORMANCE (top trim, suspect)
+//   - BayberryE41.glb      → MY Juniper PROPULSION (entry, single-motor RWD)
+//   - BayberryE80.glb      → MY Juniper PREMIUM / LONG RANGE (mid, dual-motor)
+// (The pre-Juniper 2020-2024 Y body is `ModelY_High.glb`, NOT Bayberry.)
+//
+// Wheel defaults per trim (best guess — Tesla configurator-ish):
+//   - Wheel_E41.glb        → Propulsion factory wheels (Gemini-style hubcap)
+//   - GeminiDark.glb       → 19" Gemini Dark (popular factory option)
+//   - Helix2 / Helix2_Dark → 20" Helix2 (Premium upgrade)
+//   - Machina2.glb         → 21" Machina2 (Performance stock)
+//   - Arachnid_V2_21.glb   → 21" Arachnid (Performance optional)
+//
+// User's wife owns a Juniper PROPULSION (E41 body + E41 wheels), so we
+// default to that. To target Premium/Long Range, swap to BayberryE80 +
+// GeminiDark or Helix2; to target Performance, swap to Bayberry + Machina2.
 
 export const BayberryConfig: VehicleModelConfig = {
   key: 'bayberry',
-  displayName: 'Model Y Juniper',
-  modelUrl: '/models/bayberry.glb',           // TODO(model-y): extract GLB
-  wheelUrl: '/models/wheel_gemini_dark.glb',  // TODO(model-y): extract GLB
+  displayName: 'Model Y Juniper Propulsion',
+  modelUrl: '/models/bayberry_e41.glb',  // TODO(model-y): extract GLB
+  wheelUrl: '/models/wheel_e41.glb',     // TODO(model-y): extract GLB
 
   cameraPose: {
     // TODO(model-y): re-frame against the Y body — taller silhouette
@@ -269,11 +286,12 @@ export const BayberryConfig: VehicleModelConfig = {
   },
 
   wheelFallbackPositions: [
-    // TODO(model-y): verify wheelbase + track. 19" Gemini → r = 0.367 m.
-    { id: 'LF', x: +1.4875, y: 0.367, z: -0.830, flipZ: true },
-    { id: 'RF', x: +1.4875, y: 0.367, z: +0.830, flipZ: false },
-    { id: 'LR', x: -1.3875, y: 0.367, z: -0.830, flipZ: true },
-    { id: 'RR', x: -1.3875, y: 0.367, z: +0.830, flipZ: false },
+    // TODO(model-y): verify wheelbase + track. E41 wears 19" wheels by
+    // default → tyre radius ≈ 0.353 m (Continental ProContact 235/55R19).
+    { id: 'LF', x: +1.4875, y: 0.353, z: -0.830, flipZ: true },
+    { id: 'RF', x: +1.4875, y: 0.353, z: +0.830, flipZ: false },
+    { id: 'LR', x: -1.3875, y: 0.353, z: -0.830, flipZ: true },
+    { id: 'RR', x: -1.3875, y: 0.353, z: +0.830, flipZ: false },
   ],
   wheelAnchorNames: PoppyseedConfig.wheelAnchorNames, // Tesla naming reused
 
@@ -336,24 +354,38 @@ export function pickModelForVin(vin: string | null | undefined): VehicleModelCon
   return PoppyseedConfig;
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Runtime resolution — VehicleModelContext + useActiveModel hook
+// ───────────────────────────────────────────────────────────────────────────
+//
+// The 3D viewer needs to pick the right config based on which car the user
+// has selected. <VehicleTopView3D> derives the config from `vehicle.vin`
+// at render time and pipes it through this Context to every descendant
+// (PoppyseedModel, VehicleLightEffects, VehicleCallouts, LiveChargingCable
+// — all of them inside R3F's <Canvas>, which auto-bridges React contexts).
+//
+// We keep `ACTIVE_VEHICLE_MODEL` as a static fallback only for module-load-
+// time defaults (default context value, SSR, etc.). Production paths must
+// go through useActiveModel() so a Model Y driver sees Bayberry, not the
+// Poppyseed Model 3.
+
+import { createContext, useContext } from 'react';
+
+export const VehicleModelContext = createContext<VehicleModelConfig>(PoppyseedConfig);
+
 /**
- * The currently active model.
- *
- * STEP-UP PATH when Bayberry assets land:
- *   1. Drop `bayberry.glb` + `wheel_gemini_dark.glb` into public/models/.
- *   2. Run `node Tesla-Godot-Test/inspect-glb-nodes.mjs bayberry.glb` to
- *      confirm node names still match BayberryConfig (override any that
- *      differ).
- *   3. Calibrate every TODO(model-y) marker against the real car.
- *   4. Replace this hard-coded export with a hook that resolves via VIN:
- *
- *        export function useActiveModel(): VehicleModelConfig {
- *          const { data: vehicle } = useVehicleStatus();
- *          return pickModelForVin(vehicle?.vin);
- *        }
- *
- *      Consumers then call `useActiveModel()` instead of importing the
- *      constant directly. (Today we import the constant because there
- *      is exactly one supported model — no reason to add an indirection.)
+ * Returns the currently-active vehicle model config. Reads the value
+ * supplied by the nearest <VehicleModelContext.Provider> above in the
+ * tree. Defaults to Poppyseed when no provider is mounted (e.g. unit
+ * tests, isolated component stories).
+ */
+export function useActiveModel(): VehicleModelConfig {
+  return useContext(VehicleModelContext);
+}
+
+/**
+ * Static default — kept for top-of-file constants in legacy code paths
+ * that haven't migrated to useActiveModel() yet. NEW code should always
+ * use the hook instead so multi-car selection works.
  */
 export const ACTIVE_VEHICLE_MODEL = PoppyseedConfig;

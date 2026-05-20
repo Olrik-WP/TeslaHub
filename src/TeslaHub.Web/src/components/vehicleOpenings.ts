@@ -22,8 +22,10 @@
  *        `bayberryOpenings.ts`, exporting each as `OPENINGS_POPPYSEED` /
  *        `OPENINGS_BAYBERRY`.
  *     3. Add `openings: typeof OPENINGS_POPPYSEED` to VehicleModelConfig
- *        and route via ACTIVE_VEHICLE_MODEL.openings in
- *        `useVehicleOpenings.tsx`.
+ *        and read it via `useActiveModel().openings` in
+ *        `useVehicleOpenings.tsx`. The VIN-based picker is already wired
+ *        (see vehicleModelConfig.ts > VehicleModelContext / useActiveModel)
+ *        so the consumer only needs the field to land on the config object.
  *
  *   Until then we keep them inline to avoid premature abstraction.
  *

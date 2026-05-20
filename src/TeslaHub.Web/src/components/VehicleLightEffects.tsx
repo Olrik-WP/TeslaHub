@@ -28,17 +28,17 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { VehicleStatus } from '../api/queries';
-import { ACTIVE_VEHICLE_MODEL } from './vehicleModelConfig';
+import { useActiveModel } from './vehicleModelConfig';
 
 interface VehicleLightEffectsProps {
   vehicle: VehicleStatus | undefined;
 }
 
 // All model-specific data (node names + Sentry camera positions) lives
-// in vehicleModelConfig.ts — pulled in here so the same effects code
-// runs for Poppyseed (Model 3) today and Bayberry (Model Y) tomorrow.
-// To target a different car family swap ACTIVE_VEHICLE_MODEL in that
-// file (or eventually wire it to the current vehicle's VIN).
+// in vehicleModelConfig.ts — read here through `useActiveModel()` so the
+// same effects code runs for Poppyseed (Model 3) and Bayberry (Model Y)
+// without any further branching. The active config is resolved one level
+// up by <VehicleTopView3D> based on the current vehicle's VIN.
 
 // ---------------------------------------------------------------------------
 // Main effects component
@@ -46,17 +46,27 @@ interface VehicleLightEffectsProps {
 
 export function VehicleLightEffects({ vehicle }: VehicleLightEffectsProps) {
   const { scene } = useThree();
+  const cfg = useActiveModel();
 
   // Order matters here. useGroundProjections sets the STEADY visibility
   // (on while driving / reversing), useLockFlash transiently overrides
   // it for the chirp pattern then restores the snapshot at cleanup. By
   // mounting projections FIRST we guarantee that when lock-flash's
   // restore() runs it reads the correct steady-state value.
-  useGroundProjections(scene, vehicle?.shiftState ?? null);
-  useLockFlash(scene, vehicle?.isLocked ?? null);
-  useBrakeAndReverseLights(scene, vehicle?.shiftState ?? null);
+  useGroundProjections(scene, vehicle?.shiftState ?? null, cfg.groundProjectionNodes);
+  useLockFlash(scene, vehicle?.isLocked ?? null, cfg.groundProjectionNodes);
+  useBrakeAndReverseLights(scene, vehicle?.shiftState ?? null, {
+    brake: cfg.brakeLightNodes,
+    reverse: cfg.reverseLightNodes,
+    headlight: cfg.headlightNodes,
+  });
 
-  return <SentryIndicators active={vehicle?.sentryMode === true} />;
+  return (
+    <SentryIndicators
+      active={vehicle?.sentryMode === true}
+      positions={cfg.sentryCameraPositions}
+    />
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +81,11 @@ export function VehicleLightEffects({ vehicle }: VehicleLightEffectsProps) {
 // on". We turn them on while shifted in D/R, and use them as the chirp
 // surface for lock/unlock flashes (see useLockFlash below).
 
-function useGroundProjections(scene: THREE.Object3D, shiftState: string | null) {
+function useGroundProjections(
+  scene: THREE.Object3D,
+  shiftState: string | null,
+  nodes: { headlights: string; stoplights: string },
+) {
   const shift = (shiftState ?? '').toUpperCase();
   const driving = shift === 'D' || shift === 'R';
   // Tesla doesn't expose a "brakes pressed" signal via MQTT; the closest
@@ -81,9 +95,8 @@ function useGroundProjections(scene: THREE.Object3D, shiftState: string | null) 
   const stoplightOn = driving;
 
   useEffect(() => {
-    const { headlights, stoplights } = ACTIVE_VEHICLE_MODEL.groundProjectionNodes;
-    const head = scene.getObjectByName(headlights);
-    const stop = scene.getObjectByName(stoplights);
+    const head = scene.getObjectByName(nodes.headlights);
+    const stop = scene.getObjectByName(nodes.stoplights);
     if (head) head.visible = driving;
     if (stop) stop.visible = stoplightOn;
     return () => {
@@ -92,7 +105,7 @@ function useGroundProjections(scene: THREE.Object3D, shiftState: string | null) 
       if (head) head.visible = false;
       if (stop) stop.visible = false;
     };
-  }, [scene, driving, stoplightOn]);
+  }, [scene, driving, stoplightOn, nodes.headlights, nodes.stoplights]);
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +117,11 @@ function useGroundProjections(scene: THREE.Object3D, shiftState: string | null) 
 const FLASH_ON_MS = 250;
 const FLASH_GAP_MS = 150;
 
-function useLockFlash(scene: THREE.Object3D, isLocked: boolean | null) {
+function useLockFlash(
+  scene: THREE.Object3D,
+  isLocked: boolean | null,
+  nodes: { headlights: string; stoplights: string },
+) {
   // Keep track of previous state so we only flash on TRANSITION, not on
   // every re-render. First render (prevLocked=undefined) does not flash.
   const prevLockedRef = useRef<boolean | null | undefined>(undefined);
@@ -126,14 +143,13 @@ function useLockFlash(scene: THREE.Object3D, isLocked: boolean | null) {
 
     const flashes = isLocked ? 1 : 2; // 1 chirp on lock, 2 on unlock
 
-    const { headlights, stoplights } = ACTIVE_VEHICLE_MODEL.groundProjectionNodes;
-    const projections = [headlights, stoplights]
+    const projections = [nodes.headlights, nodes.stoplights]
       .map((name) => scene.getObjectByName(name))
       .filter((n): n is THREE.Object3D => !!n);
 
     if (projections.length === 0) {
       // eslint-disable-next-line no-console
-      console.warn('[Poppyseed3D] lock flash: no projection meshes found');
+      console.warn('[Vehicle3D] lock flash: no projection meshes found');
       return;
     }
 
@@ -178,7 +194,7 @@ function useLockFlash(scene: THREE.Object3D, isLocked: boolean | null) {
       // in an inconsistent state.
       restoreOriginal();
     };
-  }, [scene, isLocked]);
+  }, [scene, isLocked, nodes.headlights, nodes.stoplights]);
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +223,15 @@ const REVERSE_COLOR = new THREE.Color('#fff8e8');
 const HEADLIGHT_INTENSITY = 1.4;
 const HEADLIGHT_COLOR = new THREE.Color('#fff5e8');
 
-function useBrakeAndReverseLights(scene: THREE.Object3D, shiftState: string | null) {
+function useBrakeAndReverseLights(
+  scene: THREE.Object3D,
+  shiftState: string | null,
+  nodes: {
+    brake: readonly string[];
+    reverse: readonly string[];
+    headlight: readonly string[];
+  },
+) {
   // Normalise: Tesla returns "P" / "R" / "N" / "D" or null when not
   // recently in motion. Anything else (parked & turned off) → no boost.
   const shift = (shiftState ?? '').toUpperCase();
@@ -256,13 +280,13 @@ function useBrakeAndReverseLights(scene: THREE.Object3D, shiftState: string | nu
     };
 
     if (driving) {
-      boost(ACTIVE_VEHICLE_MODEL.brakeLightNodes, BRAKE_INTENSITY, BRAKE_COLOR);
+      boost(nodes.brake, BRAKE_INTENSITY, BRAKE_COLOR);
       // Front headlights ON whenever we're in a drive gear — visually
       // balances the front (white DRL) with the rear (red brakes) and
       // matches how the real car behaves with auto-headlights enabled.
-      boost(ACTIVE_VEHICLE_MODEL.headlightNodes, HEADLIGHT_INTENSITY, HEADLIGHT_COLOR);
+      boost(nodes.headlight, HEADLIGHT_INTENSITY, HEADLIGHT_COLOR);
     }
-    if (reverseOn) boost(ACTIVE_VEHICLE_MODEL.reverseLightNodes, REVERSE_INTENSITY, REVERSE_COLOR);
+    if (reverseOn) boost(nodes.reverse, REVERSE_INTENSITY, REVERSE_COLOR);
 
     return () => {
       for (const s of snapshots) {
@@ -270,7 +294,7 @@ function useBrakeAndReverseLights(scene: THREE.Object3D, shiftState: string | nu
         for (const c of s.newClones) c.dispose();
       }
     };
-  }, [scene, driving, reverseOn]);
+  }, [scene, driving, reverseOn, nodes.brake, nodes.reverse, nodes.headlight]);
 }
 
 // ---------------------------------------------------------------------------
@@ -279,9 +303,10 @@ function useBrakeAndReverseLights(scene: THREE.Object3D, shiftState: string | nu
 
 interface SentryIndicatorsProps {
   active: boolean;
+  positions: ReadonlyArray<[number, number, number]>;
 }
 
-function SentryIndicators({ active }: SentryIndicatorsProps) {
+function SentryIndicators({ active, positions }: SentryIndicatorsProps) {
   // Shared sphere geometry across all indicators — six tiny spheres are
   // cheap, but reusing the geometry shaves a few KB of GPU memory.
   const geom = useMemo(() => new THREE.SphereGeometry(0.025, 12, 8), []);
@@ -310,7 +335,7 @@ function SentryIndicators({ active }: SentryIndicatorsProps) {
 
   return (
     <group renderOrder={100}>
-      {ACTIVE_VEHICLE_MODEL.sentryCameraPositions.map(([x, y, z], i) => (
+      {positions.map(([x, y, z], i) => (
         <mesh
           key={i}
           position={[x, y, z]}
