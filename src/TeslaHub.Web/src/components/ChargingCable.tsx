@@ -51,6 +51,14 @@ export interface ChargingCableProps {
   startWorld: THREE.Vector3;
   /** World position of the charge port socket on the car. */
   endWorld: THREE.Vector3;
+  /**
+   * Unit vector pointing FROM the plug INTO the port (i.e. perpendicular to
+   * the car's body where the port sits). For a Model 3 / Model Y the port
+   * is on the rear-LEFT fender, so this defaults to (0, 0, +1) in world
+   * space — assuming the car is at its default rotation. Phase 2 will read
+   * this from the per-model config (Cybertruck plug points differently).
+   */
+  plugDirection?: THREE.Vector3;
   /** True when the car is actively charging - drives color + flow intensity. */
   charging: boolean;
   /** Optional path to charger_handle.glb (extracted via export_meshes.gd). */
@@ -64,6 +72,8 @@ export interface ChargingCableProps {
   /** Pulsing speed of the flow when charging. */
   flowSpeed?: number;
 }
+
+const DEFAULT_PLUG_DIRECTION = new THREE.Vector3(0, 0, 1);
 
 // Tesla-app colors (eye-balled from screenshots):
 //   * Idle  : neutral cool grey, faint pulse barely visible.
@@ -104,36 +114,41 @@ const CABLE_FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-function buildCableCurve(start: THREE.Vector3, end: THREE.Vector3): THREE.CubicBezierCurve3 {
-  // CubicBezier control points are TANGENT handles, not points the curve
-  // passes through. We want:
-  //   * Start tangent pointing straight UP   (cable rises from the floor)
-  //   * End tangent pointing AWAY from the car along the horizontal axis
-  //     between port and start (cable enters the port horizontally instead
-  //     of dropping in from above).
+function buildCableCurve(
+  start: THREE.Vector3,
+  end: THREE.Vector3,
+  plugDir: THREE.Vector3,
+): THREE.CubicBezierCurve3 {
+  // CubicBezier control points are TANGENT handles, not waypoints.
   //
-  // This avoids the "loop over the roof" shape that a CatmullRomCurve3
-  // produces when both endpoints are at similar height.
+  // Start tangent: HORIZONTAL towards the port. This makes the cable lay
+  // flat on the floor for a brief stretch, mimicking the Tesla app where
+  // the cable "drapes" on the ground for ~30-50cm before rising.
+  //
+  // End tangent: pointing OUT of the port along -plugDir. The cable arrives
+  // already aligned with the plug socket, so the rigid handle continues
+  // seamlessly through to the port.
   const totalDist = start.distanceTo(end);
-  const liftHeight = Math.max(0.30, totalDist * 0.40);
-  const horizontalHandle = Math.max(0.25, totalDist * 0.35);
 
-  // Direction "from car back to ground anchor", projected to the horizontal
-  // plane. Used to push the end handle out so the cable arrives flat.
-  const fromPortToStart = new THREE.Vector3(start.x - end.x, 0, start.z - end.z);
-  if (fromPortToStart.lengthSq() < 1e-6) {
-    // Degenerate case (start directly below end): pick an arbitrary X
-    // direction so the handle isn't a zero vector.
-    fromPortToStart.set(-1, 0, 0);
-  }
-  fromPortToStart.normalize();
+  // Horizontal direction from start to end (cable approach in plan view).
+  const horizontalToEnd = new THREE.Vector3(end.x - start.x, 0, end.z - start.z);
+  if (horizontalToEnd.lengthSq() < 1e-6) horizontalToEnd.set(1, 0, 0);
+  horizontalToEnd.normalize();
 
-  const p0 = start.clone();
-  const p1 = start.clone().add(new THREE.Vector3(0, liftHeight, 0));
-  const p2 = end.clone().add(fromPortToStart.multiplyScalar(horizontalHandle));
-  const p3 = end.clone();
+  // p1 sits far out horizontally and slightly low so the curve dips towards
+  // the ground at first instead of bowing up immediately. Setting Y below
+  // the floor pulls the curve down to skim the floor.
+  const p1 = start
+    .clone()
+    .addScaledVector(horizontalToEnd, totalDist * 0.45)
+    .add(new THREE.Vector3(0, -0.05, 0));
 
-  return new THREE.CubicBezierCurve3(p0, p1, p2, p3);
+  // p2 is pushed AWAY from the port along the plug direction so that the
+  // curve's final tangent aligns with plugDir. This is what makes the cable
+  // arrive perpendicular to the car body instead of from a random angle.
+  const p2 = end.clone().addScaledVector(plugDir, -Math.max(0.4, totalDist * 0.45));
+
+  return new THREE.CubicBezierCurve3(start.clone(), p1, p2, end.clone());
 }
 
 // Real Tesla Charger_Handle is ~21cm long along its native +Z axis.
@@ -147,6 +162,7 @@ const HANDLE_LENGTH = 0.21;
 export function ChargingCable({
   startWorld,
   endWorld,
+  plugDirection = DEFAULT_PLUG_DIRECTION,
   charging,
   handleUrl,
   radius = 0.012,
@@ -156,23 +172,23 @@ export function ChargingCable({
 }: ChargingCableProps) {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
-  // Horizontal direction from ground anchor to port. Used both to shorten
-  // the cable (so it ends at the back of the plug) and to orient the
-  // handle so its +Z axis points straight at the port.
-  const approachDir = useMemo(() => {
-    const d = new THREE.Vector3(endWorld.x - startWorld.x, 0, endWorld.z - startWorld.z);
-    if (d.lengthSq() < 1e-6) d.set(1, 0, 0);
-    return d.normalize();
-  }, [startWorld, endWorld]);
+  // Plug direction (perpendicular to the car's body where the port sits).
+  // The handle is oriented strictly along this axis - independently of
+  // where the cable is coming from - so it always looks "straight into
+  // the port", never tilted along the cable's approach angle.
+  const plugDir = useMemo(() => plugDirection.clone().normalize(), [plugDirection]);
 
+  // The cable physically ends at the back of the handle (= port minus full
+  // handle length along the plug axis), so the rigid handle covers the
+  // last 21cm and the plug tip touches the port socket.
   const cableEndWorld = useMemo(
-    () => endWorld.clone().addScaledVector(approachDir, -HANDLE_LENGTH),
-    [endWorld, approachDir],
+    () => endWorld.clone().addScaledVector(plugDir, -HANDLE_LENGTH),
+    [endWorld, plugDir],
   );
 
   const curve = useMemo(
-    () => buildCableCurve(startWorld, cableEndWorld),
-    [startWorld, cableEndWorld],
+    () => buildCableCurve(startWorld, cableEndWorld, plugDir),
+    [startWorld, cableEndWorld, plugDir],
   );
 
   const geometry = useMemo(
@@ -210,26 +226,30 @@ export function ChargingCable({
   });
 
   // Handle transform:
-  //   * Position : midway between the cable end and the port (so the handle
-  //     spans those exact 21cm with the plug touching the port).
-  //   * Orientation : explicit basis matrix with +Z = approachDir (forward)
-  //     and +Y = world up. setFromUnitVectors() only constrains one axis
-  //     and leaves a roll degree of freedom, which made the handle look
-  //     sideways. The basis matrix removes that ambiguity.
+  //   * Position : midway between cableEnd and port along plugDir (so the
+  //     handle spans those exact 21cm with the plug touching the port).
+  //   * Orientation : explicit basis matrix with +Z = plugDir (forward into
+  //     port) and +Y = world up. Using plugDir instead of the cable's
+  //     tangent guarantees the handle is perpendicular to the car body,
+  //     even when the cable approaches from a diagonal angle.
   const handleTransform = useMemo(() => {
-    const position = cableEndWorld
-      .clone()
-      .addScaledVector(approachDir, HANDLE_LENGTH / 2);
+    const position = endWorld.clone().addScaledVector(plugDir, -HANDLE_LENGTH / 2);
 
-    const forward = approachDir.clone(); // +Z of the mesh
+    const forward = plugDir.clone(); // +Z of the mesh aims at the port
     const worldUp = new THREE.Vector3(0, 1, 0);
-    const right = new THREE.Vector3().crossVectors(worldUp, forward).normalize();
+    const right = new THREE.Vector3().crossVectors(worldUp, forward);
+    if (right.lengthSq() < 1e-6) {
+      // Degenerate: plug points straight up/down. Pick an arbitrary right
+      // axis to avoid NaN quaternion.
+      right.set(1, 0, 0);
+    }
+    right.normalize();
     const up = new THREE.Vector3().crossVectors(forward, right).normalize();
     const m = new THREE.Matrix4().makeBasis(right, up, forward);
     const quaternion = new THREE.Quaternion().setFromRotationMatrix(m);
 
     return { position, quaternion };
-  }, [cableEndWorld, approachDir]);
+  }, [endWorld, plugDir]);
 
   return (
     <group>

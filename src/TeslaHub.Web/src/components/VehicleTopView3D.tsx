@@ -46,10 +46,16 @@ const CHARGE_PORT_FALLBACK_WORLD = new THREE.Vector3(-1.856, 0.966, -0.74);
 // towards the rear, push +Z (≈ towards car center) to bury it into the body.
 const PORT_FROM_PIVOT_OFFSET = new THREE.Vector3(0, -0.07, 0.03);
 
-// Cable rises from the ground 50cm behind and 50cm to the left of the
-// rear-left tire, mimicking the in-app vehicle view where the cable comes
-// out of the floor right next to the charge port side of the car.
-const CABLE_GROUND_WORLD = new THREE.Vector3(-2.4, 0, -1.3);
+// Unit vector pointing FROM the plug INTO the port - i.e. perpendicular to
+// the car's left fender where the Model 3 charge port sits. The cable
+// approach can come from any angle, but the rigid plug ALWAYS enters along
+// this axis. In Phase 2 this will be per-model (Cybertruck is different).
+const POPPYSEED_PLUG_DIRECTION = new THREE.Vector3(0, 0, 1);
+
+// Cable ground anchor: ~3.5m behind and 1.5m to the left of the car center,
+// so the cable has enough length to drape on the floor before rising to the
+// port (Tesla in-app view shows a cable that touches the floor first).
+const CABLE_GROUND_WORLD = new THREE.Vector3(-3.5, 0, -1.5);
 
 // Nodes inside the Tesla model that visually pollute a "studio" view because
 // they are designed for the original Tesla mobile UI context (puddle lights
@@ -596,6 +602,7 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
       <ChargingCable
         startWorld={CABLE_GROUND_WORLD}
         endWorld={endWorld}
+        plugDirection={POPPYSEED_PLUG_DIRECTION}
         charging={mode === 'charging'}
         handleUrl={handleAvailable ? HANDLE_URL : undefined}
       />
