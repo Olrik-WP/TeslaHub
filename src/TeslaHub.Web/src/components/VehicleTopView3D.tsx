@@ -291,7 +291,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     const paintDebug: string[] = [];
 
     // ──────────────────────────────────────────────────────────────────
-    // Pre-pass: detect mesh-level glass role.
+    // Pre-pass: detect glass role at the PARENT GROUP level.
     //
     // Tesla reuses the SAME `Glass_Interior` material on meshes that
     // play very different visual roles:
@@ -306,15 +306,25 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     //   - inner-only → KEEP the reflection — it's the only thing that
     //                  reads as "tinted glass" instead of a black panel.
     //
-    // Because the material is shared, mutating it in-place for one role
-    // pollutes the other. We record the role per-mesh first, then clone
-    // the material per-mesh inside the main pass.
+    // CRITICAL: three.js's GLTFLoader splits each glTF mesh's primitives
+    // into separate Mesh objects nested under a Group sharing the
+    // original node name (Static_Exterior → mesh_45_0, mesh_45_1, …).
+    // Each sub-Mesh therefore carries only ONE material, so per-mesh
+    // role detection picks 'inner-only' for the Glass_Interior pane of
+    // the windshield because its sibling Glass primitive is a separate
+    // sub-Mesh. We must aggregate flags at the parent Group level
+    // (across sibling sub-meshes) and then propagate the role down.
     // ──────────────────────────────────────────────────────────────────
     type GlassRole = 'mixed' | 'inner-only' | 'outer-only' | 'none';
     const meshGlassRole = new WeakMap<THREE.Mesh, GlassRole>();
+    const groupFlags = new WeakMap<
+      THREE.Object3D,
+      { hasOuter: boolean; hasInner: boolean }
+    >();
     scene.traverse((obj) => {
       const m = obj as THREE.Mesh;
       if (!m.isMesh) return;
+      const group = m.parent ?? m;
       const mats = Array.isArray(m.material) ? m.material : [m.material];
       let hasOuterMat = false;
       let hasInnerMat = false;
@@ -324,12 +334,22 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         if (OUTER_GLASS_MAT.test(n)) hasOuterMat = true;
         if (INNER_GLASS_MAT.test(n)) hasInnerMat = true;
       }
-      const outerByNode = isInsideOuterGlass(m);
-      const isOuter = hasOuterMat || outerByNode;
+      const existing = groupFlags.get(group) ?? { hasOuter: false, hasInner: false };
+      if (hasOuterMat || isInsideOuterGlass(m)) existing.hasOuter = true;
+      if (hasInnerMat) existing.hasInner = true;
+      groupFlags.set(group, existing);
+    });
+    scene.traverse((obj) => {
+      const m = obj as THREE.Mesh;
+      if (!m.isMesh) return;
+      const group = m.parent ?? m;
+      const flags = groupFlags.get(group);
       let role: GlassRole = 'none';
-      if (isOuter && hasInnerMat) role = 'mixed';
-      else if (hasInnerMat) role = 'inner-only';
-      else if (isOuter) role = 'outer-only';
+      if (flags) {
+        if (flags.hasOuter && flags.hasInner) role = 'mixed';
+        else if (flags.hasInner) role = 'inner-only';
+        else if (flags.hasOuter) role = 'outer-only';
+      }
       meshGlassRole.set(m, role);
     });
 
