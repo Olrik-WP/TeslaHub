@@ -40,10 +40,16 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { VehicleStatus } from '../api/queries';
 
-// Height (in metres) of the leader line above each anchor. 0.55 keeps
+// Height (in metres) of the leader line above each anchor. 0.45 keeps
 // the callout clear of the car silhouette on the standard camera pose
 // (CAMERA_TARGET y=0.6) without rocketing it off-screen on top crops.
-const CALLOUT_HEIGHT = 0.55;
+const CALLOUT_HEIGHT = 0.45;
+
+// distanceFactor maps DOM size to a 3D depth value (smaller = smaller
+// onscreen). With our camera ~6 m away, 8 produced ~50 px buttons that
+// dominated the model. 2.5 keeps them ~16-20 px — visible but tasteful,
+// and they shrink/grow naturally with zoom. Tweak here if needed.
+const CALLOUT_DISTANCE_FACTOR = 2.5;
 
 export interface CalloutAction {
   onClick: () => void;
@@ -265,10 +271,10 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
       <group ref={groupRef}>
         <Html
           center
-          // distanceFactor scales the DOM element with depth so callouts
-          // far from the camera don't dominate. 8 keeps the button
-          // ~28px on the default 5.5m camera distance.
-          distanceFactor={8}
+          // Lower distanceFactor → smaller buttons (see CALLOUT_DISTANCE_FACTOR
+          // for the calibration rationale). The button still shrinks/grows
+          // with zoom, just at a more tasteful baseline.
+          distanceFactor={CALLOUT_DISTANCE_FACTOR}
           // zIndexRange below the rail's 100 so any future Settings/
           // Showroom overlay wins over callouts.
           zIndexRange={[20, 0]}
@@ -283,13 +289,13 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
             title={label}
             aria-label={label}
             className={
-              'flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[10px] font-medium ' +
-              'shadow-[0_4px_12px_rgba(0,0,0,0.35)] border backdrop-blur-md ' +
-              'transition-all hover:scale-105 active:scale-95 disabled:opacity-60 ' +
+              'flex items-center gap-1 h-5 px-1.5 rounded-full text-[8px] font-medium leading-none ' +
+              'shadow-[0_2px_6px_rgba(0,0,0,0.45)] border backdrop-blur-md ' +
+              'transition-all hover:scale-110 active:scale-95 disabled:opacity-60 ' +
               variantClass
             }
           >
-            <span className="w-3 h-3 flex items-center justify-center">{icon}</span>
+            <span className="w-2 h-2 flex items-center justify-center">{icon}</span>
             <span className="whitespace-nowrap">{label}</span>
           </button>
         </Html>
@@ -304,7 +310,7 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
 
 function PlusIcon() {
   return (
-    <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
       <path d="M6 2v8M2 6h8" />
     </svg>
   );
@@ -312,7 +318,7 @@ function PlusIcon() {
 
 function XIcon() {
   return (
-    <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
       <path d="M3 3l6 6M9 3l-6 6" />
     </svg>
   );
@@ -320,7 +326,7 @@ function XIcon() {
 
 function UnlockIcon() {
   return (
-    <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="6" width="8" height="5" rx="1" />
       <path d="M4 6V4a2 2 0 0 1 4 0" />
     </svg>
@@ -329,7 +335,7 @@ function UnlockIcon() {
 
 function VentIcon() {
   return (
-    <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2 4h8" />
       <path d="M2 8h8" />
       <path d="M4 2v8" />

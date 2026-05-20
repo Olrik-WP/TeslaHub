@@ -44,7 +44,8 @@ const LOCK_FLASH_NODES = [
   'Stoplights_Projections',
 ] as const;
 
-/** Rear brake lights — boosted emissive when shifting D or R. */
+/** Rear brake lights — boosted emissive when shifting D or R.
+ *  Confirmed via GLB inspection (Tesla-Godot-Test/inspect-glb-nodes.mjs). */
 const BRAKE_LIGHT_NODES = [
   'Brake_Lights_Left',
   'Brake_Lights_Right',
@@ -54,16 +55,33 @@ const BRAKE_LIGHT_NODES = [
 /** Reverse lights — boosted emissive only when shifting R. */
 const REVERSE_LIGHT_NODES = ['Reverse_Light', 'Reverse_Light_Perf'] as const;
 
-/** Sentry-mode camera positions on Model 3 Highland, in metres. Y is up,
- *  X is longitudinal (+forward), Z is lateral (+right). Calibrated by
- *  eye against the real car (camera lens positions on body). */
+/** Front headlights + DRL — boosted white when driving (D or R), so the
+ *  car visually has its headlights ON when shifted into a drive gear.
+ *  Without this the front looks "off" while the rear has bright brakes,
+ *  which feels asymmetric. Highland exports separate Headlights (low
+ *  beam reflector) and DRL (light bar) nodes. */
+const HEADLIGHT_NODES = ['Headlights', 'DRL'] as const;
+
+/** Sentry-mode camera positions on Model 3 Highland, in metres.
+ *  Coordinate system (confirmed against wheel fallback positions):
+ *    +X = forward (front of car)
+ *    +Y = up
+ *    +Z = right (passenger side)
+ *
+ *  Model 3 Highland has FOUR Sentry cameras (no B-pillar cams, no fender
+ *  repeaters — those are turn signals, not cameras):
+ *    1. Front  — top centre of windshield, behind rear-view mirror
+ *    2. Left   — embedded in left side mirror
+ *    3. Right  — embedded in right side mirror
+ *    4. Rear   — above license plate
+ *
+ *  Calibrated by eye against the real car (camera lens positions on body).
+ */
 const SENTRY_CAMERA_POSITIONS: ReadonlyArray<[number, number, number]> = [
-  [+0.40, 1.32, 0],     // front-facing camera (top of windshield)
-  [-0.18, 1.20, -0.85], // B-pillar left
-  [-0.18, 1.20, +0.85], // B-pillar right
-  [-2.00, 0.95, 0],     // rear camera (top of trunk lid)
-  [+1.95, 0.50, -0.92], // front fender repeater left
-  [+1.95, 0.50, +0.92], // front fender repeater right
+  [+0.40, 1.32, 0],      // front (top of windshield)
+  [+0.85, 1.08, -1.00],  // left side mirror
+  [+0.85, 1.08, +1.00],  // right side mirror
+  [-2.00, 0.95, 0],      // rear (above license plate)
 ];
 
 // ---------------------------------------------------------------------------
@@ -152,29 +170,37 @@ function useLockFlash(scene: THREE.Object3D, isLocked: boolean | null) {
 // Brake + reverse lights — driven by shiftState
 // ---------------------------------------------------------------------------
 
-/** When boosting emissive we save the original and restore on cleanup so
- *  we don't permanently alter the materials. Map from material → original
- *  emissiveIntensity / emissive color. */
-type EmissiveSnapshot = {
-  material: THREE.MeshStandardMaterial;
-  origIntensity: number;
-  origColor: THREE.Color;
+/** When we boost emissive we REPLACE the mesh's material reference with a
+ *  clone, mutate the clone, then restore the original on cleanup. We can't
+ *  mutate the material in place because Tesla's GLB ships a single shared
+ *  "Light" material (id 17) used by BOTH front and rear light meshes —
+ *  in-place mutation would also paint the front headlights red when we
+ *  light up the brake lights. Confirmed via GLB inspection. */
+type MaterialSnapshot = {
+  mesh: THREE.Mesh;
+  originalMaterial: THREE.Material | THREE.Material[];
+  /** Only the materials we ACTUALLY created via clone() — these need to
+   *  be disposed on cleanup. Pass-through materials (mats with no emissive
+   *  channel) keep their original reference and must NOT be disposed. */
+  newClones: THREE.Material[];
 };
 
 const BRAKE_INTENSITY = 2.5;
 const BRAKE_COLOR = new THREE.Color('#ff1a1a');
 const REVERSE_INTENSITY = 1.8;
 const REVERSE_COLOR = new THREE.Color('#fff8e8');
+const HEADLIGHT_INTENSITY = 1.4;
+const HEADLIGHT_COLOR = new THREE.Color('#fff5e8');
 
 function useBrakeAndReverseLights(scene: THREE.Object3D, shiftState: string | null) {
   // Normalise: Tesla returns "P" / "R" / "N" / "D" or null when not
   // recently in motion. Anything else (parked & turned off) → no boost.
   const shift = (shiftState ?? '').toUpperCase();
-  const brakeOn = shift === 'D' || shift === 'R';
+  const driving = shift === 'D' || shift === 'R';
   const reverseOn = shift === 'R';
 
   useEffect(() => {
-    const snapshots: EmissiveSnapshot[] = [];
+    const snapshots: MaterialSnapshot[] = [];
 
     const boost = (nodeNames: readonly string[], intensity: number, color: THREE.Color) => {
       for (const name of nodeNames) {
@@ -183,32 +209,53 @@ function useBrakeAndReverseLights(scene: THREE.Object3D, shiftState: string | nu
         root.traverse((obj) => {
           const mesh = obj as THREE.Mesh;
           if (!mesh.isMesh) return;
-          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-          for (const m of mats) {
-            const mat = m as THREE.MeshStandardMaterial;
-            if (!mat || !mat.emissive) continue;
-            snapshots.push({
-              material: mat,
-              origIntensity: mat.emissiveIntensity ?? 1,
-              origColor: mat.emissive.clone(),
-            });
-            mat.emissive.copy(color);
-            mat.emissiveIntensity = intensity;
+
+          // Snapshot the ORIGINAL material reference so we can restore it
+          // on cleanup. Then build a per-mesh clone array we can safely
+          // mutate without touching the shared material instance.
+          const origMaterial = mesh.material;
+          const origArray = Array.isArray(origMaterial) ? origMaterial : [origMaterial];
+          const nextArray: THREE.Material[] = [];
+          const newClones: THREE.Material[] = [];
+
+          for (let i = 0; i < origArray.length; i++) {
+            const m = origArray[i] as THREE.MeshStandardMaterial;
+            if (!m || !m.emissive) {
+              nextArray.push(m);
+              continue;
+            }
+            // Material.clone() creates an independent copy — texture maps
+            // are still shared (which is what we want, no extra GPU upload)
+            // but emissive/colour parameters become per-clone.
+            const clone = m.clone();
+            clone.emissive.copy(color);
+            clone.emissiveIntensity = intensity;
+            nextArray.push(clone);
+            newClones.push(clone);
           }
+
+          snapshots.push({ mesh, originalMaterial: origMaterial, newClones });
+          mesh.material = Array.isArray(origMaterial) ? nextArray : nextArray[0];
         });
       }
     };
 
-    if (brakeOn) boost(BRAKE_LIGHT_NODES, BRAKE_INTENSITY, BRAKE_COLOR);
+    if (driving) {
+      boost(BRAKE_LIGHT_NODES, BRAKE_INTENSITY, BRAKE_COLOR);
+      // Front headlights ON whenever we're in a drive gear — visually
+      // balances the front (white DRL) with the rear (red brakes) and
+      // matches how the real car behaves with auto-headlights enabled.
+      boost(HEADLIGHT_NODES, HEADLIGHT_INTENSITY, HEADLIGHT_COLOR);
+    }
     if (reverseOn) boost(REVERSE_LIGHT_NODES, REVERSE_INTENSITY, REVERSE_COLOR);
 
     return () => {
       for (const s of snapshots) {
-        s.material.emissive.copy(s.origColor);
-        s.material.emissiveIntensity = s.origIntensity;
+        s.mesh.material = s.originalMaterial;
+        for (const c of s.newClones) c.dispose();
       }
     };
-  }, [scene, brakeOn, reverseOn]);
+  }, [scene, driving, reverseOn]);
 }
 
 // ---------------------------------------------------------------------------
