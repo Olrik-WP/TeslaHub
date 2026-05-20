@@ -393,6 +393,43 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       console.log('[Poppyseed3D] Static_Exterior dump:', staticExteriorDump);
     }
 
+    // ALSO dump Fade mesh primitives (panoramic roof). Tesla may have
+    // merged the windshield into this mesh — the user reported the
+    // windshield "is white like the roof" in Godot which suggests it's
+    // part of the same primitive group.
+    const fadeDump: string[] = [];
+    scene.traverse((obj) => {
+      let cur: THREE.Object3D | null = obj;
+      let underFade = false;
+      while (cur) {
+        if (cur.name === 'Fade') {
+          underFade = true;
+          break;
+        }
+        cur = cur.parent;
+      }
+      if (!underFade) return;
+      const m = obj as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.updateMatrixWorld(true);
+      const bb = new THREE.Box3().setFromObject(m);
+      const sz = bb.getSize(new THREE.Vector3());
+      const ct = bb.getCenter(new THREE.Vector3());
+      const mats = Array.isArray(m.material) ? m.material : [m.material];
+      const matInfo = mats
+        .map((mt) => (mt as { name?: string } | null)?.name ?? '(null)')
+        .join(',');
+      fadeDump.push(
+        `${m.name} mats=[${matInfo}] ` +
+          `size=(${sz.x.toFixed(2)},${sz.y.toFixed(2)},${sz.z.toFixed(2)}) ` +
+          `center=(${ct.x.toFixed(2)},${ct.y.toFixed(2)},${ct.z.toFixed(2)})`,
+      );
+    });
+    if (fadeDump.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log('[Poppyseed3D] Fade dump:', fadeDump);
+    }
+
     // ──────────────────────────────────────────────────────────────────
     // TEMPORARY DEBUG: paint every Static_Exterior sub-mesh a distinct
     // fluorescent colour so the user can identify which primitive holds
@@ -468,6 +505,15 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       ['Interior2', { hex: 0xff00ff, label: 'MAGENTA(Interior2)' }],
       ['Wing', { hex: 0x00ffff, label: 'CYAN   (Wing)' }],
       ['Pillar', { hex: 0xff8800, label: 'ORANGE (Pillar)' }],
+      // Fade mesh = Tesla's panoramic roof. Several primitives are OPAQUE
+      // with light colours (Glass_Windows_Fade=0.80 grey, Interior_Fade=
+      // 0.05 dark, etc.). If the windshield is modeled as part of Fade
+      // (the user said "blanc comme le toit"), one of these is it.
+      ['Glass_Windows_Fade', { hex: 0xffff00, label: 'BRIGHT YELLOW(Glass_Windows_Fade)' }],
+      ['Interior_Fade', { hex: 0xff44aa, label: 'HOTPINK(Interior_Fade)' }],
+      ['Interior_Fade2', { hex: 0x44ff88, label: 'LIME  (Interior_Fade2)' }],
+      ['Cover_Fade', { hex: 0xaa44ff, label: 'PURPLE(Cover_Fade)' }],
+      ['Trim_Fade', { hex: 0xff4488, label: 'CORAL (Trim_Fade)' }],
     ]);
     scene.traverse((obj) => {
       const m = obj as THREE.Mesh;
