@@ -386,6 +386,41 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           continue;
         }
 
+        // GLTFLoader's default material — bright white CHROME (metalness=1).
+        // Tesla exports the Bayberry windshield as a primitive WITHOUT a
+        // material reference inside Static_Exterior. GLTFLoader silently
+        // assigns its cached `'glTF Default Material'` (color=white,
+        // metalness=1, roughness=1) to all such primitives. Combined with
+        // the HDR `Environment preset="city"`, the windshield becomes a
+        // bright chrome mirror reflecting the sky — exactly the "mur gris"
+        // the user reported. Replace each occurrence with a sensible dark
+        // tinted glass material so it reads as windshield, not chrome.
+        if (matName === 'glTF Default Material') {
+          const glass = new THREE.MeshStandardMaterial({
+            name: '__TeslaHub_NoMat_Glass',
+            color: 0x111111,
+            metalness: 0,
+            roughness: 0.45,
+            transparent: true,
+            opacity: 0.55,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            envMapIntensity: 0.25,
+          });
+          if (Array.isArray(mesh.material)) {
+            const idx = mesh.material.indexOf(mat as THREE.Material);
+            if (idx >= 0) mesh.material[idx] = glass;
+          } else {
+            mesh.material = glass;
+          }
+          mesh.renderOrder = Math.max(mesh.renderOrder ?? 0, 2);
+          if (glassDebug.length < 24) {
+            glassDebug.push(`NOMAT→glass ${pathOf(mesh)}`);
+          }
+          transparentFixed++;
+          continue;
+        }
+
         // Body paint override — re-color only the actual painted shell,
         // keeping reflectance/metalness from the original material so the
         // HDR highlights still look like proper automotive paint.
