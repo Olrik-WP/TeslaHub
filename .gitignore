@@ -38,6 +38,7 @@ fleet-telemetry-src/
 # 3d tests
 Tesla-APK-Android/
 Tesla-Godot-Test/
+docs/3d-viewer-spec.md
 
 # Tesla 3D models (proprietary assets, never commit)
 src/TeslaHub.Web/public/models/*.glb
