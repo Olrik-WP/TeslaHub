@@ -31,12 +31,14 @@ const HANDLE_URL = '/models/charger_handle.glb';
 const CHARGE_PORT_NODE = 'Charge_Cap_Spatial';
 
 // When the live cable is mounted but we can't find the charge port anchor,
-// we fall back to these hardcoded world positions — measured on the Poppyseed
-// Model 3 Highland: port sits rear-left, ~85cm high.
-const CHARGE_PORT_FALLBACK_WORLD = new THREE.Vector3(-0.87, 0.83, -1.95);
-// Cable rises from the ground ~60cm to the left of the rear-left tire,
-// roughly where the in-app screenshot shows it coming out.
-const CABLE_GROUND_WORLD = new THREE.Vector3(-1.5, 0, -1.7);
+// we fall back to this hardcoded world position — measured at runtime on
+// the Poppyseed Model 3 Highland by reading Charge_Cap_Spatial.world:
+//     (-1.856, 0.966, -0.740) → rear-left fender, ~96cm high.
+const CHARGE_PORT_FALLBACK_WORLD = new THREE.Vector3(-1.856, 0.966, -0.74);
+// Cable rises from the ground 50cm behind and 50cm to the left of the
+// rear-left tire, mimicking the in-app vehicle view where the cable comes
+// out of the floor right next to the charge port side of the car.
+const CABLE_GROUND_WORLD = new THREE.Vector3(-2.4, 0, -1.3);
 
 // Nodes inside the Tesla model that visually pollute a "studio" view because
 // they are designed for the original Tesla mobile UI context (puddle lights

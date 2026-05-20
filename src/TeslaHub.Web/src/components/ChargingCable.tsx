@@ -188,10 +188,16 @@ export function ChargingCable({
   });
 
   // Compute the handle transform from the curve's endpoint + tangent.
+  // The Tesla Charger_Handle mesh is ~20cm long along its local +Z axis,
+  // re-centered on its geometric AABB (see ChargingHandle below). We pull the
+  // handle BACK along the tangent by half its length so the plug tip lands
+  // at the port instead of penetrating 10cm inside the car.
   const handleTransform = useMemo(() => {
     const t = 1;
-    const position = curve.getPointAt(t);
-    const tangent = curve.getTangentAt(t).normalize();
+    const pointAtEnd = curve.getPointAt(t);
+    const tangent = curve.getTangentAt(Math.max(0, t - 0.001)).normalize();
+    const HANDLE_HALF_LENGTH = 0.105;
+    const position = pointAtEnd.clone().addScaledVector(tangent, -HANDLE_HALF_LENGTH);
     // Make the handle face along the tangent (Z-forward by glTF convention).
     const quaternion = new THREE.Quaternion().setFromUnitVectors(
       new THREE.Vector3(0, 0, 1),
@@ -235,6 +241,27 @@ function ChargingHandle({
   quaternion: THREE.Quaternion;
 }) {
   const gltf = useLoader(GLTFLoader, url);
-  const scene = useMemo(() => gltf.scene.clone(true), [gltf.scene]);
-  return <primitive object={scene} position={position} quaternion={quaternion} />;
+
+  // Tesla's Charger_Handle mesh ships with an internal pivot offset (the
+  // geometry sits around (0, +0.83, +0.66) in local space, not at origin).
+  // Without recentering, attaching the scene to a world position drops the
+  // mesh ~83cm above and 66cm forward of where we asked. We sub the AABB
+  // center from the mesh once, then wrap in a group so the outer position /
+  // quaternion props can safely overwrite the group's transform every render
+  // without losing the recentering offset.
+  const centered = useMemo(() => {
+    const cloned = gltf.scene.clone(true);
+    cloned.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(cloned);
+    const center = box.getCenter(new THREE.Vector3());
+    cloned.position.sub(center);
+    cloned.updateMatrixWorld(true);
+    return cloned;
+  }, [gltf.scene]);
+
+  return (
+    <group position={position} quaternion={quaternion}>
+      <primitive object={centered} />
+    </group>
+  );
 }
