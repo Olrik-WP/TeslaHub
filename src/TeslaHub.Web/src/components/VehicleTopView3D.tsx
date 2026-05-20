@@ -36,16 +36,18 @@ const CHARGE_PORT_NODE = 'Charge_Cap_Spatial';
 //     (-1.856, 0.966, -0.740) → rear-left fender, ~96cm high.
 const CHARGE_PORT_FALLBACK_WORLD = new THREE.Vector3(-1.856, 0.966, -0.74);
 
-// `Charge_Cap_Spatial` is the trapdoor's TOP HINGE pivot, NOT the plug
-// socket itself. The actual connector socket sits a few cm below the
-// hinge, in the SAME vertical plane as the fender (no horizontal push -
-// the connector is on the body surface). We apply this empirical offset
-// in WORLD space (good enough as long as the car is at its default
+// `Charge_Cap_Spatial` is the trapdoor's REAR hinge pivot, NOT the plug
+// socket itself. On Poppyseed the pivot sits at the top-rear corner of
+// the trapdoor, while the actual connector socket is centered inside the
+// trapdoor. The offset is therefore (forward, down, body-surface):
+//   * +X  : push forward (towards the car's front, away from rear hinge)
+//   * -Y  : push down (the pivot is above the socket)
+//   *  0Z : stay on the fender plane (don't sink into body)
+//
+// All in WORLD space (good enough as long as the car is at its default
 // rotation; once we wire the car's quaternion in Phase 2 we'll convert
 // via the parent's matrix).
-//
-// Tune by trial: increase -Y to lower the plug further if needed.
-const PORT_FROM_PIVOT_OFFSET = new THREE.Vector3(0, -0.06, 0);
+const PORT_FROM_PIVOT_OFFSET = new THREE.Vector3(0.05, -0.06, 0);
 
 // Unit vector pointing FROM the plug INTO the port - i.e. perpendicular to
 // the car's left fender where the Model 3 charge port sits. The cable
