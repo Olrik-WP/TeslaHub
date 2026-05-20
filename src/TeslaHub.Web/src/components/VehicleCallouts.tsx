@@ -46,11 +46,6 @@ import { useActiveModel } from './vehicleModelConfig';
 // per-VIN one level up by <VehicleTopView3D> and supplied through
 // Context — we read it via `useActiveModel()` inside the component.
 
-// Height (in metres) of the leader line above each anchor. 0.45 keeps
-// the callout clear of the car silhouette on the standard camera pose
-// (CAMERA_TARGET y=0.6) without rocketing it off-screen on top crops.
-const CALLOUT_HEIGHT = 0.45;
-
 // distanceFactor maps DOM size to a 3D depth value (smaller = smaller
 // onscreen). With our camera ~6 m away, 8 produced ~50 px buttons that
 // dominated the model. 2.5 keeps them ~16-20 px — visible but tasteful,
@@ -89,7 +84,12 @@ interface VehicleCalloutsProps {
  * we render NOTHING — the 3D animation alone communicates the state.
  */
 export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
-  const ANCHORS = useActiveModel().actionAnchors;
+  const cfg = useActiveModel();
+  const ANCHORS = cfg.actionAnchors;
+  // Every <Callout> needs a stable "model identity" to know when to drop
+  // its cached anchor Object3D. We use the config reference itself — it
+  // changes ONLY on VIN-driven model swap, so refs survive cosmetic
+  // re-renders but reset cleanly when the GLB swaps.
   if (!vehicle || !actions) return null;
 
   const frunkOpen = !!vehicle.frunkOpen;
@@ -181,6 +181,7 @@ interface CalloutProps {
 
 function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
   const { scene } = useThree();
+  const cfg = useActiveModel();
 
   // CRITICAL: lazy resolution via useFrame instead of useMemo.
   //
@@ -200,15 +201,21 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
   const anchorRef = useRef<THREE.Object3D | null>(null);
   const missingLoggedRef = useRef(false);
 
-  // Reset the cached anchor whenever the target node name changes — this
-  // happens on VIN swap (Model 3 → Y) when the per-model config supplies
-  // a different anchor name. Without this, the ref would still point at
-  // the detached object from the previous GLB and the callout would
-  // float at a stale position.
+  // Reset the cached anchor on EITHER:
+  //   - anchorName change (rare: different node name for same callout
+  //     between models — e.g. Window_LF_Spatial vs Window_FL)
+  //   - cfg reference change (common: VIN swap to a different model)
+  //
+  // The cfg-based reset is the important one. When swapping M3 → Y, the
+  // old GLB's primitive is detached from the scene root but its INTERNAL
+  // children keep their .parent set to siblings in the orphaned tree.
+  // So the previous "if (!anchorRef.current.parent) reset" was useless —
+  // it never tripped. Hooking onto cfg here gives a bulletproof signal
+  // that "everything in the scene has just been swapped, drop caches".
   useEffect(() => {
     anchorRef.current = null;
     missingLoggedRef.current = false;
-  }, [anchorName]);
+  }, [anchorName, cfg]);
 
   const lineGeom = useMemo(() => {
     const g = new THREE.BufferGeometry();
@@ -220,16 +227,6 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
   const top = useRef(new THREE.Vector3());
 
   useFrame(({ clock }) => {
-    // Self-healing for VIN-swap with anchor-name reuse: if the cached
-    // Object3D got detached (PoppyseedModel re-mounted with the new GLB
-    // and the previous primitive was removed from the scene graph), the
-    // ref still points at a stranded object whose getWorldPosition()
-    // returns the model's local-origin (= world origin). Reset and
-    // re-resolve to grab the freshly-mounted node with the same name.
-    if (anchorRef.current && !anchorRef.current.parent) {
-      anchorRef.current = null;
-      missingLoggedRef.current = false;
-    }
     if (!anchorRef.current) {
       anchorRef.current = scene.getObjectByName(anchorName) ?? null;
       if (!anchorRef.current) {
@@ -255,7 +252,7 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
     // can read the live world position even during opening animations.
     anchor.getWorldPosition(tip.current);
     top.current.copy(tip.current);
-    top.current.y += CALLOUT_HEIGHT;
+    top.current.y += cfg.calloutHeight;
 
     groupRef.current.position.copy(top.current);
 

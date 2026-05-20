@@ -103,6 +103,7 @@ function useModelConsts() {
 
 function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
   const {
+    cfg,
     MODEL_URL,
     WHEEL_URL,
     HIDDEN_NODE_NAMES,
@@ -223,11 +224,12 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     // and windshields wrapped in Window_LF, Window_RF, Front_Screen etc.
     //
     // OUTER_GLASS_NODE matches the parent Groups in the model hierarchy.
-    // OUTER_GLASS_MAT matches Tesla's *_Skybox materials (used for any
-    // exterior glass surface that should reflect the environment).
-    const OUTER_GLASS_NODE =
-      /windows_top|window_l[fr]|window_r[fr]|front_screen|rear_screen|sunroof/i;
-    const OUTER_GLASS_MAT = /glass.*skybox|glass_lights/i;
+    // OUTER_GLASS_MAT matches Tesla's outer glass materials.
+    // Both come from `cfg.materialPatterns` because Tesla renamed nodes
+    // and materials between M3 (`Window_LF` / `*_Skybox`) and Y
+    // (`Window_FL` / `Glass_Windows`).
+    const OUTER_GLASS_NODE = cfg.materialPatterns.outerGlassNode;
+    const OUTER_GLASS_MAT = cfg.materialPatterns.outerGlassMaterial;
     const isInsideOuterGlass = (start: THREE.Object3D): boolean => {
       let cur: THREE.Object3D | null = start;
       while (cur) {
@@ -252,28 +254,28 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
 const ROOF_TINT = 0.15; // very dark (panoramic roof)
 const WINDOW_TINT = 0.45; // moderate (side windows / windshields)
 
-// Body paint color override. Tesla shipped the demo model in a bright
-// blue; we override to Pearl White Multi-Coat. Later this could be driven
-// by `vehicle.exteriorColor` from the database (Tesla codes: PPSW=white,
-// PBSB=black, PMNG=midnight silver, PPMR=red, PPSR=signature red, etc.).
-// Hex maps:
+// Body paint color override + matcher — sourced from cfg so each model
+// can use its own naming convention. Hex defaults to Pearl White
+// Multi-Coat (0xF2F2F0). Later this can be driven by
+// `vehicle.exteriorColor` (Tesla codes: PPSW=white, PBSB=black,
+// PMNG=midnight silver, PPMR=red, PPSR=signature red, etc.).
 //   Pearl White Multi-Coat : 0xF2F2F0
 //   Solid Black            : 0x0A0A0A
 //   Stealth Grey           : 0x3D3D3D
 //   Midnight Silver Metal. : 0x4E5860
 //   Deep Blue Metallic     : 0x1B2A45
 //   Ultra Red              : 0xB81616
-const BODY_PAINT_COLOR = 0xf2f2f0;
-// Matches only Tesla's *named* paint materials. We deliberately exclude:
-//  - Exterior* (Exterior / Exterior_Fade / Exterior_Perf) — those are
-//    composite shells that bake black trims (wipers, rubber seals, mirror
-//    backs, plastic handles) into a single mesh using an albedo texture.
-//    Overriding their diffuse color tints the black trims too.
-//  - Plastic_*, Rubber_*, Chrome, Black_Anodized — obviously not paint.
-// Three.js MeshStandardMaterial.color is *multiplied* with the albedo map,
-// so for "real" paint materials Tesla uses a neutral/white texture and
-// drives the actual color via `mat.color`, which makes recoloring safe.
-const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
+//
+// IMPORTANT: the per-model regex must NOT match composite "shell"
+// materials (e.g. `Exterior`, `Exterior_Fade`) that bake black trims
+// (wipers, rubber seals, mirror backs, plastic handles) into a single
+// mesh via an albedo texture — overriding their diffuse colour tints
+// the black trims too. Three.js multiplies `MeshStandardMaterial.color`
+// with the albedo map, so for "real" paint materials Tesla uses a
+// neutral texture and drives the colour via `mat.color`, which makes
+// recolouring safe — that's the only kind we want to match.
+const BODY_PAINT_COLOR = cfg.bodyPaintColor;
+const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
 
     let transparentFixed = 0;
     let roofFixed = 0;
@@ -445,7 +447,12 @@ const BODY_PAINT_MAT = /^paint(_|skybox|$)/i;
         `center=(${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`,
     );
     return scene;
-  }, [scene, wheelGltf.scene, wheelsAvailable]);
+    // cfg drives bodyPaintColor + materialPatterns (paint/glass regex)
+    // and is the source of every destructured constant above. When the
+    // VIN changes the new GLB has a different `scene` reference too,
+    // but cfg is added explicitly to make the multi-model coupling
+    // visible to readers.
+  }, [scene, wheelGltf.scene, wheelsAvailable, cfg]);
 
   // Click handler intentionally OMITTED. The 3D viewer is read-only on Home:
   // - State reflects live MQTT/TeslaMate signals via <useVehicleVisualSync>

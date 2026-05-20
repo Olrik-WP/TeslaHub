@@ -143,6 +143,35 @@ export interface VehicleModelConfig {
   /** Floor / studio-shadow mesh names. Kept visible but recoloured to
    *  pitch black via the floor shadow logic. */
   floorNodes: ReadonlyArray<string>;
+
+  // ───────────────────────────────────────────────────────────────────
+  // Material patterns — Tesla renames between car families
+  // ───────────────────────────────────────────────────────────────────
+  /** Regex matched against material names AND outer-glass node names to
+   *  decide what to recolour as body paint, what to tint as glass, and
+   *  the hex of the body paint override (white-multicoat by default). */
+  materialPatterns: {
+    /** Material names that are body paint surfaces (overridden to
+     *  `bodyPaintColor`). E.g. M3 = /^paint(_|skybox|$)/i,
+     *  Y = /^paint(_|rough|$)/i (covers `Paint` + `PaintRough`). */
+    bodyPaint: RegExp;
+    /** Parent NODE names whose descendants are outer glass (windows,
+     *  windshields, panoramic roof) — used for transparency fixes. */
+    outerGlassNode: RegExp;
+    /** Material names that are outer glass — fallback when the node
+     *  test misses but the material is unambiguously glass. */
+    outerGlassMaterial: RegExp;
+  };
+  /** RGB hex applied to every material matching `materialPatterns.bodyPaint`. */
+  bodyPaintColor: number;
+
+  // ───────────────────────────────────────────────────────────────────
+  // Callout overlay tuning
+  // ───────────────────────────────────────────────────────────────────
+  /** Vertical lift (metres) of each floating callout above its anchor.
+   *  Y is 5 cm taller than 3 so the offset needs to be slightly bigger
+   *  to clear the roof. */
+  calloutHeight: number;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -236,6 +265,17 @@ export const PoppyseedConfig: VehicleModelConfig = {
     'Plate_Viewport',
   ],
   floorNodes: ['Floor', 'Ground_Plane'],
+
+  // Tesla M3 Highland materials. `Paint_*` for body, `*_Skybox`/`Glass_Lights`
+  // for HDR-reflective glass. Body paint forced to Pearl White Multi-Coat.
+  materialPatterns: {
+    bodyPaint: /^paint(_|skybox|$)/i,
+    outerGlassNode:
+      /windows_top|window_l[fr]|window_r[fr]|front_screen|rear_screen|sunroof/i,
+    outerGlassMaterial: /glass.*skybox|glass_lights/i,
+  },
+  bodyPaintColor: 0xf2f2f0,
+  calloutHeight: 0.45,
 };
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -271,45 +311,71 @@ export const PoppyseedConfig: VehicleModelConfig = {
 // default to that. To target Premium/Long Range, swap to BayberryE80 +
 // GeminiDark or Helix2; to target Performance, swap to Bayberry + Machina2.
 
+// ALL values below verified against the real bayberry_e41.glb via
+// `node Tesla-Godot-Test/inspect-glb-nodes.mjs Exports/public/bayberry_e41.glb`.
+// Tesla renamed a LOT of nodes/materials between Highland and Juniper:
+//   - Charge port pivot   : Charge_Cap_Spatial → Charge_Port_Spatial
+//   - Window pivot        : Window_LF_Spatial → Window_FL (no _Spatial)
+//   - Brake lights        : Brake_Lights_Left/Right/Center → Brake_Light
+//   - Headlights          : Headlights → DRL_Left/Right + HighBeam_Left/Right
+//   - Reverse             : Reverse_Light → Reverse + Reverse_US
+//   - Ground projections  : *_Projections (plural) → *Projection (singular)
+//   - Floor               : Floor → GroundPlane (one word)
+//   - Glass material      : *_Skybox → Glass_Windows
+//   - Body paint          : Paint_* → Paint + PaintRough (matte trim)
+// Plus the Showroom-only `Fade` mesh that ghosts the whole car white
+// (this was the "verre blanc" mystery). Must be hidden.
+
 export const BayberryConfig: VehicleModelConfig = {
   key: 'bayberry',
   displayName: 'Model Y Juniper Propulsion',
-  modelUrl: '/models/bayberry_e41.glb',  // TODO(model-y): extract GLB
-  wheelUrl: '/models/wheel_e41.glb',     // TODO(model-y): extract GLB
+  modelUrl: '/models/bayberry_e41.glb',
+  wheelUrl: '/models/wheel_e41.glb',
 
   cameraPose: {
-    // TODO(model-y): re-frame against the Y body — taller silhouette
-    // needs slightly higher target.y and possibly a tiny zoom-out.
+    // Y body is ~5 cm taller than Highland → target Y nudged up.
+    // Same orbit distance; fine-tune by eye once the car loads.
     position: [3.85, 2.0, 4.95],
     target: [0, 0.7, 0],
     fov: 38,
   },
 
   wheelFallbackPositions: [
-    // TODO(model-y): verify wheelbase + track. E41 wears 19" wheels by
-    // default → tyre radius ≈ 0.353 m (Continental ProContact 235/55R19).
-    { id: 'LF', x: +1.4875, y: 0.353, z: -0.830, flipZ: true },
-    { id: 'RF', x: +1.4875, y: 0.353, z: +0.830, flipZ: false },
-    { id: 'LR', x: -1.3875, y: 0.353, z: -0.830, flipZ: true },
-    { id: 'RR', x: -1.3875, y: 0.353, z: +0.830, flipZ: false },
+    // Wheelbase 2890 mm (Y Juniper) → x ±1.445.
+    // Track 1647/1646 mm centre-to-centre → ±0.823 m.
+    // E41 wheel is 19" with 255/45R19 → tyre radius ≈ 0.353 m.
+    // (Calibrate Z by eye if a wheel still sits proud of the arch — the
+    //  GLB's native wheel bbox isn't necessarily centred at its origin.)
+    { id: 'LF', x: +1.495, y: 0.353, z: -0.823, flipZ: true },
+    { id: 'RF', x: +1.495, y: 0.353, z: +0.823, flipZ: false },
+    { id: 'LR', x: -1.395, y: 0.353, z: -0.823, flipZ: true },
+    { id: 'RR', x: -1.395, y: 0.353, z: +0.823, flipZ: false },
   ],
-  wheelAnchorNames: PoppyseedConfig.wheelAnchorNames, // Tesla naming reused
+  // Bayberry GLB does NOT ship Wheel_*_Spatial anchors — confirmed via
+  // inspect. Always falls back to wheelFallbackPositions above.
+  wheelAnchorNames: [],
 
   chargePort: {
-    nodeName: 'Charge_Cap_Spatial',
-    alternateNames: ['Chargeport_Spatial', 'Charge_Port_Spatial', 'ChargePort'],
-    // TODO(model-y): re-measure once bayberry.glb loads. Y port sits
-    // slightly higher (taller body) — bump Y by ~+0.05.
+    // Bayberry's pivot is named WITHOUT the abbreviated "Cap".
+    nodeName: 'Charge_Port_Spatial',
+    alternateNames: ['Charge_Cap_Spatial', 'Chargeport_Spatial', 'ChargePort'],
+    // TODO(model-y): re-measure live from the console once it loads:
+    //   scene.getObjectByName('Charge_Port_Spatial').getWorldPosition(new THREE.Vector3())
     fallbackWorld: [-1.856, 1.016, -0.78],
     pivotToSocketOffset: [-0.05, -0.06, 0],
     plugDirection: [0, 0, 1],
   },
   cableGroundAnchor: [-3.5, 0, -1.5],
 
-  actionAnchors: PoppyseedConfig.actionAnchors, // Tesla naming reused
+  actionAnchors: {
+    frunk: 'Hood_Spatial',         // identical to M3
+    trunk: 'Trunk_Spatial',        // identical to M3
+    chargePort: 'Charge_Port_Spatial',  // RENAMED on Y
+    window: 'Window_FL',           // RENAMED on Y (FL vs LF, no _Spatial)
+  },
 
   sentryCameraPositions: [
-    // TODO(model-y): re-calibrate. Y is taller, so windshield/B-pillar
+    // TODO(model-y): re-calibrate live. Y is taller, so windshield/B-pillar
     // values rise by ~+0.05, and the rear sits higher above the plate.
     [+0.40, 1.40, 0],
     [+2.05, 0.60, 0],
@@ -320,15 +386,64 @@ export const BayberryConfig: VehicleModelConfig = {
     [-2.10, 0.88, 0],
   ],
 
-  // Light & projection node names — Tesla reuses these verbatim
-  // between Highland and Juniper Godot scenes.
-  brakeLightNodes: PoppyseedConfig.brakeLightNodes,
-  reverseLightNodes: PoppyseedConfig.reverseLightNodes,
-  headlightNodes: PoppyseedConfig.headlightNodes,
-  groundProjectionNodes: PoppyseedConfig.groundProjectionNodes,
+  // Bayberry has ONE merged brake mesh `Brake_Light` (no per-side split)
+  // plus the optional CHMSL-on variant. The CHMSL-off variant is the
+  // "rest state" mesh and stays visible by default — when we boost
+  // emissive on the "On" mesh it doesn't matter that Off is also on,
+  // because Off is unlit anyway.
+  brakeLightNodes: ['Brake_Light', 'Brake_Lights_CHMSL_On'],
+  // Two reverse variants (EU + US plate-area lamp) — we keep both lit
+  // when in R; the US one will simply be hidden if we ever add a
+  // region picker.
+  reverseLightNodes: ['Reverse', 'Reverse_US'],
+  // Y front lights split left/right + low-beam (DRL) / high-beam.
+  // Boost DRLs only — high beams stay dark unless we later add a
+  // dedicated headlightHighOn signal.
+  headlightNodes: ['DRL_Left', 'DRL_Right'],
+  groundProjectionNodes: {
+    headlights: 'HeadLightProjection',
+    stoplights: 'BrakeLightProjection',
+  },
 
-  hiddenNodes: PoppyseedConfig.hiddenNodes,
-  floorNodes: PoppyseedConfig.floorNodes,
+  hiddenNodes: [
+    // *** THE WHITE-VEIL CULPRIT ***
+    // `Fade` is the ghost-overlay mesh used by Tesla's Showroom to fade
+    // the car semi-transparent when zoomed in. Visible by default in the
+    // bare GLB → covers the entire car in a pale white wash. Hide it.
+    'Fade',
+
+    // Right-hand-drive variant — French market is LHD. Cuts the second
+    // steering wheel poking through the dashboard.
+    'RHD',
+    'Doorcard_LF_RHD',
+    'Doorcard_RF_RHD',
+
+    // US-spec variants — keep EU plates + EU turn signals (amber).
+    'Plate_US',
+    'Left_Turn_Signal_US',
+    'Right_Turn_Signal_US',
+    'Reverse_US',  // also referenced in reverseLightNodes; staying hidden
+                   // means the emissive boost is a no-op for it
+  ],
+  // Y exports the studio shadow as a single word `GroundPlane`.
+  floorNodes: ['GroundPlane'],
+
+  materialPatterns: {
+    // `Paint` covers the glossy body; `PaintRough` covers the matte
+    // wheel-arch trim and underbody bits that Tesla wants tinted too.
+    bodyPaint: /^paint(_|rough|$)/i,
+    // Window pivot naming flipped (FL instead of LF). No panoramic roof
+    // node — Y's roof is part of `Static_Exterior` so we can't tint it
+    // separately; that's fine, the GLB already ships it tinted.
+    outerGlassNode: /^window_(fl|fr|rl|rr)$/i,
+    // Bayberry uses `Glass_Windows` + `Glass_Windows_Fade` for the
+    // outer glass; `Glass_Interior*` is the dashboard glass and stays
+    // untouched.
+    outerGlassMaterial: /^glass_windows/i,
+  },
+  bodyPaintColor: 0xf2f2f0,  // Pearl White Multi-Coat (same as M3 default)
+  calloutHeight: 0.50,        // +5 cm vs M3 — Y is taller, callouts need
+                              // more lift to clear the higher roofline
 };
 
 export const VEHICLE_MODELS: Record<VehicleModelKey, VehicleModelConfig> = {
