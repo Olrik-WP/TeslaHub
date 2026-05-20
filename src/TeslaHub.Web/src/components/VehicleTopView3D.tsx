@@ -439,6 +439,56 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       console.log('[Poppyseed3D] Static_Exterior DEBUG palette:', debugLegend);
     }
 
+    // ──────────────────────────────────────────────────────────────────
+    // TEMPORARY DEBUG: paint the `Interior2` material BRIGHT MAGENTA
+    // across every mesh that uses it. Hypothesis: the windshield is
+    // not modeled as a glass primitive — it's an OPENING in the body
+    // shell that reveals the Interior mesh behind. If the "grey wall"
+    // turns magenta, the hypothesis is confirmed and we'll need to
+    // either darken Interior2 or insert a custom windshield primitive.
+    // ──────────────────────────────────────────────────────────────────
+    const interiorDebugTouched: string[] = [];
+    scene.traverse((obj) => {
+      const m = obj as THREE.Mesh;
+      if (!m.isMesh) return;
+      const mats = Array.isArray(m.material) ? m.material : [m.material];
+      const replaced: THREE.Material[] = [];
+      for (const mat of mats) {
+        if (!mat) {
+          replaced.push(mat as unknown as THREE.Material);
+          continue;
+        }
+        const n = (mat as { name?: string }).name ?? '';
+        if (n === 'Interior2') {
+          const debug = new THREE.MeshStandardMaterial({
+            name: '__DBG_Interior2',
+            color: 0xff00ff,
+            emissive: 0xff00ff,
+            emissiveIntensity: 0.6,
+            metalness: 0,
+            roughness: 1,
+            transparent: false,
+            depthWrite: true,
+            side: THREE.DoubleSide,
+            envMapIntensity: 0,
+          });
+          replaced.push(debug);
+          interiorDebugTouched.push(`${pathOf(m)}`);
+        } else {
+          replaced.push(mat);
+        }
+      }
+      if (Array.isArray(m.material)) {
+        m.material = replaced;
+      } else if (replaced.length === 1 && replaced[0] !== mats[0]) {
+        m.material = replaced[0] as THREE.Material;
+      }
+    });
+    if (interiorDebugTouched.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log('[Poppyseed3D] Interior2 → MAGENTA DEBUG meshes:', interiorDebugTouched);
+    }
+
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
