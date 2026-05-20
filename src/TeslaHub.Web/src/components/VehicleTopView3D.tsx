@@ -431,26 +431,37 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           );
         })();
         if (isGltfDefaultMat) {
-          const glass = new THREE.MeshStandardMaterial({
-            name: '__TeslaHub_NoMat_Glass',
-            color: 0x111111,
+          // TEMPORARY DEBUG: paint (no mat) primitives bright fluorescent
+          // green so the user can identify them visually in a screenshot.
+          // The bbox + world-center coords also let us cross-check with
+          // the Tesla coordinate system (windshield should be Y≈1, Z≈2).
+          const debug = new THREE.MeshStandardMaterial({
+            name: '__TeslaHub_NoMat_DEBUG',
+            color: 0x00ff66,
+            emissive: 0x004422,
             metalness: 0,
-            roughness: 0.45,
-            transparent: true,
-            opacity: 0.55,
-            depthWrite: false,
+            roughness: 1,
+            transparent: false,
+            depthWrite: true,
             side: THREE.DoubleSide,
-            envMapIntensity: 0.25,
+            envMapIntensity: 0,
           });
           if (Array.isArray(mesh.material)) {
             const idx = mesh.material.indexOf(mat as THREE.Material);
-            if (idx >= 0) mesh.material[idx] = glass;
+            if (idx >= 0) mesh.material[idx] = debug;
           } else {
-            mesh.material = glass;
+            mesh.material = debug;
           }
-          mesh.renderOrder = Math.max(mesh.renderOrder ?? 0, 2);
+          mesh.updateMatrixWorld(true);
+          const bbox = new THREE.Box3().setFromObject(mesh);
+          const size = bbox.getSize(new THREE.Vector3());
+          const center = bbox.getCenter(new THREE.Vector3());
           if (glassDebug.length < 24) {
-            glassDebug.push(`NOMAT→glass ${pathOf(mesh)}`);
+            glassDebug.push(
+              `NOMAT→DEBUG ${pathOf(mesh)} ` +
+                `size=(${size.x.toFixed(2)},${size.y.toFixed(2)},${size.z.toFixed(2)}) ` +
+                `center=(${center.x.toFixed(2)},${center.y.toFixed(2)},${center.z.toFixed(2)})`,
+            );
           }
           transparentFixed++;
           continue;
