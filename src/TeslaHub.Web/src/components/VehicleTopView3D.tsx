@@ -353,197 +353,6 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       meshGlassRole.set(m, role);
     });
 
-    // ──────────────────────────────────────────────────────────────────
-    // TEMPORARY DEBUG: enumerate every sub-mesh of any node named
-    // "Static_Exterior" with its material name + bbox center. This tells
-    // us EXACTLY which primitive is the windshield and which materials
-    // are actually present (the standard pre-pass log may not surface
-    // all sub-meshes if they don't enter the glass branches).
-    // ──────────────────────────────────────────────────────────────────
-    const staticExteriorDump: string[] = [];
-    scene.traverse((obj) => {
-      let cur: THREE.Object3D | null = obj;
-      let underStatic = false;
-      while (cur) {
-        if (cur.name === 'Static_Exterior') {
-          underStatic = true;
-          break;
-        }
-        cur = cur.parent;
-      }
-      if (!underStatic) return;
-      const m = obj as THREE.Mesh;
-      if (!m.isMesh) return;
-      m.updateMatrixWorld(true);
-      const bb = new THREE.Box3().setFromObject(m);
-      const sz = bb.getSize(new THREE.Vector3());
-      const ct = bb.getCenter(new THREE.Vector3());
-      const mats = Array.isArray(m.material) ? m.material : [m.material];
-      const matInfo = mats
-        .map((mt) => (mt as { name?: string } | null)?.name ?? '(null)')
-        .join(',');
-      staticExteriorDump.push(
-        `${m.name} mats=[${matInfo}] ` +
-          `size=(${sz.x.toFixed(2)},${sz.y.toFixed(2)},${sz.z.toFixed(2)}) ` +
-          `center=(${ct.x.toFixed(2)},${ct.y.toFixed(2)},${ct.z.toFixed(2)})`,
-      );
-    });
-    if (staticExteriorDump.length > 0) {
-      // eslint-disable-next-line no-console
-      console.log('[Poppyseed3D] Static_Exterior dump:', staticExteriorDump);
-    }
-
-    // ALSO dump Fade mesh primitives (panoramic roof). Tesla may have
-    // merged the windshield into this mesh — the user reported the
-    // windshield "is white like the roof" in Godot which suggests it's
-    // part of the same primitive group.
-    const fadeDump: string[] = [];
-    scene.traverse((obj) => {
-      let cur: THREE.Object3D | null = obj;
-      let underFade = false;
-      while (cur) {
-        if (cur.name === 'Fade') {
-          underFade = true;
-          break;
-        }
-        cur = cur.parent;
-      }
-      if (!underFade) return;
-      const m = obj as THREE.Mesh;
-      if (!m.isMesh) return;
-      m.updateMatrixWorld(true);
-      const bb = new THREE.Box3().setFromObject(m);
-      const sz = bb.getSize(new THREE.Vector3());
-      const ct = bb.getCenter(new THREE.Vector3());
-      const mats = Array.isArray(m.material) ? m.material : [m.material];
-      const matInfo = mats
-        .map((mt) => (mt as { name?: string } | null)?.name ?? '(null)')
-        .join(',');
-      fadeDump.push(
-        `${m.name} mats=[${matInfo}] ` +
-          `size=(${sz.x.toFixed(2)},${sz.y.toFixed(2)},${sz.z.toFixed(2)}) ` +
-          `center=(${ct.x.toFixed(2)},${ct.y.toFixed(2)},${ct.z.toFixed(2)})`,
-      );
-    });
-    if (fadeDump.length > 0) {
-      // eslint-disable-next-line no-console
-      console.log('[Poppyseed3D] Fade dump:', fadeDump);
-    }
-
-    // ──────────────────────────────────────────────────────────────────
-    // TEMPORARY DEBUG: paint every Static_Exterior sub-mesh a distinct
-    // fluorescent colour so the user can identify which primitive holds
-    // the windshield geometry. The legend is logged so screenshots can
-    // be cross-referenced to material names.
-    // ──────────────────────────────────────────────────────────────────
-    const debugPalette = [
-      { name: 'mesh_45', hex: 0xff0000, label: 'RED    (Paint shell)' },
-      { name: 'mesh_45_1', hex: 0xff7700, label: 'ORANGE (Trim)' },
-      { name: 'mesh_45_2', hex: 0xffff00, label: 'YELLOW (Cover)' },
-      { name: 'mesh_45_3', hex: 0x00ff00, label: 'GREEN  (no mat / frit band)' },
-      { name: 'mesh_45_4', hex: 0x00ffff, label: 'CYAN   (Glass_Interior)' },
-      { name: 'mesh_45_5', hex: 0x0077ff, label: 'BLUE   (PaintRough)' },
-      { name: 'mesh_45_6', hex: 0x0000ff, label: 'INDIGO (Metal)' },
-      { name: 'mesh_45_7', hex: 0xff00ff, label: 'MAGENTA(Reflector)' },
-      { name: 'mesh_45_8', hex: 0xff0099, label: 'PINK   (Glass)' },
-      { name: 'mesh_45_9', hex: 0xffffff, label: 'WHITE  (Cover2)' },
-      { name: 'mesh_45_10', hex: 0x000000, label: 'BLACK  (DarkRed)' },
-    ];
-    const debugLegend: string[] = [];
-    for (const slot of debugPalette) {
-      const target = scene.getObjectByName(slot.name) as THREE.Mesh | undefined;
-      if (!target || !target.isMesh) {
-        debugLegend.push(`${slot.label} → NOT FOUND`);
-        continue;
-      }
-      const dbgMat = new THREE.MeshStandardMaterial({
-        name: `__DBG_${slot.name}`,
-        color: slot.hex,
-        emissive: slot.hex,
-        emissiveIntensity: 0.5,
-        metalness: 0,
-        roughness: 1,
-        transparent: false,
-        depthWrite: true,
-        side: THREE.DoubleSide,
-        envMapIntensity: 0,
-      });
-      target.material = dbgMat;
-      debugLegend.push(slot.label);
-    }
-    if (debugLegend.length > 0) {
-      // eslint-disable-next-line no-console
-      console.log('[Poppyseed3D] Static_Exterior DEBUG palette:', debugLegend);
-    }
-
-    // ──────────────────────────────────────────────────────────────────
-    // TEMPORARY DEBUG: paint several candidate "hidden" materials with
-    // distinct fluorescent colours to find the actual windshield.
-    //   Interior2 → MAGENTA   (cabin upholstery / dashboard surface)
-    //   Wing      → CYAN      (suspected windshield — only near-white
-    //                           OPAQUE material in the whole GLB)
-    //   Pillar    → ORANGE    (A/B/C pillar plastic)
-    //   Cover     → DEEP BLUE (when on Interior mesh, NOT Static_Ext)
-    // We dump the full mesh→material path for each replacement so we
-    // can cross-reference the screenshot to a specific primitive.
-    // ──────────────────────────────────────────────────────────────────
-    const interiorDebugTouched: string[] = [];
-    const mkDebug = (label: string, hex: number, emissive: number = 0.6) =>
-      new THREE.MeshStandardMaterial({
-        name: `__DBG_${label}`,
-        color: hex,
-        emissive: hex,
-        emissiveIntensity: emissive,
-        metalness: 0,
-        roughness: 1,
-        transparent: false,
-        depthWrite: true,
-        side: THREE.DoubleSide,
-        envMapIntensity: 0,
-      });
-    const matDebugMap = new Map<string, { hex: number; label: string }>([
-      ['Interior2', { hex: 0xff00ff, label: 'MAGENTA(Interior2)' }],
-      ['Wing', { hex: 0x00ffff, label: 'CYAN   (Wing)' }],
-      ['Pillar', { hex: 0xff8800, label: 'ORANGE (Pillar)' }],
-      // Fade mesh = Tesla's panoramic roof. Several primitives are OPAQUE
-      // with light colours (Glass_Windows_Fade=0.80 grey, Interior_Fade=
-      // 0.05 dark, etc.). If the windshield is modeled as part of Fade
-      // (the user said "blanc comme le toit"), one of these is it.
-      ['Glass_Windows_Fade', { hex: 0xffff00, label: 'BRIGHT YELLOW(Glass_Windows_Fade)' }],
-      ['Interior_Fade', { hex: 0xff44aa, label: 'HOTPINK(Interior_Fade)' }],
-      ['Interior_Fade2', { hex: 0x44ff88, label: 'LIME  (Interior_Fade2)' }],
-      ['Cover_Fade', { hex: 0xaa44ff, label: 'PURPLE(Cover_Fade)' }],
-      ['Trim_Fade', { hex: 0xff4488, label: 'CORAL (Trim_Fade)' }],
-    ]);
-    scene.traverse((obj) => {
-      const m = obj as THREE.Mesh;
-      if (!m.isMesh) return;
-      const mats = Array.isArray(m.material) ? m.material : [m.material];
-      const replaced: THREE.Material[] = [];
-      for (const mat of mats) {
-        if (!mat) {
-          replaced.push(mat as unknown as THREE.Material);
-          continue;
-        }
-        const n = (mat as { name?: string }).name ?? '';
-        const dbgInfo = matDebugMap.get(n);
-        if (dbgInfo) {
-          replaced.push(mkDebug(n, dbgInfo.hex));
-          interiorDebugTouched.push(`${dbgInfo.label} → ${pathOf(m)}`);
-        } else {
-          replaced.push(mat);
-        }
-      }
-      if (Array.isArray(m.material)) {
-        m.material = replaced;
-      } else if (replaced.length === 1 && replaced[0] !== mats[0]) {
-        m.material = replaced[0] as THREE.Material;
-      }
-    });
-    if (interiorDebugTouched.length > 0) {
-      // eslint-disable-next-line no-console
-      console.log('[Poppyseed3D] Hidden materials DEBUG palette:', interiorDebugTouched);
-    }
 
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
@@ -623,37 +432,26 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           );
         })();
         if (isGltfDefaultMat) {
-          // TEMPORARY DEBUG: paint (no mat) primitives bright fluorescent
-          // green so the user can identify them visually in a screenshot.
-          // The bbox + world-center coords also let us cross-check with
-          // the Tesla coordinate system (windshield should be Y≈1, Z≈2).
-          const debug = new THREE.MeshStandardMaterial({
-            name: '__TeslaHub_NoMat_DEBUG',
-            color: 0x00ff66,
-            emissive: 0x004422,
+          const glass = new THREE.MeshStandardMaterial({
+            name: '__TeslaHub_NoMat_Glass',
+            color: 0x111111,
             metalness: 0,
-            roughness: 1,
-            transparent: false,
-            depthWrite: true,
+            roughness: 0.45,
+            transparent: true,
+            opacity: 0.55,
+            depthWrite: false,
             side: THREE.DoubleSide,
-            envMapIntensity: 0,
+            envMapIntensity: 0.25,
           });
           if (Array.isArray(mesh.material)) {
             const idx = mesh.material.indexOf(mat as THREE.Material);
-            if (idx >= 0) mesh.material[idx] = debug;
+            if (idx >= 0) mesh.material[idx] = glass;
           } else {
-            mesh.material = debug;
+            mesh.material = glass;
           }
-          mesh.updateMatrixWorld(true);
-          const bbox = new THREE.Box3().setFromObject(mesh);
-          const size = bbox.getSize(new THREE.Vector3());
-          const center = bbox.getCenter(new THREE.Vector3());
-          if (glassDebug.length < 24) {
-            glassDebug.push(
-              `NOMAT→DEBUG ${pathOf(mesh)} ` +
-                `size=(${size.x.toFixed(2)},${size.y.toFixed(2)},${size.z.toFixed(2)}) ` +
-                `center=(${center.x.toFixed(2)},${center.y.toFixed(2)},${center.z.toFixed(2)})`,
-            );
+          mesh.renderOrder = Math.max(mesh.renderOrder ?? 0, 2);
+          if (glassDebug.length < 48) {
+            glassDebug.push(`NOMAT→glass ${pathOf(mesh)}`);
           }
           transparentFixed++;
           continue;
@@ -671,9 +469,32 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           paintDebug.push(`${pathOf(mesh)} mat="${matName}"`);
         }
 
-        const matIsOuter = isOuter || OUTER_GLASS_MAT.test(matName);
+        // INNER FIRST: any material whose name starts with
+        // `Glass_Interior` is conceptually an inner cabin-side pane,
+        // regardless of whether its mesh sits under a `Fade` node that
+        // would otherwise mark it as outer. This is essential for the
+        // Bayberry windshield: Tesla pairs `Glass_Windows_Fade` (outer)
+        // with `Glass_Interior_Fade` (inner — must get the
+        // kill-mirror, low-opacity treatment so the cabin is visible
+        // through the layered glass instead of a reflective grey wall).
+        const isInnerMat = INNER_GLASS_MAT.test(matName);
+        const matIsOuter = !isInnerMat && (isOuter || OUTER_GLASS_MAT.test(matName));
         if (matIsOuter) {
           const std = mat as THREE.MeshStandardMaterial;
+
+          // Tesla's `Glass_Windows_Fade` (the windshield + rear hatch
+          // glass merged onto the Fade mesh) is marked alphaMode=OPAQUE
+          // in the source GLB even though it's meant to be tinted
+          // automotive glass — see audit-glb-materials.mjs output.
+          // Force it to BLEND mode here so it renders translucent
+          // exactly like the trunk's `Glass` material (alpha=0.16 BLEND
+          // by default). Without this override the windshield reads as
+          // a dark grey "wall" — the original user-reported bug.
+          if (/^glass_windows_fade$/i.test(matName)) {
+            std.transparent = true;
+            std.depthWrite = false;
+            std.opacity = 0.55;
+          }
 
           // CRUCIAL: Tesla marks many opaque materials as
           // `alphaMode=BLEND` with alpha=1.0 in the source GLTF (see
