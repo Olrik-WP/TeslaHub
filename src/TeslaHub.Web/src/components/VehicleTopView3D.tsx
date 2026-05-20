@@ -47,7 +47,7 @@ const CHARGE_PORT_FALLBACK_WORLD = new THREE.Vector3(-1.856, 0.966, -0.74);
 // All in WORLD space (good enough as long as the car is at its default
 // rotation; once we wire the car's quaternion in Phase 2 we'll convert
 // via the parent's matrix).
-const PORT_FROM_PIVOT_OFFSET = new THREE.Vector3(0.05, -0.06, 0);
+const PORT_FROM_PIVOT_OFFSET = new THREE.Vector3(-0.05, -0.06, 0);
 
 // Unit vector pointing FROM the plug INTO the port - i.e. perpendicular to
 // the car's left fender where the Model 3 charge port sits. The cable
