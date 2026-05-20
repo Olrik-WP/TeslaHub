@@ -135,13 +135,17 @@ function buildCableCurve(
   if (horizontalToEnd.lengthSq() < 1e-6) horizontalToEnd.set(1, 0, 0);
   horizontalToEnd.normalize();
 
-  // p1 sits far out horizontally and slightly low so the curve dips towards
-  // the ground at first instead of bowing up immediately. Setting Y below
-  // the floor pulls the curve down to skim the floor.
+  // p1 sits FAR out horizontally (60% of the way) and well below ground
+  // (-25cm). This pulls the curve down hard so the first half of the cable
+  // actually drapes on the floor, mimicking the Tesla app vehicle view
+  // where the cable looks "thrown on the ground" before rising to the port.
+  // The Y < 0 trick works because the curve is a Bezier - it doesn't have
+  // to pass through p1, just be pulled toward it. The actual minimum Y of
+  // the curve stays around 0 (floor level).
   const p1 = start
     .clone()
-    .addScaledVector(horizontalToEnd, totalDist * 0.45)
-    .add(new THREE.Vector3(0, -0.05, 0));
+    .addScaledVector(horizontalToEnd, totalDist * 0.60)
+    .add(new THREE.Vector3(0, -0.25, 0));
 
   // p2 is pushed AWAY from the port along the plug direction so that the
   // curve's final tangent aligns with plugDir. This is what makes the cable
@@ -158,6 +162,12 @@ function buildCableCurve(
 // This way the geometry is continuous (no gap between cable and plug),
 // and the plug doesn't penetrate the car body.
 const HANDLE_LENGTH = 0.21;
+
+// The handle mesh's actual back face isn't exactly at its bbox extreme
+// (Tesla left a few mm of empty space). To hide the resulting micro-gap
+// between the tube end and the plug back, we extend the cable 2cm INTO
+// the handle so they always visually overlap.
+const CABLE_HANDLE_OVERLAP = 0.02;
 
 export function ChargingCable({
   startWorld,
@@ -178,11 +188,10 @@ export function ChargingCable({
   // the port", never tilted along the cable's approach angle.
   const plugDir = useMemo(() => plugDirection.clone().normalize(), [plugDirection]);
 
-  // The cable physically ends at the back of the handle (= port minus full
-  // handle length along the plug axis), so the rigid handle covers the
-  // last 21cm and the plug tip touches the port socket.
+  // The cable physically ends 2cm INSIDE the handle so there's a small
+  // overlap that hides any micro-gap due to the mesh's back-face position.
   const cableEndWorld = useMemo(
-    () => endWorld.clone().addScaledVector(plugDir, -HANDLE_LENGTH),
+    () => endWorld.clone().addScaledVector(plugDir, -(HANDLE_LENGTH - CABLE_HANDLE_OVERLAP)),
     [endWorld, plugDir],
   );
 
