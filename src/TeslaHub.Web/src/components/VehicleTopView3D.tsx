@@ -440,14 +440,35 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     }
 
     // ──────────────────────────────────────────────────────────────────
-    // TEMPORARY DEBUG: paint the `Interior2` material BRIGHT MAGENTA
-    // across every mesh that uses it. Hypothesis: the windshield is
-    // not modeled as a glass primitive — it's an OPENING in the body
-    // shell that reveals the Interior mesh behind. If the "grey wall"
-    // turns magenta, the hypothesis is confirmed and we'll need to
-    // either darken Interior2 or insert a custom windshield primitive.
+    // TEMPORARY DEBUG: paint several candidate "hidden" materials with
+    // distinct fluorescent colours to find the actual windshield.
+    //   Interior2 → MAGENTA   (cabin upholstery / dashboard surface)
+    //   Wing      → CYAN      (suspected windshield — only near-white
+    //                           OPAQUE material in the whole GLB)
+    //   Pillar    → ORANGE    (A/B/C pillar plastic)
+    //   Cover     → DEEP BLUE (when on Interior mesh, NOT Static_Ext)
+    // We dump the full mesh→material path for each replacement so we
+    // can cross-reference the screenshot to a specific primitive.
     // ──────────────────────────────────────────────────────────────────
     const interiorDebugTouched: string[] = [];
+    const mkDebug = (label: string, hex: number, emissive: number = 0.6) =>
+      new THREE.MeshStandardMaterial({
+        name: `__DBG_${label}`,
+        color: hex,
+        emissive: hex,
+        emissiveIntensity: emissive,
+        metalness: 0,
+        roughness: 1,
+        transparent: false,
+        depthWrite: true,
+        side: THREE.DoubleSide,
+        envMapIntensity: 0,
+      });
+    const matDebugMap = new Map<string, { hex: number; label: string }>([
+      ['Interior2', { hex: 0xff00ff, label: 'MAGENTA(Interior2)' }],
+      ['Wing', { hex: 0x00ffff, label: 'CYAN   (Wing)' }],
+      ['Pillar', { hex: 0xff8800, label: 'ORANGE (Pillar)' }],
+    ]);
     scene.traverse((obj) => {
       const m = obj as THREE.Mesh;
       if (!m.isMesh) return;
@@ -459,21 +480,10 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           continue;
         }
         const n = (mat as { name?: string }).name ?? '';
-        if (n === 'Interior2') {
-          const debug = new THREE.MeshStandardMaterial({
-            name: '__DBG_Interior2',
-            color: 0xff00ff,
-            emissive: 0xff00ff,
-            emissiveIntensity: 0.6,
-            metalness: 0,
-            roughness: 1,
-            transparent: false,
-            depthWrite: true,
-            side: THREE.DoubleSide,
-            envMapIntensity: 0,
-          });
-          replaced.push(debug);
-          interiorDebugTouched.push(`${pathOf(m)}`);
+        const dbgInfo = matDebugMap.get(n);
+        if (dbgInfo) {
+          replaced.push(mkDebug(n, dbgInfo.hex));
+          interiorDebugTouched.push(`${dbgInfo.label} → ${pathOf(m)}`);
         } else {
           replaced.push(mat);
         }
@@ -486,7 +496,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     });
     if (interiorDebugTouched.length > 0) {
       // eslint-disable-next-line no-console
-      console.log('[Poppyseed3D] Interior2 → MAGENTA DEBUG meshes:', interiorDebugTouched);
+      console.log('[Poppyseed3D] Hidden materials DEBUG palette:', interiorDebugTouched);
     }
 
     scene.traverse((obj) => {
