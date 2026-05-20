@@ -104,20 +104,36 @@ const CABLE_FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-function buildCableCurve(start: THREE.Vector3, end: THREE.Vector3): THREE.CatmullRomCurve3 {
-  // Bezier-ish 4-point spline: rises straight up from the floor, then curves
-  // gracefully over to the charge port. The two intermediate control points
-  // are placed at 35% / 70% of the way to give the typical Tesla "S" shape
-  // visible in the in-app vehicle view.
+function buildCableCurve(start: THREE.Vector3, end: THREE.Vector3): THREE.CubicBezierCurve3 {
+  // CubicBezier control points are TANGENT handles, not points the curve
+  // passes through. We want:
+  //   * Start tangent pointing straight UP   (cable rises from the floor)
+  //   * End tangent pointing AWAY from the car along the horizontal axis
+  //     between port and start (cable enters the port horizontally instead
+  //     of dropping in from above).
+  //
+  // This avoids the "loop over the roof" shape that a CatmullRomCurve3
+  // produces when both endpoints are at similar height.
   const totalDist = start.distanceTo(end);
-  const liftHeight = Math.max(0.35, totalDist * 0.45);
+  const liftHeight = Math.max(0.30, totalDist * 0.40);
+  const horizontalHandle = Math.max(0.25, totalDist * 0.35);
+
+  // Direction "from car back to ground anchor", projected to the horizontal
+  // plane. Used to push the end handle out so the cable arrives flat.
+  const fromPortToStart = new THREE.Vector3(start.x - end.x, 0, start.z - end.z);
+  if (fromPortToStart.lengthSq() < 1e-6) {
+    // Degenerate case (start directly below end): pick an arbitrary X
+    // direction so the handle isn't a zero vector.
+    fromPortToStart.set(-1, 0, 0);
+  }
+  fromPortToStart.normalize();
 
   const p0 = start.clone();
   const p1 = start.clone().add(new THREE.Vector3(0, liftHeight, 0));
-  const p2 = end.clone().add(new THREE.Vector3(0, liftHeight * 0.5, 0));
+  const p2 = end.clone().add(fromPortToStart.multiplyScalar(horizontalHandle));
   const p3 = end.clone();
 
-  return new THREE.CatmullRomCurve3([p0, p1, p2, p3], false, 'catmullrom', 0.5);
+  return new THREE.CubicBezierCurve3(p0, p1, p2, p3);
 }
 
 export function ChargingCable({

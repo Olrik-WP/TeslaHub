@@ -527,17 +527,42 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
   const chargePortOpenness = targets.charge_port ?? 0;
 
   const endWorld = useMemo(() => {
-    const anchor = scene.getObjectByName(CHARGE_PORT_NODE);
+    // Try several known names in order. Different Godot exports keep
+    // different parent pivots intact.
+    const candidates = [
+      CHARGE_PORT_NODE,            // 'Charge_Cap_Spatial' - opening pivot
+      'Chargeport_Spatial',         // alt naming in some exports
+      'Charge_Port_Spatial',        // alt naming variant
+      'ChargePort',                 // bare mesh fallback
+    ];
+    let anchor: THREE.Object3D | undefined;
+    let usedName = '';
+    for (const name of candidates) {
+      const obj = scene.getObjectByName(name);
+      if (obj) {
+        anchor = obj;
+        usedName = name;
+        break;
+      }
+    }
     if (!anchor) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[Poppyseed3D] charge port anchor "${CHARGE_PORT_NODE}" not found - ` +
+        `[Poppyseed3D] charge port anchor not found (tried: ${candidates.join(', ')}) - ` +
           'falling back to hardcoded Model 3 Highland world position.',
       );
       return CHARGE_PORT_FALLBACK_WORLD.clone();
     }
+    // CRITICAL: matrixWorld is stale until the first render. Force-update
+    // up the parent chain BEFORE reading getWorldPosition, otherwise we
+    // get the local origin (0,0,0) of an un-rendered scene.
+    anchor.updateWorldMatrix(true, false);
     const w = new THREE.Vector3();
     anchor.getWorldPosition(w);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[Poppyseed3D] charge port anchor: "${usedName}" → world=(${w.x.toFixed(3)}, ${w.y.toFixed(3)}, ${w.z.toFixed(3)})`,
+    );
     return w;
     // chargePortOpenness intentionally re-runs the effect when the trapdoor
     // animates open/closed - the anchor world position changes with it.
@@ -545,13 +570,33 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
 
   if (mode === 'off') return null;
 
+  // Enable visual debug helpers by appending ?debug=cable to the URL.
+  // Renders two small markers: green=ground start, red=charge port end.
+  const debugCable =
+    typeof window !== 'undefined' && window.location.search.includes('debug=cable');
+
   return (
-    <ChargingCable
-      startWorld={CABLE_GROUND_WORLD}
-      endWorld={endWorld}
-      charging={mode === 'charging'}
-      handleUrl={handleAvailable ? HANDLE_URL : undefined}
-    />
+    <>
+      <ChargingCable
+        startWorld={CABLE_GROUND_WORLD}
+        endWorld={endWorld}
+        charging={mode === 'charging'}
+        handleUrl={handleAvailable ? HANDLE_URL : undefined}
+      />
+      {debugCable && (
+        <>
+          <mesh position={CABLE_GROUND_WORLD}>
+            <boxGeometry args={[0.1, 0.1, 0.1]} />
+            <meshBasicMaterial color="#22c55e" />
+          </mesh>
+          <mesh position={endWorld}>
+            <boxGeometry args={[0.1, 0.1, 0.1]} />
+            <meshBasicMaterial color="#ef4444" />
+          </mesh>
+          <axesHelper args={[2]} />
+        </>
+      )}
+    </>
   );
 }
 
@@ -713,8 +758,17 @@ function OpeningsOverlay({
   cableMode,
   onCycleCable,
 }: OpeningsOverlayProps) {
-  const { toggle, setAll, targets } = useOpeningsContext();
+  const { toggle, set, setAll, targets } = useOpeningsContext();
   const [expanded, setExpanded] = useState(false);
+
+  // Cycling the cable also opens/closes the charge port trapdoor, mirroring
+  // the Tesla mobile app: plugging in opens the port, unplugging closes it.
+  const handleCableClick = useCallback(() => {
+    const next: CableMode =
+      cableMode === 'off' ? 'plugged' : cableMode === 'plugged' ? 'charging' : 'off';
+    set('charge_port', next === 'off' ? 0 : 1);
+    onCycleCable();
+  }, [cableMode, onCycleCable, set]);
 
   const openCount = useMemo(
     () => Object.values(targets).filter((v) => v === 1).length,
@@ -791,7 +845,7 @@ function OpeningsOverlay({
           glyph="↻"
         />
         <RailButton
-          onClick={onCycleCable}
+          onClick={handleCableClick}
           active={cableMode !== 'off'}
           accent={cableMode === 'charging' ? 'green' : undefined}
           title={CABLE_LABELS[cableMode]}
