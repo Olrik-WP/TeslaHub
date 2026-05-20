@@ -25,44 +25,28 @@ import {
   useControlMutation,
   type OptimisticPatch,
 } from '../hooks/useVehicleControl';
+import { ACTIVE_VEHICLE_MODEL } from './vehicleModelConfig';
 
-const MODEL_URL = '/models/poppyseed.glb';
-const WHEEL_URL = '/models/wheel_d50_highland.glb';
+// All car-specific values (URLs, node names, camera pose, charge port
+// geometry, wheel positions, scene cleanup) live in vehicleModelConfig.ts
+// — see ACTIVE_VEHICLE_MODEL. The constants below are LOCAL CACHES of
+// those values to keep call sites readable without re-piping the config
+// through every helper. To support a new car, edit vehicleModelConfig.ts;
+// this file does NOT need to change.
+const CFG = ACTIVE_VEHICLE_MODEL;
+
+const MODEL_URL = CFG.modelUrl;
+const WHEEL_URL = CFG.wheelUrl;
+// Charging handle is universal across Tesla models — same physical part
+// regardless of which car it's plugged into.
 const HANDLE_URL = '/models/charger_handle.glb';
 
-// Charge port pivot inside the Poppyseed scene. Same node used by the
-// `charge_port` opening animation (see vehicleOpenings.ts).
-const CHARGE_PORT_NODE = 'Charge_Cap_Spatial';
-
-// When the live cable is mounted but we can't find the charge port anchor,
-// we fall back to this hardcoded world position — measured at runtime on
-// the Poppyseed Model 3 Highland by reading Charge_Cap_Spatial.world:
-//     (-1.856, 0.966, -0.740) → rear-left fender, ~96cm high.
-const CHARGE_PORT_FALLBACK_WORLD = new THREE.Vector3(-1.856, 0.966, -0.74);
-
-// `Charge_Cap_Spatial` is the trapdoor's REAR hinge pivot, NOT the plug
-// socket itself. On Poppyseed the pivot sits at the top-rear corner of
-// the trapdoor, while the actual connector socket is centered inside the
-// trapdoor. The offset is therefore (forward, down, body-surface):
-//   * +X  : push forward (towards the car's front, away from rear hinge)
-//   * -Y  : push down (the pivot is above the socket)
-//   *  0Z : stay on the fender plane (don't sink into body)
-//
-// All in WORLD space (good enough as long as the car is at its default
-// rotation; once we wire the car's quaternion in Phase 2 we'll convert
-// via the parent's matrix).
-const PORT_FROM_PIVOT_OFFSET = new THREE.Vector3(-0.05, -0.06, 0);
-
-// Unit vector pointing FROM the plug INTO the port - i.e. perpendicular to
-// the car's left fender where the Model 3 charge port sits. The cable
-// approach can come from any angle, but the rigid plug ALWAYS enters along
-// this axis. In Phase 2 this will be per-model (Cybertruck is different).
-const POPPYSEED_PLUG_DIRECTION = new THREE.Vector3(0, 0, 1);
-
-// Cable ground anchor: ~3.5m behind and 1.5m to the left of the car center,
-// so the cable has enough length to drape on the floor before rising to the
-// port (Tesla in-app view shows a cable that touches the floor first).
-const CABLE_GROUND_WORLD = new THREE.Vector3(-3.5, 0, -1.5);
+const CHARGE_PORT_NODE = CFG.chargePort.nodeName;
+const CHARGE_PORT_ALT_NAMES = CFG.chargePort.alternateNames;
+const CHARGE_PORT_FALLBACK_WORLD = new THREE.Vector3(...CFG.chargePort.fallbackWorld);
+const PORT_FROM_PIVOT_OFFSET = new THREE.Vector3(...CFG.chargePort.pivotToSocketOffset);
+const POPPYSEED_PLUG_DIRECTION = new THREE.Vector3(...CFG.chargePort.plugDirection);
+const CABLE_GROUND_WORLD = new THREE.Vector3(...CFG.cableGroundAnchor);
 
 // Nodes inside the Tesla model that visually pollute a "studio" view because
 // they are designed for the original Tesla mobile UI context (puddle lights
@@ -73,55 +57,32 @@ const CABLE_GROUND_WORLD = new THREE.Vector3(-3.5, 0, -1.5);
 // Tesla bakes the studio shadow into a horizontal quad named "Floor" in Godot
 // (also exported as "Ground_Plane" in some GLB builds). We keep it visible
 // and tune its material — do NOT hide it or replace with drei's ContactShadows.
-const FLOOR_NODE_NAMES = new Set(['Floor', 'Ground_Plane']);
+const FLOOR_NODE_NAMES = new Set(CFG.floorNodes);
 
 // Permanently HIDDEN nodes — DETACHED from the scene graph (removed from
 // the parent's children list). These should never be visible regardless
 // of vehicle state, so we strip them entirely to keep the bounding box
 // tight and prevent any race condition that could re-show them.
-const HIDDEN_NODE_NAMES = new Set([
-  // Tesla CSG overlays — flat planes on the windshields/dashboard used to
-  // visualise the defrost and the cabin airflow. They flicker against the
-  // glass roof when transparent and serve no purpose in a static view.
-  'Defrost_Front',
-  'Defrost_Rear',
-  'Airflow_left',
-  'Airflow_right',
-  // Plate viewport: a Godot Viewport that bakes a text label onto a quad
-  // (license plate text). Without the live Godot runtime it renders as a
-  // black square stuck on the rear bumper.
-  'Plate_Viewport',
-]);
+const HIDDEN_NODE_NAMES = new Set(CFG.hiddenNodes);
 
 // CONDITIONALLY hidden nodes — kept in the scene graph but `visible=false`
 // by default. Their visibility is toggled at runtime by VehicleLightEffects
-// (lock flash) or by the parking-lights effect when shiftState changes.
-// We keep them in the graph so getObjectByName() can find them later.
+// (lock flash, ground projections in drive mode). We keep them in the
+// graph so getObjectByName() can find them later.
 const CONDITIONALLY_HIDDEN_NODE_NAMES = new Set([
-  // Light cones projected on the floor (designed for top-down Tesla UI).
-  // Flashed during lock/unlock events; off the rest of the time.
-  'Headlights_Projections',
-  'Stoplights_Projections',
+  CFG.groundProjectionNodes.headlights,
+  CFG.groundProjectionNodes.stoplights,
 ]);
 
-// Wheel anchor names from Poppyseed.tscn under ROOT/Spatials. Godot's
-// PackedSceneGLTF exporter strips empty Spatial nodes, so these usually
-// DON'T survive in the .glb. We keep the lookup as a best-effort first
-// pass — if any survived (custom export, edited mesh), they win.
-const WHEEL_ANCHORS = [
-  { name: 'Wheel_LF_Spatial', mirror: false },
-  { name: 'Wheel_LR_Spatial', mirror: false },
-  { name: 'Wheel_RF_Spatial', mirror: true },
-  { name: 'Wheel_RR_Spatial', mirror: true },
-] as const;
+// Wheel anchor empties. Godot's PackedSceneGLTF exporter strips empty
+// Spatial nodes, so these usually DON'T survive in the .glb. We keep the
+// lookup as a best-effort first pass — if any survived (custom export,
+// edited mesh), they win.
+const WHEEL_ANCHORS = CFG.wheelAnchorNames;
 
-// Fallback positions used when the empty anchors above were stripped at
-// export. Coordinates derived from real Tesla Model 3 Highland (Poppyseed)
-// dimensions:
-//   Wheelbase 2875 mm → x ±1.4375 with a +50 mm forward bias for the GLB
-//   Track 1580 mm (center-to-center) → ±0.79 m + tire outer edge ≈ ±0.815
-//   18" wheel radius 343 mm → wheel center y = 0.343 m
-//   Axes: X = longitudinal (+ forward), Y = up, Z = lateral (+ right)
+// Fallback wheel positions used when the empty anchors above were stripped
+// at export. Per-model (wheelbase, track, tyre radius all vary). See the
+// vehicleModelConfig comments for the dimensional reasoning.
 //
 // The Godot-exported wheel ships with its Photon cover face on +Z and the
 // open hub on -Z. So wheels on the right side of the vehicle (+Z) keep
@@ -131,12 +92,7 @@ const WHEEL_ANCHORS = [
 // has internal transforms that silently cancel any parent rotation,
 // while a negative scale always reflects the geometry. Three.js auto-
 // reverses face winding for negative scales so normals stay correct.
-const WHEEL_FALLBACK_POSITIONS = [
-  { id: 'LF', x: +1.4875, y: 0.343, z: -0.815, flipZ: true },
-  { id: 'RF', x: +1.4875, y: 0.343, z: +0.815, flipZ: false },
-  { id: 'LR', x: -1.3875, y: 0.343, z: -0.815, flipZ: true },
-  { id: 'RR', x: -1.3875, y: 0.343, z: +0.815, flipZ: false },
-] as const;
+const WHEEL_FALLBACK_POSITIONS = CFG.wheelFallbackPositions;
 
 // ---- Camera positioning ---------------------------------------------------
 // We don't use drei's <Bounds> auto-fit because Three.js's automatic bbox
@@ -144,14 +100,10 @@ const WHEEL_FALLBACK_POSITIONS = [
 // handles, etc.) and reports the scene as 6.58 × 1.45 × 4.21 m — way larger
 // than the real 4.72 × 1.44 × 1.85 m of a Tesla Model 3 Highland. That
 // makes <Bounds> zoom out 40 % too far. Instead we hard-code a camera pose
-// calibrated to the real car size and let OrbitControls handle user zoom.
-//
-// Frame composition: 3/4 front view, slight elevation, car centered.
-// Distance ~5.5 m gives a tight crop with the wheels touching the canvas
-// bottom edge and a small headroom for the roof.
-const CAMERA_POSITION: [number, number, number] = [3.85, 1.9, 4.95];
-const CAMERA_TARGET: [number, number, number] = [0, 0.6, 0]; // car center
-const CAMERA_FOV = 38;
+// calibrated per-model and let OrbitControls handle user zoom.
+const CAMERA_POSITION: [number, number, number] = CFG.cameraPose.position;
+const CAMERA_TARGET: [number, number, number] = CFG.cameraPose.target;
+const CAMERA_FOV = CFG.cameraPose.fov;
 
 // ---- Wheel polish ---------------------------------------------------------
 // The D50 base wheel set on the Highland is actually a BLACK PLASTIC
@@ -563,14 +515,10 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
   const chargePortOpenness = targets.charge_port ?? 0;
 
   const endWorld = useMemo(() => {
-    // Try several known names in order. Different Godot exports keep
-    // different parent pivots intact.
-    const candidates = [
-      CHARGE_PORT_NODE,            // 'Charge_Cap_Spatial' - opening pivot
-      'Chargeport_Spatial',         // alt naming in some exports
-      'Charge_Port_Spatial',        // alt naming variant
-      'ChargePort',                 // bare mesh fallback
-    ];
+    // Try the main name then several known alternates in order.
+    // Different Godot exports keep different parent pivots intact.
+    // See vehicleModelConfig.ts for the per-model overrides.
+    const candidates = [CHARGE_PORT_NODE, ...CHARGE_PORT_ALT_NAMES];
     let anchor: THREE.Object3D | undefined;
     let usedName = '';
     for (const name of candidates) {

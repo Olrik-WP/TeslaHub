@@ -39,6 +39,12 @@ import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { VehicleStatus } from '../api/queries';
+import { ACTIVE_VEHICLE_MODEL } from './vehicleModelConfig';
+
+// Anchor names live in the model config so a future Y/S/X swap is just
+// a config update (vehicleModelConfig.ts). Most Tesla cars reuse the
+// same names but having the indirection costs nothing.
+const ANCHORS = ACTIVE_VEHICLE_MODEL.actionAnchors;
 
 // Height (in metres) of the leader line above each anchor. 0.45 keeps
 // the callout clear of the car silhouette on the standard camera pose
@@ -100,7 +106,7 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           and the user pops it shut by hand. */}
       {!frunkOpen && (
         <Callout
-          anchorName="Hood_Spatial"
+          anchorName={ANCHORS.frunk}
           label="Ouvrir frunk"
           icon={<PlusIcon />}
           variant="closed"
@@ -112,7 +118,7 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           Motorised actuator both ways. Single endpoint `actuate_trunk`
           toggles it. */}
       <Callout
-        anchorName="Trunk_Spatial"
+        anchorName={ANCHORS.trunk}
         label={trunkOpen ? 'Fermer coffre' : 'Ouvrir coffre'}
         icon={trunkOpen ? <XIcon /> : <PlusIcon />}
         variant={trunkOpen ? 'open' : 'closed'}
@@ -128,7 +134,7 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           pluggedIn so each click has unambiguous semantics. */}
       {pluggedIn ? (
         <Callout
-          anchorName="Charge_Cap_Spatial"
+          anchorName={ANCHORS.chargePort}
           label="Déverrouiller câble"
           icon={<UnlockIcon />}
           variant="plug"
@@ -136,7 +142,7 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
         />
       ) : (
         <Callout
-          anchorName="Charge_Cap_Spatial"
+          anchorName={ANCHORS.chargePort}
           label={portOpen ? 'Fermer trappe' : 'Ouvrir trappe'}
           icon={portOpen ? <XIcon /> : <PlusIcon />}
           variant={portOpen ? 'open' : 'closed'}
@@ -148,7 +154,7 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           TeslaMate exposes only an aggregate boolean. The `vent` Tesla
           command cracks all four 1cm and `close` closes them all. */}
       <Callout
-        anchorName="Window_LF_Spatial"
+        anchorName={ANCHORS.window}
         label={windowsOpen ? 'Fermer vitres' : 'Aérer vitres'}
         icon={windowsOpen ? <XIcon /> : <VentIcon />}
         variant={windowsOpen ? 'open' : 'closed'}

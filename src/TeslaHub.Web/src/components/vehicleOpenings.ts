@@ -10,6 +10,23 @@
  * EXACT copies of the values in the .tscn — see the source comments next
  * to each definition for the corresponding `[sub_resource type="Animation"]`.
  *
+ * MULTI-MODEL NOTE:
+ *   These keyframes are Poppyseed-specific. Tesla reuses the SAME node
+ *   names across model families (Hood_Spatial, Trunk_Spatial, etc.) but
+ *   the animation values differ — Model Y has a taller liftgate that
+ *   rotates further, the hood opens at a different angle, etc.
+ *
+ *   When Bayberry (Model Y) lands:
+ *     1. Read `Tesla-APK-Android/.../Bayberry.tscn` for the new keyframes.
+ *     2. Split this file into `poppyseedOpenings.ts` and
+ *        `bayberryOpenings.ts`, exporting each as `OPENINGS_POPPYSEED` /
+ *        `OPENINGS_BAYBERRY`.
+ *     3. Add `openings: typeof OPENINGS_POPPYSEED` to VehicleModelConfig
+ *        and route via ACTIVE_VEHICLE_MODEL.openings in
+ *        `useVehicleOpenings.tsx`.
+ *
+ *   Until then we keep them inline to avoid premature abstraction.
+ *
  * Coordinate system:
  *   - Godot uses Y-up, right-handed, rotation_degrees in (x, y, z) Euler.
  *   - Three.js matches Y-up / right-handed, but its Euler default order is

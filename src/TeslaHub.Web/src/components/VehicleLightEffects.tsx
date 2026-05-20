@@ -28,64 +28,17 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { VehicleStatus } from '../api/queries';
+import { ACTIVE_VEHICLE_MODEL } from './vehicleModelConfig';
 
 interface VehicleLightEffectsProps {
   vehicle: VehicleStatus | undefined;
 }
 
-// ---------------------------------------------------------------------------
-// Node name constants — match the Poppyseed.tscn hierarchy. See:
-// Tesla-APK-Android/.../Ego/v2023/Poppyseed/Poppyseed.tscn
-// ---------------------------------------------------------------------------
-
-/** Floor projection meshes — flashed during lock/unlock events. */
-const LOCK_FLASH_NODES = [
-  'Headlights_Projections',
-  'Stoplights_Projections',
-] as const;
-
-/** Rear brake lights — boosted emissive when shifting D or R.
- *  Confirmed via GLB inspection (Tesla-Godot-Test/inspect-glb-nodes.mjs). */
-const BRAKE_LIGHT_NODES = [
-  'Brake_Lights_Left',
-  'Brake_Lights_Right',
-  'Brake_Lights_Center',
-] as const;
-
-/** Reverse lights — boosted emissive only when shifting R. */
-const REVERSE_LIGHT_NODES = ['Reverse_Light', 'Reverse_Light_Perf'] as const;
-
-/** Front headlights + DRL — boosted white when driving (D or R), so the
- *  car visually has its headlights ON when shifted into a drive gear.
- *  Without this the front looks "off" while the rear has bright brakes,
- *  which feels asymmetric. Highland exports separate Headlights (low
- *  beam reflector) and DRL (light bar) nodes. */
-const HEADLIGHT_NODES = ['Headlights', 'DRL'] as const;
-
-/** Sentry-mode camera positions on Model 3 Highland, in metres.
- *  Coordinate system (confirmed against wheel fallback positions):
- *    +X = forward (front of car)
- *    +Y = up
- *    +Z = right (passenger side)
- *
- *  Model 3 Highland physically has SIX Sentry cameras:
- *    1. Front       — top centre of windshield, behind rear-view mirror
- *    2/3. Fenders   — tiny lens in the front-fender turn-signal grille
- *                     (forward-looking side cams, also used by Autopilot)
- *    4/5. B-pillars — rear-looking side cams, just behind the front-door
- *                     window cutout
- *    6. Rear        — above license plate, on the trunk lid
- *
- *  Calibrated by eye against the real car body lines.
- */
-const SENTRY_CAMERA_POSITIONS: ReadonlyArray<[number, number, number]> = [
-  [+0.40, 1.32, 0],      // 1. front (top of windshield)
-  [+1.10, 0.72, -0.97],  // 2. left front fender (turn-signal lens)
-  [+1.10, 0.72, +0.97],  // 3. right front fender (turn-signal lens)
-  [-0.18, 1.20, -0.97],  // 4. left B-pillar (rear-looking)
-  [-0.18, 1.20, +0.97],  // 5. right B-pillar (rear-looking)
-  [-2.00, 0.95, 0],      // 6. rear (above license plate)
-];
+// All model-specific data (node names + Sentry camera positions) lives
+// in vehicleModelConfig.ts — pulled in here so the same effects code
+// runs for Poppyseed (Model 3) today and Bayberry (Model Y) tomorrow.
+// To target a different car family swap ACTIVE_VEHICLE_MODEL in that
+// file (or eventually wire it to the current vehicle's VIN).
 
 // ---------------------------------------------------------------------------
 // Main effects component
@@ -118,9 +71,6 @@ export function VehicleLightEffects({ vehicle }: VehicleLightEffectsProps) {
 // on". We turn them on while shifted in D/R, and use them as the chirp
 // surface for lock/unlock flashes (see useLockFlash below).
 
-const HEADLIGHT_PROJECTION_NODE = 'Headlights_Projections';
-const STOPLIGHT_PROJECTION_NODE = 'Stoplights_Projections';
-
 function useGroundProjections(scene: THREE.Object3D, shiftState: string | null) {
   const shift = (shiftState ?? '').toUpperCase();
   const driving = shift === 'D' || shift === 'R';
@@ -131,8 +81,9 @@ function useGroundProjections(scene: THREE.Object3D, shiftState: string | null) 
   const stoplightOn = driving;
 
   useEffect(() => {
-    const head = scene.getObjectByName(HEADLIGHT_PROJECTION_NODE);
-    const stop = scene.getObjectByName(STOPLIGHT_PROJECTION_NODE);
+    const { headlights, stoplights } = ACTIVE_VEHICLE_MODEL.groundProjectionNodes;
+    const head = scene.getObjectByName(headlights);
+    const stop = scene.getObjectByName(stoplights);
     if (head) head.visible = driving;
     if (stop) stop.visible = stoplightOn;
     return () => {
@@ -175,7 +126,8 @@ function useLockFlash(scene: THREE.Object3D, isLocked: boolean | null) {
 
     const flashes = isLocked ? 1 : 2; // 1 chirp on lock, 2 on unlock
 
-    const projections = LOCK_FLASH_NODES
+    const { headlights, stoplights } = ACTIVE_VEHICLE_MODEL.groundProjectionNodes;
+    const projections = [headlights, stoplights]
       .map((name) => scene.getObjectByName(name))
       .filter((n): n is THREE.Object3D => !!n);
 
@@ -304,13 +256,13 @@ function useBrakeAndReverseLights(scene: THREE.Object3D, shiftState: string | nu
     };
 
     if (driving) {
-      boost(BRAKE_LIGHT_NODES, BRAKE_INTENSITY, BRAKE_COLOR);
+      boost(ACTIVE_VEHICLE_MODEL.brakeLightNodes, BRAKE_INTENSITY, BRAKE_COLOR);
       // Front headlights ON whenever we're in a drive gear — visually
       // balances the front (white DRL) with the rear (red brakes) and
       // matches how the real car behaves with auto-headlights enabled.
-      boost(HEADLIGHT_NODES, HEADLIGHT_INTENSITY, HEADLIGHT_COLOR);
+      boost(ACTIVE_VEHICLE_MODEL.headlightNodes, HEADLIGHT_INTENSITY, HEADLIGHT_COLOR);
     }
-    if (reverseOn) boost(REVERSE_LIGHT_NODES, REVERSE_INTENSITY, REVERSE_COLOR);
+    if (reverseOn) boost(ACTIVE_VEHICLE_MODEL.reverseLightNodes, REVERSE_INTENSITY, REVERSE_COLOR);
 
     return () => {
       for (const s of snapshots) {
@@ -358,7 +310,7 @@ function SentryIndicators({ active }: SentryIndicatorsProps) {
 
   return (
     <group renderOrder={100}>
-      {SENTRY_CAMERA_POSITIONS.map(([x, y, z], i) => (
+      {ACTIVE_VEHICLE_MODEL.sentryCameraPositions.map(([x, y, z], i) => (
         <mesh
           key={i}
           position={[x, y, z]}
