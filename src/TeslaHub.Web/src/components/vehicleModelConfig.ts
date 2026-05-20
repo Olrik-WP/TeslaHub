@@ -161,6 +161,12 @@ export interface VehicleModelConfig {
     /** Material names that are outer glass — fallback when the node
      *  test misses but the material is unambiguously glass. */
     outerGlassMaterial: RegExp;
+    /** Subset of outer glass nodes that should get the DARKER roof
+     *  tint (panoramic roofs are bronze/black, not light grey). M3
+     *  uses `Windows_Top`/`Sunroof`; Y exports the roof as a single
+     *  mesh named `Fade` (Tesla's quirk — that's also its naming in
+     *  the source Bayberry.tscn). */
+    roofGlassNode: RegExp;
   };
   /** RGB hex applied to every material matching `materialPatterns.bodyPaint`. */
   bodyPaintColor: number;
@@ -273,6 +279,7 @@ export const PoppyseedConfig: VehicleModelConfig = {
     outerGlassNode:
       /windows_top|window_l[fr]|window_r[fr]|front_screen|rear_screen|sunroof/i,
     outerGlassMaterial: /glass.*skybox|glass_lights/i,
+    roofGlassNode: /windows_top|sunroof/i,
   },
   bodyPaintColor: 0xf2f2f0,
   calloutHeight: 0.45,
@@ -406,11 +413,10 @@ export const BayberryConfig: VehicleModelConfig = {
   },
 
   hiddenNodes: [
-    // *** THE WHITE-VEIL CULPRIT ***
-    // `Fade` is the ghost-overlay mesh used by Tesla's Showroom to fade
-    // the car semi-transparent when zoomed in. Visible by default in the
-    // bare GLB → covers the entire car in a pale white wash. Hide it.
-    'Fade',
+    // NOTE: `Fade` was originally suspected as a Showroom ghost-overlay
+    // and added here — that was WRONG. `Fade` is the panoramic glass
+    // ROOF (Tesla's odd choice of name in Bayberry.tscn). It's tinted
+    // via materialPatterns.roofGlassNode below; keep it visible.
 
     // Right-hand-drive variant — French market is LHD. Cuts the second
     // steering wheel poking through the dashboard.
@@ -432,14 +438,20 @@ export const BayberryConfig: VehicleModelConfig = {
     // `Paint` covers the glossy body; `PaintRough` covers the matte
     // wheel-arch trim and underbody bits that Tesla wants tinted too.
     bodyPaint: /^paint(_|rough|$)/i,
-    // Window pivot naming flipped (FL instead of LF). No panoramic roof
-    // node — Y's roof is part of `Static_Exterior` so we can't tint it
-    // separately; that's fine, the GLB already ships it tinted.
-    outerGlassNode: /^window_(fl|fr|rl|rr)$/i,
+    // Window pivot naming flipped (FL instead of LF). `Fade` is the
+    // panoramic roof glass (Tesla's quirky name — see materialPatterns
+    // .roofGlassNode below). All glass surfaces share the same node-
+    // walk logic, so listing Fade here makes its descendants get the
+    // transparency/depth-sort fix applied like the door windows.
+    outerGlassNode: /^(window_(fl|fr|rl|rr)|fade)$/i,
     // Bayberry uses `Glass_Windows` + `Glass_Windows_Fade` for the
     // outer glass; `Glass_Interior*` is the dashboard glass and stays
-    // untouched.
+    // untouched. Fade roof uses Glass_Windows_Fade so this catches it.
     outerGlassMaterial: /^glass_windows/i,
+    // Roof gets the darker tint. Y's roof IS the `Fade` mesh (not the
+    // M3 `Windows_Top` / `Sunroof`). Both patterns kept for safety
+    // even though only Fade exists in Bayberry.
+    roofGlassNode: /^fade$/i,
   },
   bodyPaintColor: 0xf2f2f0,  // Pearl White Multi-Coat (same as M3 default)
   calloutHeight: 0.50,        // +5 cm vs M3 — Y is taller, callouts need

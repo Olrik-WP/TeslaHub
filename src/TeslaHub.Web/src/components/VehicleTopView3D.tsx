@@ -287,10 +287,11 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
+      const ROOF_GLASS_NODE = cfg.materialPatterns.roofGlassNode;
       const isRoof = (() => {
         let cur: THREE.Object3D | null = mesh;
         while (cur) {
-          if (/windows_top|sunroof/i.test(cur.name)) return true;
+          if (ROOF_GLASS_NODE.test(cur.name)) return true;
           cur = cur.parent;
         }
         return false;
