@@ -351,28 +351,78 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
 
         const matIsOuter = isOuter || OUTER_GLASS_MAT.test(matName);
         if (matIsOuter) {
-          mat.transparent = true;
-          mat.depthWrite = false;
-          mat.side = THREE.DoubleSide;
-          // Stable draw order to avoid z-fighting flicker between glass
-          // surfaces during orbit. three.js sorts equal-renderOrder
-          // transparents by depth, but two near-coplanar surfaces (Y
-          // panoramic roof + windshield at the roof line) flicker as
-          // the camera moves and the depth sort flips between them.
-          // Forcing distinct renderOrders breaks the tie deterministically:
-          //   - roof first (3) — drawn last visually but on top of body
-          //   - door windows + side glass (2)
-          //   - generic transparents (1)
-          // Higher renderOrder draws AFTER → appears in front when
-          // overlapping. Roof getting the topmost slot reads as "thicker"
-          // glass overlay; in practice it removes the flick completely.
-          mesh.renderOrder = isRoof ? 3 : 2;
-          if (mat.color) mat.color.multiplyScalar(isRoof ? ROOF_TINT : WINDOW_TINT);
+          const std = mat as THREE.MeshStandardMaterial;
+
+          // CRUCIAL: Tesla marks many opaque materials as
+          // `alphaMode=BLEND` with alpha=1.0 in the source GLTF (see
+          // Bayberry's Fade mesh: Interior_Fade, Trim_Fade, Cover_Fade,
+          // Interior_Fade2 — all alpha=1.0 but BLEND). GLTFLoader sets
+          // mat.transparent=true on them, then everything in the
+          // transparent pass gets depth-sorted by camera distance,
+          // causing flicker between near-coplanar surfaces (panoramic
+          // roof + windshield, headliner + roof glass) as the orbit
+          // changes the sort order. We override BLEND-but-opaque
+          // materials back to actually-opaque so they go through the
+          // depth-tested opaque pass and don't participate in the
+          // transparent sort.
+          const effectiveOpacity = std.opacity ?? 1;
+          const isEffectivelyOpaque = effectiveOpacity >= 0.95;
+
+          if (isEffectivelyOpaque) {
+            std.transparent = false;
+            std.depthWrite = true;
+            std.side = THREE.DoubleSide;
+            // Do NOT change renderOrder — let the opaque pass handle
+            // depth sort naturally (renderOrder defaults to 0).
+          } else {
+            std.transparent = true;
+            std.depthWrite = false;
+            std.side = THREE.DoubleSide;
+            // Stable draw order between TRULY transparent layers only.
+            // Higher renderOrder draws later (= on top); panoramic
+            // roof sits above other glass to avoid the windshield/roof
+            // flicker at the pavilion seam.
+            mesh.renderOrder = isRoof ? 3 : 2;
+            // Tesla ships `Glass` material with alpha=0.16 — the
+            // windshield ends up so transparent that the HDR sky shines
+            // straight through and we never see the tint. Bump opacity
+            // up to the dark-glass range so the colour is visible.
+            if (std.opacity !== undefined && std.opacity < 0.4) {
+              std.opacity = isRoof ? 0.90 : 0.55;
+            }
+          }
+
+          // Dampen environment reflections on ALL outer glass (opaque
+          // or transparent). With three.js's `Environment preset="city"`
+          // the HDR sky bounces hard off the glass and tints it bright
+          // white, which is exactly what the user reported on the Y
+          // windshield. Scaling envMapIntensity by 0.3 keeps a hint of
+          // chrome-ish realism without washing the tint away.
+          if ('envMapIntensity' in std) {
+            std.envMapIntensity = (std.envMapIntensity ?? 1) * 0.3;
+          }
+
+          // Diffuse colour tint. For materials with near-black baseColor
+          // (Tesla's `Glass` = 0.01 grey, `Glass_Windows` = 0 black)
+          // multiplyScalar is a no-op (anything × 0.45 ≈ 0), so set
+          // an explicit visible dark-glass colour instead. Otherwise
+          // multiply to preserve any pre-existing tint texture intent.
+          if (std.color) {
+            const c = std.color;
+            if (c.r < 0.05 && c.g < 0.05 && c.b < 0.05) {
+              const baseV = isRoof ? 0.05 : 0.10;
+              c.setRGB(baseV, baseV, baseV);
+            } else {
+              c.multiplyScalar(isRoof ? ROOF_TINT : WINDOW_TINT);
+            }
+          }
+
           if (isRoof) roofFixed++;
           else windowFixed++;
-          if (glassDebug.length < 8) {
+          if (glassDebug.length < 16) {
             glassDebug.push(
-              `${isRoof ? 'ROOF' : 'WIN'} ${mesh.name || '(unnamed)'} mat="${matName}"`,
+              `${isRoof ? 'ROOF' : 'WIN'} ${mesh.name || '(unnamed)'} mat="${matName}" ` +
+                `opacity=${effectiveOpacity.toFixed(2)}→${isEffectivelyOpaque ? 'OPAQUE' : (std.opacity ?? 1).toFixed(2)}`,
             );
           }
         } else if (mat.transparent || (mat.opacity !== undefined && mat.opacity < 1)) {
