@@ -167,6 +167,15 @@ export interface VehicleModelConfig {
      *  mesh named `Fade` (Tesla's quirk — that's also its naming in
      *  the source Bayberry.tscn). */
     roofGlassNode: RegExp;
+    /** Material names that are the INSIDE (cabin-side) pane of an
+     *  exterior glass surface. Tesla layers windshield/door windows
+     *  with `Glass` (outer) + `Glass_Interior` (inner) where the inner
+     *  pane has roughness ≈ 0.01 — effectively a perfect mirror that
+     *  reflects the HDR sky and overpowers the outer tint. We don't
+     *  tint these (they're already pitch black) but we kill their
+     *  reflection so the outer glass tint can dominate. Match
+     *  `Glass_Interior`, `Glass_Interior_Fade`, `Glass_Interior_*`. */
+    innerGlassMaterial: RegExp;
   };
   /** RGB hex applied to every material matching `materialPatterns.bodyPaint`. */
   bodyPaintColor: number;
@@ -280,6 +289,9 @@ export const PoppyseedConfig: VehicleModelConfig = {
       /windows_top|window_l[fr]|window_r[fr]|front_screen|rear_screen|sunroof/i,
     outerGlassMaterial: /glass.*skybox|glass_lights/i,
     roofGlassNode: /windows_top|sunroof/i,
+    // M3 audit confirms `Glass_Interior` + `Glass_Interior_Tinted_Fade`
+    // both ship with rough=0.01 just like Bayberry — kill the mirror.
+    innerGlassMaterial: /^glass_interior/i,
   },
   bodyPaintColor: 0xf2f2f0,
   calloutHeight: 0.45,
@@ -457,6 +469,12 @@ export const BayberryConfig: VehicleModelConfig = {
     // M3 `Windows_Top` / `Sunroof`). Both patterns kept for safety
     // even though only Fade exists in Bayberry.
     roofGlassNode: /^fade$/i,
+    // Bayberry layers windshield (in Static_Exterior) and door windows
+    // with both `Glass` (outer) AND `Glass_Interior` (inner) panes.
+    // `Glass_Interior` rough=0.01 → mirror that reflects the HDR sky
+    // straight through the very transparent outer Glass (alpha 0.16),
+    // making the windshield read as bright white. Detect and dampen.
+    innerGlassMaterial: /^glass_interior/i,
   },
   bodyPaintColor: 0xf2f2f0,  // Pearl White Multi-Coat (same as M3 default)
   calloutHeight: 0.50,        // +5 cm vs M3 — Y is taller, callouts need

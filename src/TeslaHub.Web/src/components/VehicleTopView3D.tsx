@@ -225,11 +225,16 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     //
     // OUTER_GLASS_NODE matches the parent Groups in the model hierarchy.
     // OUTER_GLASS_MAT matches Tesla's outer glass materials.
-    // Both come from `cfg.materialPatterns` because Tesla renamed nodes
-    // and materials between M3 (`Window_LF` / `*_Skybox`) and Y
+    // INNER_GLASS_MAT matches the cabin-side pane that Tesla layers
+    // behind every windshield/door window — those have rough≈0.01 and
+    // act as perfect mirrors, ruining the outer tint by reflecting
+    // the HDR sky.
+    // All three come from `cfg.materialPatterns` because Tesla renamed
+    // nodes and materials between M3 (`Window_LF` / `*_Skybox`) and Y
     // (`Window_FL` / `Glass_Windows`).
     const OUTER_GLASS_NODE = cfg.materialPatterns.outerGlassNode;
     const OUTER_GLASS_MAT = cfg.materialPatterns.outerGlassMaterial;
+    const INNER_GLASS_MAT = cfg.materialPatterns.innerGlassMaterial;
     const isInsideOuterGlass = (start: THREE.Object3D): boolean => {
       let cur: THREE.Object3D | null = start;
       while (cur) {
@@ -425,6 +430,37 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
                 `opacity=${effectiveOpacity.toFixed(2)}→${isEffectivelyOpaque ? 'OPAQUE' : (std.opacity ?? 1).toFixed(2)}`,
             );
           }
+        } else if (INNER_GLASS_MAT.test(matName)) {
+          // INNER cabin-side pane of a layered Tesla glass surface.
+          // Tesla ships this with rough=0.01 (perfect mirror) which
+          // reflects the HDR `Environment preset="city"` straight back
+          // through the outer Glass pane (alpha=0.16, too transparent
+          // to mask the inner mirror). Result: bright white windshield
+          // despite the outer being correctly tinted dark.
+          //
+          // We don't tint the colour (it's already pitch black) and
+          // we keep its opacity untouched — the inner pane is supposed
+          // to be there. We just kill the mirror by bumping roughness
+          // (scatters reflections wide) and slashing envMapIntensity
+          // (less HDR sky bouncing off). Outer glass tint now shows
+          // through naturally.
+          const std = mat as THREE.MeshStandardMaterial;
+          std.roughness = Math.max(std.roughness ?? 0.5, 0.7);
+          if ('envMapIntensity' in std) {
+            std.envMapIntensity = (std.envMapIntensity ?? 1) * 0.05;
+          }
+          // Mark transparent + depthWrite=false so it composites
+          // correctly behind the outer glass. Render order 1 puts it
+          // behind outer glass (renderOrder 2-3).
+          std.transparent = true;
+          std.depthWrite = false;
+          mesh.renderOrder = 1;
+          if (glassDebug.length < 16) {
+            glassDebug.push(
+              `INNER ${mesh.name || '(unnamed)'} mat="${matName}" rough→${std.roughness}`,
+            );
+          }
+          transparentFixed++;
         } else if (mat.transparent || (mat.opacity !== undefined && mat.opacity < 1)) {
           mat.depthWrite = false;
           mesh.renderOrder = 1;
