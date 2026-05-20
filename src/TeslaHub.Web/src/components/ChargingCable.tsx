@@ -136,6 +136,14 @@ function buildCableCurve(start: THREE.Vector3, end: THREE.Vector3): THREE.CubicB
   return new THREE.CubicBezierCurve3(p0, p1, p2, p3);
 }
 
+// Real Tesla Charger_Handle is ~21cm long along its native +Z axis.
+// We split the trip from the floor to the port into two parts:
+//   * Cable spline goes from start → BACK of the plug (port - 21cm)
+//   * Handle mesh fills the last 21cm, plug tip touching the port
+// This way the geometry is continuous (no gap between cable and plug),
+// and the plug doesn't penetrate the car body.
+const HANDLE_LENGTH = 0.21;
+
 export function ChargingCable({
   startWorld,
   endWorld,
@@ -148,9 +156,23 @@ export function ChargingCable({
 }: ChargingCableProps) {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
+  // Horizontal direction from ground anchor to port. Used both to shorten
+  // the cable (so it ends at the back of the plug) and to orient the
+  // handle so its +Z axis points straight at the port.
+  const approachDir = useMemo(() => {
+    const d = new THREE.Vector3(endWorld.x - startWorld.x, 0, endWorld.z - startWorld.z);
+    if (d.lengthSq() < 1e-6) d.set(1, 0, 0);
+    return d.normalize();
+  }, [startWorld, endWorld]);
+
+  const cableEndWorld = useMemo(
+    () => endWorld.clone().addScaledVector(approachDir, -HANDLE_LENGTH),
+    [endWorld, approachDir],
+  );
+
   const curve = useMemo(
-    () => buildCableCurve(startWorld, endWorld),
-    [startWorld, endWorld],
+    () => buildCableCurve(startWorld, cableEndWorld),
+    [startWorld, cableEndWorld],
   );
 
   const geometry = useMemo(
@@ -187,24 +209,27 @@ export function ChargingCable({
     (u.uBaseColor.value as THREE.Color).lerp(targetColor, Math.min(1, dt * 4));
   });
 
-  // Compute the handle transform from the curve's endpoint + tangent.
-  // The Tesla Charger_Handle mesh is ~20cm long along its local +Z axis,
-  // re-centered on its geometric AABB (see ChargingHandle below). We pull the
-  // handle BACK along the tangent by half its length so the plug tip lands
-  // at the port instead of penetrating 10cm inside the car.
+  // Handle transform:
+  //   * Position : midway between the cable end and the port (so the handle
+  //     spans those exact 21cm with the plug touching the port).
+  //   * Orientation : explicit basis matrix with +Z = approachDir (forward)
+  //     and +Y = world up. setFromUnitVectors() only constrains one axis
+  //     and leaves a roll degree of freedom, which made the handle look
+  //     sideways. The basis matrix removes that ambiguity.
   const handleTransform = useMemo(() => {
-    const t = 1;
-    const pointAtEnd = curve.getPointAt(t);
-    const tangent = curve.getTangentAt(Math.max(0, t - 0.001)).normalize();
-    const HANDLE_HALF_LENGTH = 0.105;
-    const position = pointAtEnd.clone().addScaledVector(tangent, -HANDLE_HALF_LENGTH);
-    // Make the handle face along the tangent (Z-forward by glTF convention).
-    const quaternion = new THREE.Quaternion().setFromUnitVectors(
-      new THREE.Vector3(0, 0, 1),
-      tangent,
-    );
+    const position = cableEndWorld
+      .clone()
+      .addScaledVector(approachDir, HANDLE_LENGTH / 2);
+
+    const forward = approachDir.clone(); // +Z of the mesh
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const right = new THREE.Vector3().crossVectors(worldUp, forward).normalize();
+    const up = new THREE.Vector3().crossVectors(forward, right).normalize();
+    const m = new THREE.Matrix4().makeBasis(right, up, forward);
+    const quaternion = new THREE.Quaternion().setFromRotationMatrix(m);
+
     return { position, quaternion };
-  }, [curve]);
+  }, [cableEndWorld, approachDir]);
 
   return (
     <group>

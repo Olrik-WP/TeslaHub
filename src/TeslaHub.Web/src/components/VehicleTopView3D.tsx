@@ -35,6 +35,17 @@ const CHARGE_PORT_NODE = 'Charge_Cap_Spatial';
 // the Poppyseed Model 3 Highland by reading Charge_Cap_Spatial.world:
 //     (-1.856, 0.966, -0.740) → rear-left fender, ~96cm high.
 const CHARGE_PORT_FALLBACK_WORLD = new THREE.Vector3(-1.856, 0.966, -0.74);
+
+// `Charge_Cap_Spatial` is the trapdoor's TOP HINGE pivot, NOT the plug
+// socket itself. The actual connector socket sits a few cm below and
+// slightly inward. We apply this empirical offset in WORLD space (good
+// enough as long as the car is at its default rotation; once we wire the
+// car's quaternion in Phase 2 we'll convert via parent's matrix).
+//
+// Tune by trial: increase -Y to lower the plug, push -X to nudge it back
+// towards the rear, push +Z (≈ towards car center) to bury it into the body.
+const PORT_FROM_PIVOT_OFFSET = new THREE.Vector3(0, -0.07, 0.03);
+
 // Cable rises from the ground 50cm behind and 50cm to the left of the
 // rear-left tire, mimicking the in-app vehicle view where the cable comes
 // out of the floor right next to the charge port side of the car.
@@ -559,11 +570,14 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
     // up the parent chain BEFORE reading getWorldPosition, otherwise we
     // get the local origin (0,0,0) of an un-rendered scene.
     anchor.updateWorldMatrix(true, false);
-    const w = new THREE.Vector3();
-    anchor.getWorldPosition(w);
+    const pivotWorld = new THREE.Vector3();
+    anchor.getWorldPosition(pivotWorld);
+    // Offset from the hinge pivot to the actual plug socket.
+    const w = pivotWorld.clone().add(PORT_FROM_PIVOT_OFFSET);
     // eslint-disable-next-line no-console
     console.log(
-      `[Poppyseed3D] charge port anchor: "${usedName}" → world=(${w.x.toFixed(3)}, ${w.y.toFixed(3)}, ${w.z.toFixed(3)})`,
+      `[Poppyseed3D] charge port anchor: "${usedName}" pivot=(${pivotWorld.x.toFixed(3)}, ${pivotWorld.y.toFixed(3)}, ${pivotWorld.z.toFixed(3)}) ` +
+        `plug=(${w.x.toFixed(3)}, ${w.y.toFixed(3)}, ${w.z.toFixed(3)})`,
     );
     return w;
     // chargePortOpenness intentionally re-runs the effect when the trapdoor
