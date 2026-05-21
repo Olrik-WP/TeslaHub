@@ -404,6 +404,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     let windowFixed = 0;
     let paintFixed = 0;
     let floorFixed = 0;
+    let projectionMeshesTouched = 0;
     const glassDebug: string[] = [];
     const paintDebug: string[] = [];
 
@@ -551,6 +552,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           return null;
         })();
         if (projectionRole) {
+          projectionMeshesTouched++;
           const std = mat as THREE.MeshStandardMaterial;
           const beamCfg = cfg.projections[projectionRole];
 
@@ -598,6 +600,22 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             };
             stdAny.__teslahub_proj_snap = snap;
 
+            // Diagnostic — fires ONCE per material so we can see in the
+            // console exactly what the GLB shipped for this projection.
+            // If `hasBaked=false` and the rectangle still doesn't show
+            // up, the issue is geometry-side (mesh hidden, node name
+            // mismatch); if `hasBaked=true` with a tiny/empty texture
+            // the issue is the bootstrap deciding it doesn't need to
+            // graft the fallback.
+            // eslint-disable-next-line no-console
+            console.log(
+              `[ProjectionBootstrap] role=${projectionRole} mat="${matName}" ` +
+                `mesh="${mesh.name}" hasBaked=${hasBaked} ` +
+                `glbOpacity=${std.opacity ?? 1} ` +
+                `glbTransparent=${std.transparent} ` +
+                `glbColor=#${(std.color?.getHex() ?? 0).toString(16).padStart(6, '0')}`,
+            );
+
             // For the M3 path we ALSO commit the bootstrapped state to
             // the material right now (graft texture, force transparent,
             // force shader recompile so the freshly added sampler is
@@ -623,12 +641,35 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           // a custom textureUrl) reaches inside the material.
 
           // 1. Texture swap — only when user provided a custom URL.
-          if (beamCfg.textureUrl) {
+          //    When we graft a USER-provided PNG (or our fallback PNG)
+          //    onto a Y baked material that was shipped OPAQUE, we MUST
+          //    flip the material into BLEND mode + recompile its
+          //    shader. Without that the PNG's alpha channel is
+          //    ignored, the quad renders as a solid rectangle which
+          //    visually merges with the bright floor and looks like
+          //    the projection "disappeared". This is the bug behind
+          //    "model Y projection disappears when I type a texture
+          //    URL in the Showroom" — the texture WAS swapped, but on
+          //    a still-opaque material so the alpha cut never happened.
+          const usingCustomUrl = !!beamCfg.textureUrl;
+          if (usingCustomUrl) {
             const customMap = getBeamTexture(projectionRole, beamCfg.textureUrl);
-            if (std.map !== customMap) std.map = customMap;
+            if (std.map !== customMap) {
+              std.map = customMap;
+              std.needsUpdate = true;
+            }
+            std.transparent = true;
+            std.depthWrite = false;
+            std.side = THREE.DoubleSide;
           } else if (std.map !== snap.baseMap) {
-            // User cleared a previously-set custom URL → restore baked.
+            // User cleared a previously-set custom URL → restore baked
+            // map AND the baseline transparent/depth flags so a Y
+            // returning from custom-URL back to default behaves
+            // exactly like a fresh load.
             std.map = snap.baseMap;
+            std.transparent = snap.baseTransparent;
+            std.depthWrite = snap.baseDepthWrite;
+            std.needsUpdate = true;
           }
 
           // 2. Colour — multiply snap baseline × user tint. Skip the
@@ -652,15 +693,20 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           //    opacity onto an OPAQUE material is fine (Three honours
           //    it once transparent=true) but we don't want to flip
           //    transparency on a material that was happily OPAQUE
-          //    just because the slider sits at 1.
+          //    just because the slider sits at 1. When the user has
+          //    grafted a custom URL we keep the transparent/depthWrite
+          //    flags forced by the texture-swap block above (the PNG
+          //    needs alpha blending to render correctly).
           if (beamCfg.opacity !== 1) {
             std.opacity = snap.baseOpacity * beamCfg.opacity;
             std.transparent = true;
             std.depthWrite = false;
           } else {
             std.opacity = snap.baseOpacity;
-            std.transparent = snap.baseTransparent;
-            std.depthWrite = snap.baseDepthWrite;
+            if (!usingCustomUrl) {
+              std.transparent = snap.baseTransparent;
+              std.depthWrite = snap.baseDepthWrite;
+            }
           }
 
           mesh.renderOrder = beamCfg.renderOrder;
@@ -1021,6 +1067,16 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       // eslint-disable-next-line no-console
       console.log(`[Poppyseed3D] floor shadow meshes fixed: ${floorFixed}`);
     }
+    // Always log the projection mesh count so we can immediately spot
+    // an empty result (= the GLB doesn't ship the configured node
+    // names, or the meshes were renamed during export). Without this
+    // signal it's impossible to tell from the screen whether "no
+    // projection visible" means "broken material" or "no mesh at all".
+    // eslint-disable-next-line no-console
+    console.log(
+      `[Poppyseed3D] projection meshes touched (head=${cfg.groundProjectionNodes.headlights}, ` +
+        `stop=${cfg.groundProjectionNodes.stoplights}): ${projectionMeshesTouched}`,
+    );
 
     let wheelsAttached = 0;
     let wheelMode: 'anchor' | 'fallback' | 'none' = 'none';
