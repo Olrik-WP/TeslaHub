@@ -822,9 +822,14 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       const anchorsFound = WHEEL_ANCHORS.filter((a) => anchors[a.name]).length;
       wheelMode = anchorsFound === 4 ? 'anchor' : 'fallback';
 
-      const ALREADY = '__teslahub_wheels_attached';
-      if (!(scene as unknown as Record<string, boolean>)[ALREADY]) {
-        if (wheelMode === 'anchor') {
+      if (wheelMode === 'anchor') {
+        // Anchor mode is idempotent because Three appends the wheel
+        // clone to a node that already exists in the GLB hierarchy —
+        // re-running would attach a SECOND clone on top of the first,
+        // hence the one-shot flag. Anchors don't move at runtime so
+        // there's nothing to re-update.
+        const ANCHOR_DONE = '__teslahub_wheels_anchored';
+        if (!(scene as unknown as Record<string, boolean>)[ANCHOR_DONE]) {
           for (const { name, mirror } of WHEEL_ANCHORS) {
             const anchor = anchors[name];
             const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
@@ -832,27 +837,42 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             anchor.add(wheelClone);
             wheelsAttached++;
           }
+          (scene as unknown as Record<string, boolean>)[ANCHOR_DONE] = true;
         } else {
-          for (const pos of WHEEL_FALLBACK_POSITIONS) {
-            const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
+          wheelsAttached = 4;
+        }
+      } else {
+        // Fallback mode: keep a Map<cornerId, wrapper> on the scene so
+        // re-runs of this memo (triggered by Showroom slider drags that
+        // mutate `cfg.wheelFallbackPositions`) UPDATE the existing
+        // wrappers' position instead of stacking new ones on top. The
+        // wheel mesh itself is heavy to clone (skinned, possibly with
+        // alloy texture maps) so we keep the same clone forever.
+        type WheelStash = Map<string, THREE.Group>;
+        const STASH_KEY = '__teslahub_wheel_wrappers';
+        const sceneAny = scene as unknown as Record<string, unknown>;
+        let stash = sceneAny[STASH_KEY] as WheelStash | undefined;
+        if (!stash) {
+          stash = new Map();
+          sceneAny[STASH_KEY] = stash;
+        }
 
-            // Re-center the wheel on its geometric bbox center, so any
-            // reflection or rotation pivots around the true center and
-            // not the Godot-exported native origin (which sits offset).
+        for (const pos of WHEEL_FALLBACK_POSITIONS) {
+          let wrapper = stash.get(pos.id);
+          if (!wrapper) {
+            // First time we see this corner — clone + re-center on bbox.
+            const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
             wheelClone.updateMatrixWorld(true);
             const wheelBox = new THREE.Box3().setFromObject(wheelClone);
             const wheelCenter = wheelBox.getCenter(new THREE.Vector3());
             const wheelSize = wheelBox.getSize(new THREE.Vector3());
             wheelClone.position.sub(wheelCenter);
-
-            const wrapper = new THREE.Group();
+            wrapper = new THREE.Group();
+            wrapper.name = `WheelWrapper_${pos.id}`;
             wrapper.add(wheelClone);
-            wrapper.position.set(pos.x, pos.y, pos.z);
-            if (pos.flipZ) wrapper.scale.z = -1;
             scene.add(wrapper);
-
-            wheelsAttached++;
-            if (wheelsAttached === 1) {
+            stash.set(pos.id, wrapper);
+            if (stash.size === 1) {
               // eslint-disable-next-line no-console
               console.log(
                 `[Poppyseed3D] wheel native: ` +
@@ -863,8 +883,12 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
               );
             }
           }
+          // Always (re-)apply position + flipZ. This is the line that
+          // makes Showroom sliders actually move the wheel in realtime.
+          wrapper.position.set(pos.x, pos.y, pos.z);
+          wrapper.scale.set(1, 1, pos.flipZ ? -1 : 1);
+          wheelsAttached++;
         }
-        (scene as unknown as Record<string, boolean>)[ALREADY] = true;
       }
     }
 
@@ -1027,11 +1051,22 @@ function Loader() {
   );
 }
 
-// Probes the wheel asset once when the canvas mounts. Same trick as
-// VehicleTopView for the chassis: returns null while probing, true/false
-// once known.
+// Probes a 3D asset URL once when it changes. Returns:
+//   - `null` while the probe is in flight (or the URL has just changed
+//     and we haven't probed the new one yet — the "stale-protect").
+//   - `true` once the asset is confirmed available.
+//   - `false` once the asset is confirmed missing/text.
+//
+// The stale-protect is critical for the wheel picker in Showroom:
+// without it, when the user swaps wheel GLB, this hook would return
+// the PREVIOUS URL's `true` for ~1 render while the new probe runs.
+// During that render, the upstream `<PoppyseedModel wheelsAvailable={true}>`
+// would call `useGLTF(NEW_URL)` and Three.js would throw if NEW_URL
+// returns 404, crashing the whole viewer instead of just hiding the
+// wheels. We tie the state to the probed URL so a URL mismatch always
+// reads as null and the consumer unmounts safely until we know.
 function useAssetAvailable(url: string): boolean | null {
-  const [available, setAvailable] = useState<boolean | null>(null);
+  const [state, setState] = useState<{ url: string; available: boolean } | null>(null);
   useEffect(() => {
     let cancelled = false;
     fetch(url, { method: 'HEAD', cache: 'force-cache' })
@@ -1043,19 +1078,19 @@ function useAssetAvailable(url: string): boolean | null {
         console.log(
           `[Poppyseed3D] probe ${url} → status=${r.status} content-type="${ct}" → available=${ok}`,
         );
-        setAvailable(ok);
+        setState({ url, available: ok });
       })
       .catch((err) => {
         if (cancelled) return;
         // eslint-disable-next-line no-console
         console.warn(`[Poppyseed3D] probe ${url} failed:`, err);
-        setAvailable(false);
+        setState({ url, available: false });
       });
     return () => {
       cancelled = true;
     };
   }, [url]);
-  return available;
+  return state && state.url === url ? state.available : null;
 }
 
 interface Props {
