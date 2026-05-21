@@ -55,6 +55,10 @@ export interface WheelPositionOverride {
    *  left side to flip the mesh so the cover faces -Z. Usually you
    *  don't need to touch this — it's baked into the per-corner default. */
   flipZ?: boolean;
+  /** Extra yaw rotation (degrees) applied to the wheel wrapper. Used
+   *  to re-orient a swapped wheel GLB whose "front" axis doesn't
+   *  match the original. Defaults to 0. */
+  rotY?: number;
 }
 
 /**
@@ -212,6 +216,7 @@ function mergeWheelPositions(
       y: ov.y ?? w.y,
       z: ov.z ?? w.z,
       flipZ: ov.flipZ ?? w.flipZ,
+      rotY: ov.rotY ?? w.rotY ?? 0,
     };
   });
 }

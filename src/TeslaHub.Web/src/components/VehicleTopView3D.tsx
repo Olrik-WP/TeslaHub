@@ -158,11 +158,23 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     WHEEL_ANCHORS,
     WHEEL_FALLBACK_POSITIONS,
   } = useModelConsts();
-  const { scene } = useGLTF(MODEL_URL);
+  const { scene: rawScene } = useGLTF(MODEL_URL);
   const wheelGltf = useGLTF(wheelsAvailable ? WHEEL_URL : MODEL_URL);
   // ^ trick: useGLTF must be called unconditionally (hook rule). When the
   //   wheel asset is missing we reuse the main URL — its scene is then
   //   ignored by the wheel mounting code below.
+
+  // CRITICAL: drei caches the parsed GLTF scene by URL — every viewer
+  // mounted with the same URL gets the SAME `rawScene` object. That
+  // means when Home and Showroom both render the M3, any node mutation
+  // (door rotation, wheel attachment, paint colour…) made by one
+  // viewer is also visible in the other.
+  // SkeletonUtils.clone() duplicates the scene graph but PRESERVES
+  // material + geometry references — so each viewer gets its own set
+  // of transforms while shared GPU resources stay shared. The clone is
+  // cheap (<1 ms on a ~200-node Tesla GLB) and is recomputed only when
+  // the underlying URL/scene changes (model swap), not on every render.
+  const scene = useMemo(() => SkeletonUtils.clone(rawScene), [rawScene]);
 
   const cleanedScene = useMemo(() => {
     // Polish the wheel materials ONCE, on the original wheelGltf.scene.
@@ -883,9 +895,12 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
               );
             }
           }
-          // Always (re-)apply position + flipZ. This is the line that
-          // makes Showroom sliders actually move the wheel in realtime.
+          // Always (re-)apply position + rotation + flipZ. This is what
+          // makes Showroom sliders actually move/orient the wheel in
+          // realtime — drag a slider → cfg rebuilt → memo re-runs →
+          // wrapper transform updated in place.
           wrapper.position.set(pos.x, pos.y, pos.z);
+          wrapper.rotation.set(0, THREE.MathUtils.degToRad(pos.rotY ?? 0), 0);
           wrapper.scale.set(1, 1, pos.flipZ ? -1 : 1);
           wheelsAttached++;
         }

@@ -125,7 +125,7 @@ function WheelsSection({ overrides, onChange, defaults }: Props) {
 
   const setCornerField = (
     corner: WheelCorner,
-    field: 'x' | 'y' | 'z',
+    field: 'x' | 'y' | 'z' | 'rotY',
     value: number,
   ) => {
     const next = {
@@ -208,6 +208,7 @@ function WheelsSection({ overrides, onChange, defaults }: Props) {
             ov?.y ?? def.y,
             ov?.z ?? def.z,
           ];
+          const currentRotY = ov?.rotY ?? def.rotY ?? 0;
           const cornerOverridden = !!ov;
           return (
             <div
@@ -252,10 +253,20 @@ function WheelsSection({ overrides, onChange, defaults }: Props) {
                 value={current[2]}
                 onChange={(n) => setCornerField(corner, 'z', n)}
                 defaultValue={def.z}
-                min={-1.5}
-                max={1.5}
+                min={-3}
+                max={3}
                 step={0.005}
                 unit="m"
+              />
+              <ShowroomSlider
+                label="Rot"
+                value={currentRotY}
+                onChange={(n) => setCornerField(corner, 'rotY', n)}
+                defaultValue={def.rotY ?? 0}
+                min={-180}
+                max={180}
+                step={1}
+                unit="°"
               />
             </div>
           );

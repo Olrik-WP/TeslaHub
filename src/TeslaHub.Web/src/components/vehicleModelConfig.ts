@@ -50,6 +50,11 @@ export interface WheelFallbackPosition {
   /** Tesla's exported wheel cover faces +Z. Wheels on the left side
    *  (-Z) need scale.z = -1 to re-orient the cover outward. */
   flipZ: boolean;
+  /** Extra Y rotation (yaw) in DEGREES applied to the wheel wrapper.
+   *  Useful when a swapped wheel GLB (Cypress, E41…) was exported with
+   *  a different "front" axis than the original; tune until the
+   *  hubcap pattern faces the right way. Default 0. */
+  rotY?: number;
 }
 
 export interface VehicleModelConfig {
