@@ -506,9 +506,19 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             // stays at 1 since the PNG alpha already handles the fade.
             if (std.color) std.color.setHex(0xffffff);
             std.opacity = 1;
-            // Render after the floor shadow but before the body so the
-            // beam blends correctly on top of the dark ground texture.
-            mesh.renderOrder = -5;
+            // CRITICAL: the material was originally compiled WITHOUT a
+            // map (Tesla's M3 GLB ships these primitives texture-less),
+            // so three.js cached a shader that has no texture sampler.
+            // Setting `map` afterwards alone is not enough — we must
+            // force a shader recompile or the projection renders as a
+            // black/transparent quad regardless of texture data.
+            std.needsUpdate = true;
+            // Render AFTER everything else (the shadow floor, paint,
+            // glass…) so the beam composites on top instead of being
+            // hidden behind another transparent surface that was sorted
+            // closer to the camera. +10 keeps us safely above any
+            // model-internal renderOrder tweaks (windows use 0/1).
+            mesh.renderOrder = 10;
           }
           // Skip the rest of the loop body — projection meshes aren't
           // glass, paint, or anything else we'd want to touch.
