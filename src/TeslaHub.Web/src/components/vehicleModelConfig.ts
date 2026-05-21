@@ -215,6 +215,11 @@ export interface VehicleModelConfig {
    *  so a single override repaints every mesh that uses the material.
    *  Set to an empty array for models with proper interior textures. */
   interiorOverrides?: ReadonlyArray<{
+    /** Stable identifier used by the Showroom UI as the override key
+     *  (e.g. `Interior2`, `Decor`, `cupholder`, `Wing`). Lets the user
+     *  pick a colour per slot without us having to round-trip a
+     *  RegExp through JSON. */
+    key: string;
     /** Match the material's `name` property exactly (case-insensitive). */
     matchName: RegExp;
     /** RGB hex to assign to `mat.color`. */
@@ -224,6 +229,36 @@ export interface VehicleModelConfig {
     /** Optional override of `mat.metalness` (0..1). */
     metalness?: number;
   }>;
+
+  // ───────────────────────────────────────────────────────────────────
+  // Wheel finish — material tweaks for alloy + plastic wheel pieces
+  // ───────────────────────────────────────────────────────────────────
+  /** Polish parameters applied to every wheel mesh whose material name
+   *  matches the alloy or plastic regexes hard-wired in
+   *  VehicleTopView3D.tsx (`aluminum|chrome|metal_anodized|silver` for
+   *  alloy, `plastic_black|rubber` for plastic). Per-model so a model
+   *  family that ships brighter chrome can tune separately from one
+   *  with matte rims. The Showroom UI exposes these as sliders / a
+   *  colour picker. */
+  wheelFinish: {
+    /** Lower bound applied to the alloy material's `roughness`. Below
+     *  this value the alloy looks like a mirror; default 0.35 reads as
+     *  brushed alloy. 0 = polished, 1 = matte. */
+    alloyRoughnessMin: number;
+    /** Multiplier applied to alloy material's `envMapIntensity`. >1
+     *  exaggerates the HDR sky reflection so the wheel pops against
+     *  the dark window glass. Default 1.6. */
+    alloyEnvBoost: number;
+    /** Tint applied to alloy materials (multiplied into `mat.color`).
+     *  Undefined = leave the GLB's native colour alone. Use to dial
+     *  black-painted alloys, gold, bronze, etc. */
+    alloyTint?: number;
+    /** Roughness forced on plastic black / rubber materials. Default
+     *  0.55 — sub-matte so brake-dust / tyre rubber reads correctly. */
+    plasticRoughness: number;
+    /** EnvMap boost for plastic. Default 1.5. */
+    plasticEnvBoost: number;
+  };
 
   // ───────────────────────────────────────────────────────────────────
   // Privacy-glass nodes — extra-tinted rear windows (Tesla factory)
@@ -381,6 +416,12 @@ export const PoppyseedConfig: VehicleModelConfig = {
   },
   bodyPaintColor: 0xf2f2f0,
   calloutHeight: 0.45,
+  wheelFinish: {
+    alloyRoughnessMin: 0.35,
+    alloyEnvBoost: 1.6,
+    plasticRoughness: 0.55,
+    plasticEnvBoost: 1.5,
+  },
   openings: OPENINGS_POPPYSEED,
   mirrorTracks: MIRROR_TRACKS_POPPYSEED,
 };
@@ -590,11 +631,17 @@ export const BayberryConfig: VehicleModelConfig = {
   // the cabin reads as a normal dark Tesla interior. Slight roughness
   // bump on Decor/cupholder removes the plasticky highlight too.
   interiorOverrides: [
-    { matchName: /^Interior2$/i, color: 0x1a1a1a, roughness: 0.7 },
-    { matchName: /^Decor$/i, color: 0x1a1a1a, roughness: 0.7 },
-    { matchName: /^cupholder$/i, color: 0x1a1a1a, roughness: 0.7 },
-    { matchName: /^Wing$/i, color: 0x1a1a1a, roughness: 0.7 },
+    { key: 'Interior2', matchName: /^Interior2$/i, color: 0x1a1a1a, roughness: 0.7 },
+    { key: 'Decor', matchName: /^Decor$/i, color: 0x1a1a1a, roughness: 0.7 },
+    { key: 'cupholder', matchName: /^cupholder$/i, color: 0x1a1a1a, roughness: 0.7 },
+    { key: 'Wing', matchName: /^Wing$/i, color: 0x1a1a1a, roughness: 0.7 },
   ],
+  wheelFinish: {
+    alloyRoughnessMin: 0.35,
+    alloyEnvBoost: 1.6,
+    plasticRoughness: 0.55,
+    plasticEnvBoost: 1.5,
+  },
 
   // Tesla MY Juniper ships privacy glass on the rear doors (much darker
   // than the front side windows). In the GLB the rear-window geometry

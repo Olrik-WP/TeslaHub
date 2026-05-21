@@ -412,6 +412,37 @@ function CameraSection({ overrides, onChange, defaults }: Props) {
   const fov = cp.fov ?? defaults.cameraPose.fov;
   const overridden = !!overrides.cameraPose && Object.keys(overrides.cameraPose).length > 0;
 
+  // ── Yaw (horizontal rotation) ─────────────────────────────────────
+  // Convenience slider that rotates the camera AROUND the car (the
+  // OrbitControls target) on the horizontal plane, keeping the same
+  // distance and altitude. Updates `cameraPose.position` in cartesian
+  // — no extra field added to the config, so the saved override stays
+  // a plain XYZ tuple that any downstream consumer already understands.
+  //
+  // The displayed yaw is computed from the CURRENT (position, target)
+  // pair, so reset-to-default works naturally (the default yaw is
+  // whatever atan2 gives for the shipped position).
+  const dxToCam = position[0] - target[0];
+  const dzToCam = position[2] - target[2];
+  const horizDist = Math.hypot(dxToCam, dzToCam);
+  const radToDeg = 180 / Math.PI;
+  const currentYawDeg = Math.atan2(dzToCam, dxToCam) * radToDeg;
+  // Default yaw is computed from the SHIPPED position+target, so the
+  // ↺ button revert to the shipped framing's yaw — not 0°.
+  const defDx = defaults.cameraPose.position[0] - defaults.cameraPose.target[0];
+  const defDz = defaults.cameraPose.position[2] - defaults.cameraPose.target[2];
+  const defaultYawDeg = Math.atan2(defDz, defDx) * radToDeg;
+
+  const setYawDeg = (newYawDeg: number) => {
+    // If the camera is right above the target (no horizontal distance),
+    // there's nothing to rotate — bail rather than producing NaN.
+    if (horizDist < 1e-4) return;
+    const rad = newYawDeg / radToDeg;
+    const newX = target[0] + horizDist * Math.cos(rad);
+    const newZ = target[2] + horizDist * Math.sin(rad);
+    setField('position', [newX, position[1], newZ]);
+  };
+
   return (
     <SubSection
       title="Caméra"
@@ -430,6 +461,20 @@ function CameraSection({ overrides, onChange, defaults }: Props) {
         ) : null
       }
     >
+      <ShowroomSlider
+        label="Yaw"
+        value={currentYawDeg}
+        onChange={setYawDeg}
+        defaultValue={defaultYawDeg}
+        min={-180}
+        max={180}
+        step={1}
+        unit="°"
+      />
+      <p className="text-[10px] text-[#6b7280] -mt-1">
+        Rotation horizontale de la caméra autour de la voiture (distance
+        et hauteur conservées).
+      </p>
       <ShowroomVec3Slider
         label="Position caméra"
         value={position}

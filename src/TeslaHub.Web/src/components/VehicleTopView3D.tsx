@@ -96,12 +96,11 @@ function getBeamTexture(role: 'headlight' | 'stoplight'): THREE.Texture {
 //              the dark chrome doesn't render as flat black.
 //   PLASTIC  → keep the matte-black plastic feel, but lift envMap a bit
 //              so the spoke design stays readable instead of pitch black.
+// Material-name regexes — pure pattern, no tuning here (the numbers
+// they pair with moved into VehicleModelConfig.wheelFinish so the
+// Showroom can override them per car).
 const WHEEL_ALLOY_MAT_RE = /^(aluminum|aluminium|chrome|metal_anodized|silver)/i;
-const WHEEL_ALLOY_ROUGHNESS_MIN = 0.35;
-const WHEEL_ALLOY_ENVMAP_BOOST = 1.6;
 const WHEEL_PLASTIC_MAT_RE = /^(plastic_black|rubber)/i;
-const WHEEL_PLASTIC_ROUGHNESS = 0.55;
-const WHEEL_PLASTIC_ENVMAP_BOOST = 1.5;
 
 // ---- Per-model derived constants -----------------------------------------
 // Returns the same shape as the old file-level CFG block, but driven by
@@ -181,39 +180,66 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     // SkeletonUtils.clone preserves material references, so tweaks made
     // here propagate to all 4 cloned wheels for free.
     if (wheelsAvailable) {
-      const FLAG = '__teslahub_wheel_polished';
-      const wheelSceneRef = wheelGltf.scene as unknown as Record<string, boolean>;
-      if (!wheelSceneRef[FLAG]) {
-        let alloyCount = 0;
-        let plasticCount = 0;
-        const seenMats: string[] = [];
-        wheelGltf.scene.traverse((obj) => {
-          const mesh = obj as THREE.Mesh;
-          if (!mesh.isMesh) return;
-          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-          for (const m of mats) {
-            const mat = m as THREE.MeshStandardMaterial;
-            const matName = (mat as { name?: string }).name ?? '';
-            if (seenMats.indexOf(matName) === -1) seenMats.push(matName);
-            if (WHEEL_ALLOY_MAT_RE.test(matName)) {
-              mat.roughness = Math.max(mat.roughness ?? 0.5, WHEEL_ALLOY_ROUGHNESS_MIN);
-              mat.envMapIntensity = (mat.envMapIntensity ?? 1) * WHEEL_ALLOY_ENVMAP_BOOST;
-              alloyCount++;
-            } else if (WHEEL_PLASTIC_MAT_RE.test(matName)) {
-              mat.metalness = 0;
-              mat.roughness = WHEEL_PLASTIC_ROUGHNESS;
-              mat.envMapIntensity = (mat.envMapIntensity ?? 1) * WHEEL_PLASTIC_ENVMAP_BOOST;
-              plasticCount++;
-            }
-          }
-        });
-        wheelSceneRef[FLAG] = true;
-        // eslint-disable-next-line no-console
-        console.log(
-          `[Poppyseed3D] wheel polish: alloy=${alloyCount} plastic=${plasticCount} | ` +
-            `materials seen: ${seenMats.join(', ')}`,
-        );
+      // Snapshot the GLB's baseline material values ONCE per wheel scene
+      // so the Showroom can tune `wheelFinish` (roughness, envBoost,
+      // tint) up AND back down. Without the snapshot, every Showroom
+      // tick would compound the multiplier on the previous frame's
+      // already-boosted value (envMapIntensity → +∞, tint → drift).
+      type WheelSnap = { roughness: number; envMapIntensity: number; color: number };
+      const SNAP_KEY = '__teslahub_wheel_snap';
+      const wheelSceneAny = wheelGltf.scene as unknown as Record<string, unknown>;
+      let snap = wheelSceneAny[SNAP_KEY] as WeakMap<THREE.Material, WheelSnap> | undefined;
+      if (!snap) {
+        snap = new WeakMap();
+        wheelSceneAny[SNAP_KEY] = snap;
       }
+      const finish = cfg.wheelFinish;
+      let alloyCount = 0;
+      let plasticCount = 0;
+      const seenMats: string[] = [];
+      wheelGltf.scene.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const m of mats) {
+          const mat = m as THREE.MeshStandardMaterial;
+          const matName = (mat as { name?: string }).name ?? '';
+          if (seenMats.indexOf(matName) === -1) seenMats.push(matName);
+          // Capture baseline ONCE — every subsequent re-run computes from
+          // these reference values, never from the mutated current ones.
+          let base = snap!.get(mat);
+          if (!base) {
+            base = {
+              roughness: mat.roughness ?? 0.5,
+              envMapIntensity: mat.envMapIntensity ?? 1,
+              color: mat.color ? mat.color.getHex() : 0xffffff,
+            };
+            snap!.set(mat, base);
+          }
+          if (WHEEL_ALLOY_MAT_RE.test(matName)) {
+            mat.roughness = Math.max(base.roughness, finish.alloyRoughnessMin);
+            mat.envMapIntensity = base.envMapIntensity * finish.alloyEnvBoost;
+            if (mat.color) {
+              if (finish.alloyTint !== undefined) {
+                mat.color.setHex(finish.alloyTint);
+              } else {
+                mat.color.setHex(base.color);
+              }
+            }
+            alloyCount++;
+          } else if (WHEEL_PLASTIC_MAT_RE.test(matName)) {
+            mat.metalness = 0;
+            mat.roughness = finish.plasticRoughness;
+            mat.envMapIntensity = base.envMapIntensity * finish.plasticEnvBoost;
+            plasticCount++;
+          }
+        }
+      });
+      // eslint-disable-next-line no-console
+      console.log(
+        `[Poppyseed3D] wheel polish: alloy=${alloyCount} plastic=${plasticCount} | ` +
+          `materials seen: ${seenMats.join(', ')}`,
+      );
     }
 
     const toRemove: THREE.Object3D[] = [];

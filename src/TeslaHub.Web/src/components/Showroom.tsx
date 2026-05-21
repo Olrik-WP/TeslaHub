@@ -54,6 +54,7 @@ import {
 } from './showroomVisualState';
 import { ShowroomVisualSection } from './ShowroomVisualSection';
 import { ShowroomGeometrySection } from './ShowroomGeometrySection';
+import { ShowroomAestheticsSection } from './ShowroomAestheticsSection';
 
 // Lazy-load the viewer — same trick VehicleTopView.tsx uses to keep
 // the GLB/three.js bundle off the initial Settings page load.
@@ -161,6 +162,36 @@ export default function Showroom({ carId }: Props) {
     setEditedOverrides(savedOverrides ?? {});
   };
 
+  // Tiny "copied" badge that flashes for 1.5s after a successful copy.
+  // Used by the Copy-JSON button below — gives a visual ack so the user
+  // doesn't wonder whether the clipboard actually got written.
+  const [copyFlash, setCopyFlash] = useState(false);
+  const handleCopyJson = async () => {
+    try {
+      const text = JSON.stringify(editedOverrides, null, 2);
+      await navigator.clipboard.writeText(text);
+      setCopyFlash(true);
+      window.setTimeout(() => setCopyFlash(false), 1500);
+    } catch {
+      // Clipboard API can fail on insecure contexts (http on non-
+      // localhost). Fall back to a textarea-based copy so the feature
+      // still works when the app is served on plain HTTP over the LAN.
+      const ta = document.createElement('textarea');
+      ta.value = JSON.stringify(editedOverrides, null, 2);
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        setCopyFlash(true);
+        window.setTimeout(() => setCopyFlash(false), 1500);
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+  };
+
   const handleReset = () => {
     if (!carId) return;
     if (
@@ -256,6 +287,23 @@ export default function Showroom({ carId }: Props) {
           </button>
           <button
             type="button"
+            onClick={handleCopyJson}
+            title={t(
+              'showroom.copyJsonHint',
+              "Copie tes réglages au format JSON — utile pour les promouvoir en défauts du modèle",
+            )}
+            className={
+              'h-8 px-3 text-xs rounded-md bg-[#1a1a1a] border border-[#2a2a2a] ' +
+              'text-[#9ca3af] hover:text-white hover:bg-[#2a2a2a] ' +
+              'transition-colors'
+            }
+          >
+            {copyFlash
+              ? t('showroom.copied', '✓ Copié')
+              : t('showroom.copyJson', 'Copier JSON')}
+          </button>
+          <button
+            type="button"
             onClick={handleReset}
             disabled={resetMutation.isPending}
             title={t(
@@ -339,10 +387,15 @@ export default function Showroom({ carId }: Props) {
             defaults={defaults}
           />
 
-          {/* Sections still pending — esthétique (Phase 3b.3):
-              - Paint body (color picker hex Tesla officiel)
-              - Intérieur (Decor/cupholder/Wing/Interior2 colors)
-              - Jantes (color + roughness + envMapIntensity)
+          <div className="h-px bg-[#1a1a1a]" />
+
+          <ShowroomAestheticsSection
+            overrides={editedOverrides}
+            onChange={setEditedOverrides}
+            defaults={defaults}
+          />
+
+          {/* Sections still pending — Phase 3b.3b/c:
               - Vitres (5 sliders opacity + tint + reflection)
               - Projections (color + opacity + texture URL custom)
               - Sentry cameras (7×XYZ sliders)
@@ -350,7 +403,7 @@ export default function Showroom({ carId }: Props) {
           <div className="text-[10px] text-[#4b5563] text-center pt-4 border-t border-[#1a1a1a]">
             {t(
               'showroom.moreSoon',
-              'À venir : peinture, intérieur, jantes, vitres, projections, sentinelles…',
+              'À venir : vitres, projections, caméras sentinelles…',
             )}
           </div>
         </div>

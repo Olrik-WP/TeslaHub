@@ -162,6 +162,15 @@ export interface ShowroomOverrides {
   /** Vertical lift of floating callouts (metres). Default ~0.45-0.50
    *  depending on roof height. */
   calloutHeight?: number;
+  /** Per-slot interior colour overrides. Keys match the `key` field
+   *  on each `interiorOverrides` entry in the model's config
+   *  (`Interior2`, `Decor`, `cupholder`, `Wing`). Values are RGB hex.
+   *  Models without `interiorOverrides` (e.g. Poppyseed M3) ignore
+   *  this field. */
+  interiorColors?: Record<string, number>;
+  /** Wheel finish tweaks (alloy roughness/tint, plastic finish). Each
+   *  field shallow-merges over the model's `wheelFinish` default. */
+  wheelFinish?: Partial<VehicleModelConfig['wheelFinish']>;
 
   // Glass / projections — currently magic numbers in VehicleTopView3D.tsx.
   // Wired through cfg in Phase 3 (DRY refactor); the fields are
@@ -272,6 +281,21 @@ export function mergeShowroomConfig(
     // Visual chrome (scalars)
     bodyPaintColor: overrides.bodyPaintColor ?? defaults.bodyPaintColor,
     calloutHeight: overrides.calloutHeight ?? defaults.calloutHeight,
+
+    // Interior colours — per-slot override keyed on the entry's `key`.
+    // Each entry keeps its matchName/roughness/metalness from the
+    // model default; only `color` is replaceable. Models without
+    // `interiorOverrides` pass through unchanged (undefined).
+    interiorOverrides: defaults.interiorOverrides?.map((ov) => ({
+      ...ov,
+      color: overrides.interiorColors?.[ov.key] ?? ov.color,
+    })),
+
+    // Wheel finish — shallow merge (every field is optional on the
+    // override, falls back to the default).
+    wheelFinish: overrides.wheelFinish
+      ? { ...defaults.wheelFinish, ...overrides.wheelFinish }
+      : defaults.wheelFinish,
   };
 }
 
