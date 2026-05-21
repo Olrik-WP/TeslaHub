@@ -38,6 +38,7 @@
 import { useEffect } from 'react';
 import type { VehicleStatus } from '../api/queries';
 import { useOpeningsContext } from './useVehicleOpenings';
+import { useActiveModel } from './vehicleModelConfig';
 import type { CableMode } from './ShowroomControls';
 
 interface UseVehicleVisualSyncOptions {
@@ -48,6 +49,12 @@ interface UseVehicleVisualSyncOptions {
 
 export function useVehicleVisualSync({ vehicle, onCableModeChange }: UseVehicleVisualSyncOptions) {
   const { set } = useOpeningsContext();
+  const model = useActiveModel();
+  // Only animate the side mirrors on models whose GLB exposes a
+  // dedicated mirror pivot node. Bayberry (MY Juniper) fuses the
+  // mirror mesh into the door, so toggling a mirror_LF target would
+  // just sit idle in the openings map — harmless but noisy in debug.
+  const hasMirrors = !!model.mirrorTracks;
 
   // --- Openings ------------------------------------------------------------
   // Each useEffect is intentionally narrow on its dependency: it only
@@ -117,10 +124,11 @@ export function useVehicleVisualSync({ vehicle, onCableModeChange }: UseVehicleV
   // parked, unlocked car (i.e. they just got out and are checking the
   // app) — showing folded mirrors there would be wrong.
   useEffect(() => {
+    if (!hasMirrors) return;
     const target = vehicle?.isLocked === true ? 1 : 0;
     set('mirror_LF', target);
     set('mirror_RF', target);
-  }, [vehicle?.isLocked, set]);
+  }, [vehicle?.isLocked, set, hasMirrors]);
 
   // --- Cable mode (derived) ------------------------------------------------
   useEffect(() => {

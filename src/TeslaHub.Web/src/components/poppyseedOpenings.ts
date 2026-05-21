@@ -1,108 +1,42 @@
 /**
  * Tesla Model 3 Highland (Poppyseed) — opening animations.
  *
- * Tesla's Godot 3.5 PackedSceneGLTF exporter strips AnimationPlayer tracks
- * from the .glb, so we reconstruct the 13 official animations defined in
- * `Tesla-APK-Android/.../Poppyseed.tscn` by hand.
+ * Tesla's Godot 3.5 PackedSceneGLTF exporter strips AnimationPlayer
+ * tracks from the .glb, so we reconstruct the 13 official animations
+ * defined in `Tesla-APK-Android/.../Poppyseed.tscn` by hand.
  *
- * Each opening targets one or more "pivot" nodes by name. The animation
- * runs from t=0 (closed) to t=length (fully open). All keyframes below are
- * EXACT copies of the values in the .tscn — see the source comments next
- * to each definition for the corresponding `[sub_resource type="Animation"]`.
+ * Each opening targets one or more "pivot" nodes by name. The
+ * animation runs from t=0 (closed) to t=length (fully open). All
+ * keyframes below are EXACT copies of the values in the .tscn — see
+ * the source comments next to each definition for the corresponding
+ * `[sub_resource type="Animation"]`.
  *
- * MULTI-MODEL NOTE:
- *   These keyframes are Poppyseed-specific. Tesla reuses the SAME node
- *   names across model families (Hood_Spatial, Trunk_Spatial, etc.) but
- *   the animation values differ — Model Y has a taller liftgate that
- *   rotates further, the hood opens at a different angle, etc.
+ * COORDINATE SYSTEM:
+ *   - Godot Y-up, right-handed, rotation_degrees as (x, y, z) Euler.
+ *   - Three.js matches Y-up / right-handed. Its Euler default order
+ *     is 'XYZ' but the runtime explicitly uses 'YXZ' to match Godot.
+ *   - Translations are in metres, applied as ABSOLUTE LOCAL positions
+ *     relative to the node's parent (Tesla authored them that way —
+ *     the runtime calls `node.position.set(...)` directly).
  *
- *   When Bayberry (Model Y) lands:
- *     1. Read `Tesla-APK-Android/.../Bayberry.tscn` for the new keyframes.
- *     2. Split this file into `poppyseedOpenings.ts` and
- *        `bayberryOpenings.ts`, exporting each as `OPENINGS_POPPYSEED` /
- *        `OPENINGS_BAYBERRY`.
- *     3. Add `openings: typeof OPENINGS_POPPYSEED` to VehicleModelConfig
- *        and read it via `useActiveModel().openings` in
- *        `useVehicleOpenings.tsx`. The VIN-based picker is already wired
- *        (see vehicleModelConfig.ts > VehicleModelContext / useActiveModel)
- *        so the consumer only needs the field to land on the config object.
- *
- *   Until then we keep them inline to avoid premature abstraction.
- *
- * Coordinate system:
- *   - Godot uses Y-up, right-handed, rotation_degrees in (x, y, z) Euler.
- *   - Three.js matches Y-up / right-handed, but its Euler default order is
- *     "XYZ" (Godot uses "YXZ"). For door rotations (only Y axis used) and
- *     hood/charge cap (only single axis used), the order doesn't matter,
- *     so we can pass the values straight through. For the trunk hinge and
- *     mirrors (multi-axis), keyframes are simple enough that order is OK
- *     too — verified by visual inspection.
- *   - Translations are in meters, applied as offsets relative to each
- *     pivot's REST position. We snapshot rest pos/rot on first frame.
+ * Bayberry (MY Juniper) has its own auto-generated file
+ * (`bayberryOpenings.ts`) sourced from .tres animation resources
+ * instead — see that file for the generator script.
  */
 
-export type OpeningId =
-  | 'hood'
-  | 'trunk'
-  | 'charge_port'
-  | 'door_LF'
-  | 'door_LR'
-  | 'door_RF'
-  | 'door_RR'
-  | 'window_LF'
-  | 'window_LR'
-  | 'window_RF'
-  | 'window_RR'
-  // Mirror fold animations. Originally Tesla embedded these inside the
-  // door_LF / door_RF .tscn animations (so opening a front door also
-  // folded its mirror). That was wrong though — in real Teslas mirrors
-  // fold on LOCK (when the auto-fold setting is enabled), NOT on door
-  // open. We expose them as standalone openings so useVehicleVisualSync
-  // can drive them from `isLocked`. The same animation tracks are
-  // reused, just decoupled from the door triggers.
-  | 'mirror_LF'
-  | 'mirror_RF';
-
-export interface KeyframeRotation {
-  /** Time in seconds (0 → length). */
-  t: number;
-  /** Euler degrees (x, y, z). */
-  eul: [number, number, number];
-}
-
-export interface KeyframeTranslation {
-  /** Time in seconds (0 → length). */
-  t: number;
-  /** Offset in meters relative to the node's rest position. */
-  pos: [number, number, number];
-}
-
-export interface OpeningTrack {
-  /** Node name as it appears in the GLB scene graph. */
-  node: string;
-  rotation?: KeyframeRotation[];
-  translation?: KeyframeTranslation[];
-}
-
-export interface OpeningDefinition {
-  id: OpeningId;
-  /** Total animation length in seconds (matches Godot `length=`). */
-  length: number;
-  /**
-   * Whether this opening is followed by an automatic secondary one.
-   * (e.g. opening LF door auto-unfolds the LF mirror in the .tscn.)
-   */
-  followUp?: OpeningId;
-  /** Tracks — one per pivot node. */
-  tracks: OpeningTrack[];
-}
+import type {
+  OpeningDefinition,
+  OpeningTrack,
+} from './vehicleOpeningTypes';
 
 /**
- * Mirror fold animations (anims/4 and anims/7 in .tscn). These are now
- * top-level openings — see OpeningId type comment for why we decoupled
- * them from the door animations.
+ * Mirror fold animations (anims/4 and anims/7 in .tscn). These are
+ * surfaced as standalone openings — Tesla originally embedded them in
+ * the LF / RF door animations but real Teslas fold mirrors on lock
+ * (auto-fold setting), NOT on door open. The visual sync hook drives
+ * them from `vehicle.isLocked`.
  */
-export const MIRROR_TRACKS = {
+export const MIRROR_TRACKS_POPPYSEED = {
   mirror_LF: {
     node: 'Door_LF_Mirror_Spatial',
     rotation: [
@@ -120,12 +54,12 @@ export const MIRROR_TRACKS = {
 } as const;
 
 /**
- * The 11 top-level openings (excluding the auto-mirror followups).
+ * The 13 openings (11 top-level + 2 mirror fold).
  *
  * Source: `Tesla-APK-Android/decoded/.../Ego/v2023/Poppyseed/Poppyseed.tscn`
  * sub_resources Animation id=1..13.
  */
-export const OPENINGS: OpeningDefinition[] = [
+export const OPENINGS_POPPYSEED: ReadonlyArray<OpeningDefinition> = [
   // anims/1 → Hood (= frunk lid)
   {
     id: 'hood',
@@ -348,41 +282,11 @@ export const OPENINGS: OpeningDefinition[] = [
   {
     id: 'mirror_LF',
     length: 1.0,
-    tracks: [MIRROR_TRACKS.mirror_LF],
+    tracks: [MIRROR_TRACKS_POPPYSEED.mirror_LF],
   },
   {
     id: 'mirror_RF',
     length: 1.0,
-    tracks: [MIRROR_TRACKS.mirror_RF],
+    tracks: [MIRROR_TRACKS_POPPYSEED.mirror_RF],
   },
 ];
-
-/**
- * Quick lookup by opening id.
- */
-export const OPENINGS_BY_ID: Record<OpeningId, OpeningDefinition> = OPENINGS.reduce(
-  (acc, o) => {
-    acc[o.id] = o;
-    return acc;
-  },
-  {} as Record<OpeningId, OpeningDefinition>,
-);
-
-/**
- * Human-readable French labels for the UI overlay.
- */
-export const OPENING_LABELS: Record<OpeningId, string> = {
-  hood: 'Frunk',
-  trunk: 'Coffre',
-  charge_port: 'Trappe de charge',
-  door_LF: 'Porte avant gauche',
-  door_LR: 'Porte arrière gauche',
-  door_RF: 'Porte avant droite',
-  door_RR: 'Porte arrière droite',
-  window_LF: 'Vitre avant gauche',
-  window_LR: 'Vitre arrière gauche',
-  window_RF: 'Vitre avant droite',
-  window_RR: 'Vitre arrière droite',
-  mirror_LF: 'Rétroviseur gauche',
-  mirror_RF: 'Rétroviseur droit',
-};

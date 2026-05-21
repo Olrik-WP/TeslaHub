@@ -3,13 +3,13 @@ import type { ReactNode } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import {
-  OPENINGS,
-  OPENINGS_BY_ID,
   type KeyframeRotation,
   type KeyframeTranslation,
+  type OpeningDefinition,
   type OpeningId,
   type OpeningTrack,
-} from './vehicleOpenings';
+} from './vehicleOpeningTypes';
+import { useActiveModel } from './vehicleModelConfig';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -45,28 +45,46 @@ interface OpeningsProviderProps {
   children: ReactNode;
 }
 
+// Build a target/progress map containing EVERY OpeningId, even the ones
+// the current model doesn't implement. This way useVehicleVisualSync can
+// always call `set('mirror_LF', …)` without exploding when the Y is
+// active and has no mirror anims — the write just sits in the map and
+// the animator skips it (no matching definition in `model.openings`).
+function emptyOpeningMap<T extends number>(value: T): Record<OpeningId, T> {
+  return {
+    hood: value,
+    trunk: value,
+    charge_port: value,
+    door_LF: value,
+    door_LR: value,
+    door_RF: value,
+    door_RR: value,
+    window_LF: value,
+    window_LR: value,
+    window_RF: value,
+    window_RR: value,
+    mirror_LF: value,
+    mirror_RF: value,
+  };
+}
+
 export function OpeningsProvider({ children }: OpeningsProviderProps) {
+  // We snapshot the model's opening set so `setAll` only iterates over
+  // ids the active car can actually animate. The map itself holds every
+  // id (see emptyOpeningMap above) for safety.
+  const model = useActiveModel();
+  const modelOpeningIds = useMemo(
+    () => model.openings.map((o) => o.id),
+    [model.openings],
+  );
+
   const [targets, setTargets] = useState<Record<OpeningId, 0 | 1>>(() =>
-    OPENINGS.reduce(
-      (acc, o) => {
-        acc[o.id] = 0;
-        return acc;
-      },
-      {} as Record<OpeningId, 0 | 1>,
-    ),
+    emptyOpeningMap(0 as 0 | 1),
   );
 
   // Live animated progress — mutated every frame by useOpeningsAnimator, so
   // we don't trigger React re-renders. UI reads it on demand via readProgress.
-  const progressRef = useRef<Record<OpeningId, number>>(
-    OPENINGS.reduce(
-      (acc, o) => {
-        acc[o.id] = 0;
-        return acc;
-      },
-      {} as Record<OpeningId, number>,
-    ),
-  );
+  const progressRef = useRef<Record<OpeningId, number>>(emptyOpeningMap(0));
 
   const set = useCallback((id: OpeningId, target: 0 | 1) => {
     setTargets((prev) => (prev[id] === target ? prev : { ...prev, [id]: target }));
@@ -80,15 +98,15 @@ export function OpeningsProvider({ children }: OpeningsProviderProps) {
     setTargets((prev) => {
       const next = { ...prev };
       let changed = false;
-      for (const o of OPENINGS) {
-        if (next[o.id] !== target) {
-          next[o.id] = target;
+      for (const id of modelOpeningIds) {
+        if (next[id] !== target) {
+          next[id] = target;
           changed = true;
         }
       }
       return changed ? next : prev;
     });
-  }, []);
+  }, [modelOpeningIds]);
 
   const readProgress = useCallback(() => progressRef.current, []);
 
@@ -127,7 +145,7 @@ function lerpTriple(
  * default Animation interp=1 (linear).
  */
 function sampleRotation(
-  keys: KeyframeRotation[],
+  keys: ReadonlyArray<KeyframeRotation>,
   time: number,
 ): [number, number, number] {
   if (keys.length === 0) return [0, 0, 0];
@@ -147,7 +165,7 @@ function sampleRotation(
 }
 
 function sampleTranslation(
-  keys: KeyframeTranslation[],
+  keys: ReadonlyArray<KeyframeTranslation>,
   time: number,
 ): [number, number, number] {
   if (keys.length === 0) return [0, 0, 0];
@@ -194,6 +212,10 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
     | (OpeningsContextValue & { __progressRef?: React.MutableRefObject<Record<OpeningId, number>> })
     | null;
   if (!ctx) throw new Error('VehicleOpeningsAnimator requires <OpeningsProvider>');
+  // Per-model animation set. Re-resolved on every render so a runtime
+  // car swap (Model 3 → Model Y) immediately uses the new keyframes.
+  const model = useActiveModel();
+  const openings: ReadonlyArray<OpeningDefinition> = model.openings;
 
   // Snapshot rest transforms ONCE per (scene, opening). We do this lazily
   // inside useFrame to ensure the scene graph is fully mounted and any
@@ -225,7 +247,7 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
     // Approach factor independent of frame rate.
     const k = 1 - Math.exp(-approach * delta);
 
-    for (const opening of OPENINGS) {
+    for (const opening of openings) {
       const target = targets[opening.id];
       const current = progress[opening.id];
       // Move progress toward target; clamp to [0,1].
@@ -293,26 +315,4 @@ function applyTrack(
   void rest;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers exposed to UI components
-// ---------------------------------------------------------------------------
-
-/**
- * Returns the opening id whose pivot node is an ancestor of the given
- * mesh, or null. Used to route raycast clicks back to the right opening.
- */
-export function findOpeningForObject(obj: THREE.Object3D): OpeningId | null {
-  let cur: THREE.Object3D | null = obj;
-  while (cur) {
-    for (const o of OPENINGS) {
-      for (const track of o.tracks) {
-        if (cur.name === track.node) return o.id;
-      }
-    }
-    cur = cur.parent;
-  }
-  return null;
-}
-
-export { OPENINGS, OPENINGS_BY_ID };
 export type { OpeningId };

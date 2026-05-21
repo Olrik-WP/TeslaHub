@@ -19,7 +19,8 @@
  */
 import { useCallback, useMemo, useState } from 'react';
 import { useOpeningsContext } from './useVehicleOpenings';
-import { OPENINGS, OPENING_LABELS, type OpeningId } from './vehicleOpenings';
+import { OPENING_LABELS, type OpeningId } from './vehicleOpeningTypes';
+import { useActiveModel } from './vehicleModelConfig';
 
 export type CableMode = 'off' | 'plugged' | 'charging';
 
@@ -70,6 +71,8 @@ export function ShowroomControls({
   onCycleCable,
 }: ShowroomControlsProps) {
   const { toggle, set, setAll, targets } = useOpeningsContext();
+  const model = useActiveModel();
+  const openings = model.openings;
   const [expanded, setExpanded] = useState(false);
 
   // Cycling the cable also opens/closes the charge port trapdoor, mirroring
@@ -119,7 +122,7 @@ export function ShowroomControls({
         </div>
 
         <div className="grid grid-cols-3 gap-1">
-          {OPENINGS.map((o) => {
+          {openings.map((o) => {
             const isOpen = targets[o.id] === 1;
             return (
               <button

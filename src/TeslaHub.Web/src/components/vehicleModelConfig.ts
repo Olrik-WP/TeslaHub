@@ -30,6 +30,14 @@
  *   +Z = right (passenger side)
  */
 
+import type {
+  OpeningDefinition,
+  OpeningTrack,
+} from './vehicleOpeningTypes';
+import { OPENINGS_POPPYSEED } from './poppyseedOpenings';
+import { MIRROR_TRACKS_POPPYSEED } from './poppyseedOpenings';
+import { OPENINGS_BAYBERRY } from './bayberryOpenings';
+
 /** Tesla internal codename for each car family. */
 export type VehicleModelKey = 'poppyseed' | 'bayberry';
 
@@ -232,6 +240,34 @@ export interface VehicleModelConfig {
    *  Y is 5 cm taller than 3 so the offset needs to be slightly bigger
    *  to clear the roof. */
   calloutHeight: number;
+
+  // ───────────────────────────────────────────────────────────────────
+  // Opening animations — per-model (Tesla ships different keyframes per
+  // car family, and even uses DIFFERENT node names: M3 calls a window
+  // pivot `Window_LF_Spatial`, Y calls it `Window_FL`).
+  // ───────────────────────────────────────────────────────────────────
+  /** Every animatable opening for this model. Drives the
+   *  <VehicleOpeningsAnimator> inside the Canvas + the visual sync
+   *  hook (which writes to `set(openingId, 0|1)`).
+   *
+   *  Models that don't implement a given opening (e.g. Bayberry has no
+   *  `mirror_LF` / `mirror_RF`) simply omit it from the array. The
+   *  runtime degrades gracefully — set() calls for missing ids are
+   *  recorded but never produce visible motion. */
+  openings: ReadonlyArray<OpeningDefinition>;
+
+  /** Optional auto-fold tracks for the side mirrors, triggered on lock.
+   *  Only meaningful when the GLB exposes dedicated mirror pivot
+   *  nodes (Poppyseed: `Door_LF_Mirror_Spatial`, etc.). Bayberry's
+   *  mirrors are fused into the door mesh — no separate node, no
+   *  auto-fold possible without mesh surgery → leave undefined.
+   *
+   *  When undefined, useVehicleVisualSync skips the `set('mirror_*', …)`
+   *  calls entirely so the model doesn't accumulate dead targets. */
+  mirrorTracks?: {
+    mirror_LF: OpeningTrack;
+    mirror_RF: OpeningTrack;
+  };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -340,6 +376,8 @@ export const PoppyseedConfig: VehicleModelConfig = {
   },
   bodyPaintColor: 0xf2f2f0,
   calloutHeight: 0.45,
+  openings: OPENINGS_POPPYSEED,
+  mirrorTracks: MIRROR_TRACKS_POPPYSEED,
 };
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -560,6 +598,13 @@ export const BayberryConfig: VehicleModelConfig = {
   // way to know it should be darker than the front-door windows. Listing
   // the parent group names here tells it to boost opacity.
   privacyGlassNodes: [/^Window_R[LR]$/i],
+
+  openings: OPENINGS_BAYBERRY,
+  // No mirrorTracks for Bayberry — Tesla fused the rear-view mirror
+  // meshes into Front_Left_Door / Front_Right_Door (no separate pivot
+  // node in the GLB), so auto-fold on lock is impossible without
+  // remeshing. The visual sync hook detects the undefined field and
+  // skips the mirror_LF / mirror_RF targets entirely.
 };
 
 export const VEHICLE_MODELS: Record<VehicleModelKey, VehicleModelConfig> = {
