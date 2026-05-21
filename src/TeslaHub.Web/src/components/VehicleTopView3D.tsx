@@ -94,6 +94,35 @@ const beamTextureCache = new Map<string, THREE.Texture>();
 const DEFAULT_HEADLIGHT_BEAM_URL = '/textures/headlight_beam.png';
 const DEFAULT_STOPLIGHT_BEAM_URL = '/textures/stoplight_beam.png';
 
+/** Snapshot stored on the projection MESH (not the material — we may
+ *  swap the material to MeshBasicMaterial for unlit PNG beams). */
+type ProjectionSnap = {
+  originalMat: THREE.Material;
+  hasBaked: boolean;
+  baseMap: THREE.Texture;
+  baseColor: number;
+  baseOpacity: number;
+  baseTransparent: boolean;
+  baseDepthWrite: boolean;
+};
+
+type MeshWithProjSnap = THREE.Mesh & { __teslahub_proj_snap?: ProjectionSnap };
+
+/** Fire `cb` once the texture image is decoded (handles async PNG load). */
+function whenTextureReady(tex: THREE.Texture, cb: () => void): void {
+  const img = tex.image as HTMLImageElement | undefined;
+  if (img && 'complete' in img && img.complete && img.naturalWidth > 0) {
+    cb();
+    return;
+  }
+  if (img && 'addEventListener' in img) {
+    img.addEventListener('load', () => cb(), { once: true });
+    img.addEventListener('error', () => cb(), { once: true });
+    return;
+  }
+  requestAnimationFrame(cb);
+}
+
 /**
  * Returns a `THREE.Texture` for the requested beam URL — cached so we
  * don't re-fetch the same PNG when the Showroom user toggles between
@@ -102,16 +131,70 @@ const DEFAULT_STOPLIGHT_BEAM_URL = '/textures/stoplight_beam.png';
  * /textures/*.png). Custom URLs can point to any HTTPS image hosted
  * by the Caddy reverse-proxy or the user's own asset CDN.
  */
-function getBeamTexture(role: 'headlight' | 'stoplight', url: string | undefined): THREE.Texture {
+function getBeamTexture(
+  role: 'headlight' | 'stoplight',
+  url: string | undefined,
+  onLoad?: (tex: THREE.Texture) => void,
+): THREE.Texture {
   const finalUrl =
     url ?? (role === 'headlight' ? DEFAULT_HEADLIGHT_BEAM_URL : DEFAULT_STOPLIGHT_BEAM_URL);
-  let tex = beamTextureCache.get(finalUrl);
-  if (!tex) {
-    tex = beamTextureLoader.load(finalUrl);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    beamTextureCache.set(finalUrl, tex);
+  const cached = beamTextureCache.get(finalUrl);
+  if (cached) {
+    if (onLoad) whenTextureReady(cached, () => onLoad(cached));
+    return cached;
   }
+  const tex = beamTextureLoader.load(
+    finalUrl,
+    (loaded) => {
+      loaded.colorSpace = THREE.SRGBColorSpace;
+      onLoad?.(loaded);
+    },
+    undefined,
+    (err) => {
+      // eslint-disable-next-line no-console
+      console.error('[BeamTexture] load failed:', finalUrl, err);
+    },
+  );
+  tex.colorSpace = THREE.SRGBColorSpace;
+  beamTextureCache.set(finalUrl, tex);
   return tex;
+}
+
+/** Unlit projection quad — same pattern as the floor shadow fix. The
+ *  Tesla beam PNG stores the cone shape in the ALPHA channel; wiring
+ *  it as both `map` and `alphaMap` on a MeshBasicMaterial reproduces
+ *  the cut-out fan without PBR lighting washing it to black on the M3. */
+function applyUnlitProjectionMaterial(
+  mesh: THREE.Mesh,
+  tex: THREE.Texture,
+  color: number,
+  opacity: number,
+): THREE.MeshBasicMaterial {
+  const cur = mesh.material as THREE.MeshBasicMaterial;
+  let basic: THREE.MeshBasicMaterial;
+  if (cur instanceof THREE.MeshBasicMaterial && (cur as unknown as { __th_proj?: boolean }).__th_proj) {
+    basic = cur;
+  } else {
+    basic = new THREE.MeshBasicMaterial({
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    (basic as unknown as { __th_proj?: boolean }).__th_proj = true;
+    mesh.material = basic;
+  }
+  tex.colorSpace = THREE.SRGBColorSpace;
+  basic.map = tex;
+  basic.alphaMap = tex;
+  basic.color.setHex(color);
+  basic.opacity = opacity;
+  basic.transparent = true;
+  basic.depthWrite = false;
+  basic.needsUpdate = true;
+  whenTextureReady(tex, () => {
+    basic.needsUpdate = true;
+  });
+  return basic;
 }
 
 // ---- Wheel polish ---------------------------------------------------------
@@ -404,7 +487,6 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     let windowFixed = 0;
     let paintFixed = 0;
     let floorFixed = 0;
-    let projectionMeshesTouched = 0;
     const glassDebug: string[] = [];
     const paintDebug: string[] = [];
 
@@ -552,166 +634,78 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           return null;
         })();
         if (projectionRole) {
-          projectionMeshesTouched++;
-          const std = mat as THREE.MeshStandardMaterial;
           const beamCfg = cfg.projections[projectionRole];
+          const meshProj = mesh as MeshWithProjSnap;
+          const std = mat as THREE.MeshStandardMaterial;
 
-          // First-touch bootstrap — runs ONCE per material instance.
-          // We follow two distinct strategies depending on whether the
-          // GLB shipped a baked diffuse map:
-          //
-          //   • M3 path (snap.hasBaked === false): the primitive ships
-          //     texture-less so we graft the Tesla fallback PNG, force
-          //     a WHITE baseline colour (snap.baseColor = 0xffffff)
-          //     and full opacity. If we kept the GLB's actual color
-          //     (often 0x111111 = a dark grey "shadow tint"), the
-          //     beam texture would multiply to near-black and the
-          //     projection would render invisible — which is exactly
-          //     the regression the user just reported.
-          //
-          //   • Y path (snap.hasBaked === true): the baked beam PNG
-          //     already lives in the material. We capture the GLB's
-          //     own colour/opacity/transparent flags so the default
-          //     beamCfg (white × 1) leaves Bayberry's projection
-          //     exactly as Tesla shipped it.
-          type ProjSnap = {
-            baseMap: THREE.Texture;
-            baseColor: number;
-            baseOpacity: number;
-            baseTransparent: boolean;
-            baseDepthWrite: boolean;
-            hasBaked: boolean;
-          };
-          type WithProjSnap = { __teslahub_proj_snap?: ProjSnap };
-          const stdAny = std as unknown as WithProjSnap;
-          let snap = stdAny.__teslahub_proj_snap;
-          if (!snap) {
+          if (!meshProj.__teslahub_proj_snap) {
             const hasBaked = !!std.map;
-            const fallbackMap = hasBaked
-              ? (std.map as THREE.Texture)
-              : getBeamTexture(projectionRole, undefined);
-            snap = {
-              baseMap: fallbackMap,
+            meshProj.__teslahub_proj_snap = {
+              originalMat: mat,
+              hasBaked,
+              baseMap: hasBaked
+                ? (std.map as THREE.Texture)
+                : getBeamTexture(projectionRole, undefined),
               baseColor: hasBaked ? (std.color?.getHex() ?? 0xffffff) : 0xffffff,
               baseOpacity: hasBaked ? (std.opacity ?? 1) : 1,
               baseTransparent: hasBaked ? std.transparent : true,
               baseDepthWrite: hasBaked ? std.depthWrite : false,
-              hasBaked,
             };
-            stdAny.__teslahub_proj_snap = snap;
-
-            // Diagnostic — fires ONCE per material so we can see in the
-            // console exactly what the GLB shipped for this projection.
-            // If `hasBaked=false` and the rectangle still doesn't show
-            // up, the issue is geometry-side (mesh hidden, node name
-            // mismatch); if `hasBaked=true` with a tiny/empty texture
-            // the issue is the bootstrap deciding it doesn't need to
-            // graft the fallback.
-            // eslint-disable-next-line no-console
-            console.log(
-              `[ProjectionBootstrap] role=${projectionRole} mat="${matName}" ` +
-                `mesh="${mesh.name}" hasBaked=${hasBaked} ` +
-                `glbOpacity=${std.opacity ?? 1} ` +
-                `glbTransparent=${std.transparent} ` +
-                `glbColor=#${(std.color?.getHex() ?? 0).toString(16).padStart(6, '0')}`,
-            );
-
-            // For the M3 path we ALSO commit the bootstrapped state to
-            // the material right now (graft texture, force transparent,
-            // force shader recompile so the freshly added sampler is
-            // wired into the program). After this single setup pass we
-            // never call needsUpdate again — subsequent slider ticks
-            // only flip non-shader fields.
-            if (!hasBaked) {
-              std.map = fallbackMap;
-              std.transparent = true;
-              std.depthWrite = false;
-              std.side = THREE.DoubleSide;
-              std.needsUpdate = true;
-            }
           }
-
-          // ── Every-pass mutations: apply the user's overrides ONLY
-          // when they differ from the neutral default. This is what
-          // fixes the "touch any slider and the Y projection
-          // disappears" bug: when beamCfg matches the shipped default
-          // (white × 1 × the model's renderOrder), we leave the GLB
-          // material strictly untouched after the bootstrap above.
-          // Only an actual user-edit (non-identity color/opacity, or
-          // a custom textureUrl) reaches inside the material.
-
-          // 1. Texture swap — only when user provided a custom URL.
-          //    When we graft a USER-provided PNG (or our fallback PNG)
-          //    onto a Y baked material that was shipped OPAQUE, we MUST
-          //    flip the material into BLEND mode + recompile its
-          //    shader. Without that the PNG's alpha channel is
-          //    ignored, the quad renders as a solid rectangle which
-          //    visually merges with the bright floor and looks like
-          //    the projection "disappeared". This is the bug behind
-          //    "model Y projection disappears when I type a texture
-          //    URL in the Showroom" — the texture WAS swapped, but on
-          //    a still-opaque material so the alpha cut never happened.
+          const snap = meshProj.__teslahub_proj_snap;
           const usingCustomUrl = !!beamCfg.textureUrl;
-          if (usingCustomUrl) {
-            const customMap = getBeamTexture(projectionRole, beamCfg.textureUrl);
-            if (std.map !== customMap) {
-              std.map = customMap;
-              std.needsUpdate = true;
-            }
-            std.transparent = true;
-            std.depthWrite = false;
-            std.side = THREE.DoubleSide;
-          } else if (std.map !== snap.baseMap) {
-            // User cleared a previously-set custom URL → restore baked
-            // map AND the baseline transparent/depth flags so a Y
-            // returning from custom-URL back to default behaves
-            // exactly like a fresh load.
-            std.map = snap.baseMap;
-            std.transparent = snap.baseTransparent;
-            std.depthWrite = snap.baseDepthWrite;
-            std.needsUpdate = true;
-          }
+          // M3 ships texture-less → always unlit PNG graft.
+          // Y baked works natively, but a user-provided PNG needs the
+          // same unlit alphaMap path (otherwise alpha is ignored on the
+          // GLB's OPAQUE StandardMaterial and the beam vanishes).
+          const needsUnlit = !snap.hasBaked || usingCustomUrl;
 
-          // 2. Colour — multiply snap baseline × user tint. Skip the
-          //    write entirely if user kept the white default AND the
-          //    current colour is already at baseline (avoids re-writing
-          //    on every tick which can spuriously dirty the shader).
-          if (std.color) {
-            if (beamCfg.color === 0xffffff) {
-              // Neutral colour — restore baseline only if it drifted.
-              if (std.color.getHex() !== snap.baseColor) {
-                std.color.setHex(snap.baseColor);
-              }
-            } else {
-              std.color.setHex(snap.baseColor);
-              std.color.multiply(new THREE.Color().setHex(beamCfg.color));
+          if (needsUnlit) {
+            const tex = usingCustomUrl
+              ? getBeamTexture(projectionRole, beamCfg.textureUrl)
+              : snap.baseMap;
+            let tint = snap.baseColor;
+            if (beamCfg.color !== 0xffffff) {
+              tint = snap.baseColor;
+              const c = new THREE.Color().setHex(tint);
+              c.multiply(new THREE.Color().setHex(beamCfg.color));
+              tint = c.getHex();
             }
-          }
-
-          // 3. Opacity — apply only if user moved the slider off 1.
-          //    Default Y is OPAQUE in the GLB; forcing a multiplied
-          //    opacity onto an OPAQUE material is fine (Three honours
-          //    it once transparent=true) but we don't want to flip
-          //    transparency on a material that was happily OPAQUE
-          //    just because the slider sits at 1. When the user has
-          //    grafted a custom URL we keep the transparent/depthWrite
-          //    flags forced by the texture-swap block above (the PNG
-          //    needs alpha blending to render correctly).
-          if (beamCfg.opacity !== 1) {
-            std.opacity = snap.baseOpacity * beamCfg.opacity;
-            std.transparent = true;
-            std.depthWrite = false;
+            applyUnlitProjectionMaterial(
+              mesh,
+              tex,
+              tint,
+              snap.baseOpacity * beamCfg.opacity,
+            );
           } else {
-            std.opacity = snap.baseOpacity;
-            if (!usingCustomUrl) {
-              std.transparent = snap.baseTransparent;
-              std.depthWrite = snap.baseDepthWrite;
+            // Y native baked — restore the GLB StandardMaterial if we
+            // previously swapped to Basic for a custom URL experiment.
+            if (mesh.material !== snap.originalMat) {
+              mesh.material = snap.originalMat;
+            }
+            const baked = snap.originalMat as THREE.MeshStandardMaterial;
+            if (baked.color) {
+              if (beamCfg.color === 0xffffff) {
+                if (baked.color.getHex() !== snap.baseColor) {
+                  baked.color.setHex(snap.baseColor);
+                }
+              } else {
+                baked.color.setHex(snap.baseColor);
+                baked.color.multiply(new THREE.Color().setHex(beamCfg.color));
+              }
+            }
+            if (beamCfg.opacity !== 1) {
+              baked.opacity = snap.baseOpacity * beamCfg.opacity;
+              baked.transparent = true;
+              baked.depthWrite = false;
+            } else {
+              baked.opacity = snap.baseOpacity;
+              baked.transparent = snap.baseTransparent;
+              baked.depthWrite = snap.baseDepthWrite;
             }
           }
 
           mesh.renderOrder = beamCfg.renderOrder;
-          // Skip the rest of the loop body — projection meshes aren't
-          // glass, paint, or anything else we'd want to touch.
           continue;
         }
 
@@ -1067,16 +1061,6 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       // eslint-disable-next-line no-console
       console.log(`[Poppyseed3D] floor shadow meshes fixed: ${floorFixed}`);
     }
-    // Always log the projection mesh count so we can immediately spot
-    // an empty result (= the GLB doesn't ship the configured node
-    // names, or the meshes were renamed during export). Without this
-    // signal it's impossible to tell from the screen whether "no
-    // projection visible" means "broken material" or "no mesh at all".
-    // eslint-disable-next-line no-console
-    console.log(
-      `[Poppyseed3D] projection meshes touched (head=${cfg.groundProjectionNodes.headlights}, ` +
-        `stop=${cfg.groundProjectionNodes.stoplights}): ${projectionMeshesTouched}`,
-    );
 
     let wheelsAttached = 0;
     let wheelMode: 'anchor' | 'fallback' | 'none' = 'none';
