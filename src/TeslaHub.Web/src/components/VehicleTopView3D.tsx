@@ -1380,6 +1380,11 @@ function VehicleTopView3DInner({ vehicle, showroomMode }: Props) {
           {/* Read MQTT/TeslaMate state → drive openings + cableMode. */}
           <VehicleStateSync vehicle={vehicle} onCableModeChange={setCableMode} />
 
+          {/* Push camera/target/FOV from cfg into the live WebGL camera
+              so Showroom sliders actually move the framing in realtime.
+              Idempotent in normal viewer (cfg is stable). */}
+          <CameraPoseSync />
+
           <OrbitControls
             target={cfg.cameraPose.target}
             enablePan={false}
@@ -1458,6 +1463,54 @@ function LockBadge({ locked }: { locked: boolean }) {
       </svg>
     </div>
   );
+}
+
+/**
+ * Push the active model's camera pose (position + target + fov) into
+ * the WebGL camera / OrbitControls in realtime.
+ *
+ * Why this exists:
+ *   The `<Canvas camera={...}>` prop is only read on FIRST mount; after
+ *   that, R3F leaves the perspective camera alone. That's fine in the
+ *   normal viewer (the pose comes from a stable config) but BREAKS the
+ *   Showroom calibration page where the user drags FOV / Position
+ *   sliders and expects the framing to update instantly.
+ *
+ *   This component watches the resolved config and writes any change
+ *   straight to the live camera + OrbitControls.target. It runs INSIDE
+ *   the <Canvas> tree so it can read both via `useThree`.
+ *
+ * Safety: the effect runs only when the cfg references actually change
+ * (the config object is memoised in `useResolvedModelConfig`), so
+ * orbiting the camera with the mouse during the in-between renders
+ * doesn't get stomped on.
+ */
+function CameraPoseSync() {
+  const pose = useActiveModel().cameraPose;
+  const camera = useThree((s) => s.camera);
+  // drei's OrbitControls registers itself on the store via `makeDefault`.
+  // The store typing in @react-three/fiber narrows `controls` to
+  // EventManager which doesn't surface the .target shape — runtime-check
+  // before touching it.
+  const controls = useThree((s) => s.controls) as unknown as {
+    target?: { fromArray: (a: ArrayLike<number>) => void };
+    update?: () => void;
+  } | null;
+
+  useEffect(() => {
+    camera.position.fromArray(pose.position);
+    if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+      const pc = camera as THREE.PerspectiveCamera;
+      pc.fov = pose.fov;
+      pc.updateProjectionMatrix();
+    }
+    if (controls?.target && controls.update) {
+      controls.target.fromArray(pose.target);
+      controls.update();
+    }
+  }, [camera, controls, pose.position, pose.target, pose.fov]);
+
+  return null;
 }
 
 // Tiny child component whose sole job is to call the sync hook inside the

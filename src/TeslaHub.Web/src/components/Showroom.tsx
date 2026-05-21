@@ -43,14 +43,17 @@ import type { ShowroomOverrides } from './showroomOverrides';
 import {
   PoppyseedConfig,
   BayberryConfig,
+  VEHICLE_MODELS,
   type VehicleModelKey,
 } from './vehicleModelConfig';
+import { pickResolvedModelKey } from './showroomOverrides';
 import {
   type ShowroomVisualState,
   DEFAULT_VISUAL_STATE,
   buildShowroomStubVehicle,
 } from './showroomVisualState';
 import { ShowroomVisualSection } from './ShowroomVisualSection';
+import { ShowroomGeometrySection } from './ShowroomGeometrySection';
 
 // Lazy-load the viewer — same trick VehicleTopView.tsx uses to keep
 // the GLB/three.js bundle off the initial Settings page load.
@@ -209,6 +212,13 @@ export default function Showroom({ carId }: Props) {
   // remote-controlling from the right-hand panel.
   const stubVehicle = buildShowroomStubVehicle(vehicle, visualState);
 
+  // Active model SHIPPED defaults (no overrides applied). Used by the
+  // geometry section so the sliders' "↺ reset" buttons know what to
+  // revert to. We re-resolve on every render so a model switch made
+  // higher in the panel (Modèle/Trim section) is picked up here.
+  const activeModelKey = pickResolvedModelKey(vehicle.vin, editedOverrides);
+  const defaults = VEHICLE_MODELS[activeModelKey] ?? PoppyseedConfig;
+
   return (
     <div className="space-y-3">
       {/* Toolbar — sticky on scroll. Title + Save/Discard/Reset. */}
@@ -321,20 +331,26 @@ export default function Showroom({ carId }: Props) {
             onChange={setVisualState}
           />
 
-          {/* Placeholder for sections to come in next sub-phase:
-              - Roues (per-corner sliders X/Y/Z + wheelUrl)
-              - Charge port (sliders X/Y/Z + plug direction)
-              - Cable ground anchor
-              - Sentry cameras (7 sliders)
-              - Glass (sliders opacity + color)
-              - Projections (sliders + color + texture URL)
-              - Intérieur (Decor/cupholder/Wing color pickers)
+          <div className="h-px bg-[#1a1a1a]" />
+
+          <ShowroomGeometrySection
+            overrides={editedOverrides}
+            onChange={setEditedOverrides}
+            defaults={defaults}
+          />
+
+          {/* Sections still pending — esthétique (Phase 3b.3):
+              - Paint body (color picker hex Tesla officiel)
+              - Intérieur (Decor/cupholder/Wing/Interior2 colors)
               - Jantes (color + roughness + envMapIntensity)
-              All folded into <TuningPanel> in next sub-phases. */}
+              - Vitres (5 sliders opacity + tint + reflection)
+              - Projections (color + opacity + texture URL custom)
+              - Sentry cameras (7×XYZ sliders)
+              + Phase 4 — drag-gizmos sur les callouts/anchors. */}
           <div className="text-[10px] text-[#4b5563] text-center pt-4 border-t border-[#1a1a1a]">
             {t(
               'showroom.moreSoon',
-              'Sections à venir : roues, charge port, sentry, intérieur, jantes, vitres, projections…',
+              'À venir : peinture, intérieur, jantes, vitres, projections, sentinelles…',
             )}
           </div>
         </div>
