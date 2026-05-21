@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ReactNode } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
@@ -85,6 +93,22 @@ export function OpeningsProvider({ children }: OpeningsProviderProps) {
   // Live animated progress — mutated every frame by useOpeningsAnimator, so
   // we don't trigger React re-renders. UI reads it on demand via readProgress.
   const progressRef = useRef<Record<OpeningId, number>>(emptyOpeningMap(0));
+
+  // Reset everything to "closed" whenever the active model changes
+  // (e.g. user switches Model 3 → Model Y in the Showroom, or picks
+  // a different car on Home). Without this, a hood/trunk left open
+  // on the previous model would instantly snap the same opening on
+  // the new model to "open" before the user has a chance to look —
+  // and on the Y, since the keyframes are different from the M3,
+  // the visual end state would be wrong too.
+  // belt + braces alongside the `key={cfg.key}` remount in
+  // VehicleTopView3D: if a caller mounts <OpeningsProvider> outside
+  // that key boundary (e.g. a future Showroom that survives car
+  // switches), this effect still keeps the openings coherent.
+  useEffect(() => {
+    setTargets(emptyOpeningMap(0 as 0 | 1));
+    progressRef.current = emptyOpeningMap(0);
+  }, [model.key]);
 
   const set = useCallback((id: OpeningId, target: 0 | 1) => {
     setTargets((prev) => (prev[id] === target ? prev : { ...prev, [id]: target }));

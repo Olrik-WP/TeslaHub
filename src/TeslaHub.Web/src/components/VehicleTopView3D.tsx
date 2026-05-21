@@ -1340,27 +1340,41 @@ function VehicleTopView3DInner({ vehicle, showroomMode }: Props) {
 
           <Suspense fallback={<Loader />}>
             <Environment preset="city" />
-            {/* Wait until the wheel probe completes before mounting the
-                chassis. Otherwise the chassis loads twice via Suspense when
-                the wheel state flips from unknown → available. */}
-            {wheelsAvailable !== null && (
-              <PoppyseedModel wheelsAvailable={wheelsAvailable} />
-            )}
-            {/* Cable mounts only when the live state says we're plugged or
-                charging. Animated colour switches between grey-pulse and
-                green-flow inside <ChargingCable>. */}
-            {cableMode !== 'off' && handleAvailable !== null && (
-              <LiveChargingCable mode={cableMode} handleAvailable={handleAvailable} />
-            )}
-            {/* Callouts mounted inside Canvas so they can read the scene
-                graph (anchor positions) via useThree.scene. They render
-                nothing when actions=null (Fleet API not ready). */}
-            <VehicleCallouts vehicle={vehicle} actions={filteredActions} />
-            {/* Phase 7 light effects: lock flash, brake/reverse lights,
-                sentry-mode camera pulses. Reads vehicle.* live state
-                and mutates scene nodes directly (no React props/state
-                churn). */}
-            <VehicleLightEffects vehicle={vehicle} />
+            {/* IMPORTANT — keyed by the model key so a runtime swap
+                (Showroom: Model 3 → Model Y, or Home: switching cars
+                between a 3 and a Y) FORCES every model-bound component
+                to remount. Without this, the per-instance caches that
+                live in useRef (VehicleOpeningsAnimator.restCache,
+                VehicleLightEffects emissive snapshots, callout anchor
+                lookups…) keep stale references to nodes from the
+                previous scene graph and the new model just sits
+                inanimate until the page is refreshed.
+                The Canvas itself stays mounted so the WebGL context
+                and OrbitControls (camera pose) survive — only the
+                scene-bound subtree resets. */}
+            <group key={cfg.key}>
+              {/* Wait until the wheel probe completes before mounting the
+                  chassis. Otherwise the chassis loads twice via Suspense when
+                  the wheel state flips from unknown → available. */}
+              {wheelsAvailable !== null && (
+                <PoppyseedModel wheelsAvailable={wheelsAvailable} />
+              )}
+              {/* Cable mounts only when the live state says we're plugged or
+                  charging. Animated colour switches between grey-pulse and
+                  green-flow inside <ChargingCable>. */}
+              {cableMode !== 'off' && handleAvailable !== null && (
+                <LiveChargingCable mode={cableMode} handleAvailable={handleAvailable} />
+              )}
+              {/* Callouts mounted inside Canvas so they can read the scene
+                  graph (anchor positions) via useThree.scene. They render
+                  nothing when actions=null (Fleet API not ready). */}
+              <VehicleCallouts vehicle={vehicle} actions={filteredActions} />
+              {/* Phase 7 light effects: lock flash, brake/reverse lights,
+                  sentry-mode camera pulses. Reads vehicle.* live state
+                  and mutates scene nodes directly (no React props/state
+                  churn). */}
+              <VehicleLightEffects vehicle={vehicle} />
+            </group>
           </Suspense>
 
           {/* Read MQTT/TeslaMate state → drive openings + cableMode. */}
