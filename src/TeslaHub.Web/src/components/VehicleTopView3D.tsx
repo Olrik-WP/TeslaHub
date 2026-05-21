@@ -471,15 +471,6 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     });
 
 
-    // Tesla GLBs reuse a single Material instance across many meshes
-    // (e.g. `Glass_Interior` is shared between every door window). The
-    // OUTER glass branch mutates `mat.color` and `mat.envMapIntensity`
-    // in place, so the SAME material would be re-multiplied for every
-    // mesh that references it — each pass making it darker. Track which
-    // materials have already had their non-idempotent tweaks applied so
-    // we don't compound the mutation.
-    const tintedOuterGlass = new WeakSet<THREE.Material>();
-
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -563,85 +554,115 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           const std = mat as THREE.MeshStandardMaterial;
           const beamCfg = cfg.projections[projectionRole];
 
-          // First-touch snapshot — captures the GLB-native state
-          // (texture, color, opacity, transparent/depth flags) so we
-          // can ALWAYS restore the baseline before applying the user's
-          // override on top. Without this we'd compound mutations on
-          // every Showroom slider tick (opacity → 0, color → black) AND
-          // permanently lose the Bayberry baked texture the first time
-          // the M3 fallback is grafted on top of it.
+          // First-touch bootstrap — runs ONCE per material instance.
+          // We follow two distinct strategies depending on whether the
+          // GLB shipped a baked diffuse map:
+          //
+          //   • M3 path (snap.hasBaked === false): the primitive ships
+          //     texture-less so we graft the Tesla fallback PNG, force
+          //     a WHITE baseline colour (snap.baseColor = 0xffffff)
+          //     and full opacity. If we kept the GLB's actual color
+          //     (often 0x111111 = a dark grey "shadow tint"), the
+          //     beam texture would multiply to near-black and the
+          //     projection would render invisible — which is exactly
+          //     the regression the user just reported.
+          //
+          //   • Y path (snap.hasBaked === true): the baked beam PNG
+          //     already lives in the material. We capture the GLB's
+          //     own colour/opacity/transparent flags so the default
+          //     beamCfg (white × 1) leaves Bayberry's projection
+          //     exactly as Tesla shipped it.
           type ProjSnap = {
-            baseMap: THREE.Texture | null;
+            baseMap: THREE.Texture;
             baseColor: number;
             baseOpacity: number;
             baseTransparent: boolean;
             baseDepthWrite: boolean;
+            hasBaked: boolean;
           };
           type WithProjSnap = { __teslahub_proj_snap?: ProjSnap };
           const stdAny = std as unknown as WithProjSnap;
           let snap = stdAny.__teslahub_proj_snap;
           if (!snap) {
+            const hasBaked = !!std.map;
+            const fallbackMap = hasBaked
+              ? (std.map as THREE.Texture)
+              : getBeamTexture(projectionRole, undefined);
             snap = {
-              baseMap: std.map ?? null,
-              baseColor: std.color ? std.color.getHex() : 0xffffff,
-              baseOpacity: std.opacity ?? 1,
-              baseTransparent: std.transparent,
-              baseDepthWrite: std.depthWrite,
+              baseMap: fallbackMap,
+              baseColor: hasBaked ? (std.color?.getHex() ?? 0xffffff) : 0xffffff,
+              baseOpacity: hasBaked ? (std.opacity ?? 1) : 1,
+              baseTransparent: hasBaked ? std.transparent : true,
+              baseDepthWrite: hasBaked ? std.depthWrite : false,
+              hasBaked,
             };
             stdAny.__teslahub_proj_snap = snap;
-          }
 
-          // Resolve the desired map:
-          //   1. User-provided URL (Showroom textureUrl override) wins
-          //   2. Otherwise restore the baked GLB map if any (Bayberry)
-          //   3. Otherwise graft the Tesla fallback PNG (Poppyseed M3
-          //      ships these primitives texture-less so we have to)
-          let desiredMap: THREE.Texture | null;
-          let needFallbackShader = false;
-          if (beamCfg.textureUrl) {
-            desiredMap = getBeamTexture(projectionRole, beamCfg.textureUrl);
-            needFallbackShader = !snap.baseMap; // M3 case
-          } else if (snap.baseMap) {
-            desiredMap = snap.baseMap;
-          } else {
-            desiredMap = getBeamTexture(projectionRole, undefined);
-            needFallbackShader = true; // M3 case
-          }
-          if (std.map !== desiredMap) {
-            std.map = desiredMap;
-            // CRITICAL when we go from null→texture: the M3 material
-            // was originally compiled WITHOUT a map sampler. Setting
-            // `map` alone is not enough — we must force a shader
-            // recompile or the projection renders as a black /
-            // transparent quad regardless of texture data.
-            if (needFallbackShader) std.needsUpdate = true;
-          }
-
-          // Wire transparency only when WE grafted a new map (M3 case).
-          // For Bayberry we keep the baked alphaMode the GLB already
-          // had — touching it would force-transparent every Y mesh and
-          // break the depth sort.
-          if (snap.baseMap) {
-            std.transparent = snap.baseTransparent;
-            std.depthWrite = snap.baseDepthWrite;
-          } else {
-            std.transparent = true;
-            std.depthWrite = false;
-          }
-          std.side = THREE.DoubleSide;
-
-          // Colour: restore baseline then multiply user tint over it
-          // (white = identity, so the default beamCfg leaves Bayberry's
-          // warm-white baked diffuse exactly as Tesla shipped it).
-          if (std.color) {
-            std.color.setHex(snap.baseColor);
-            if (beamCfg.color !== 0xffffff) {
-              const userColor = new THREE.Color().setHex(beamCfg.color);
-              std.color.multiply(userColor);
+            // For the M3 path we ALSO commit the bootstrapped state to
+            // the material right now (graft texture, force transparent,
+            // force shader recompile so the freshly added sampler is
+            // wired into the program). After this single setup pass we
+            // never call needsUpdate again — subsequent slider ticks
+            // only flip non-shader fields.
+            if (!hasBaked) {
+              std.map = fallbackMap;
+              std.transparent = true;
+              std.depthWrite = false;
+              std.side = THREE.DoubleSide;
+              std.needsUpdate = true;
             }
           }
-          // Opacity: baseline × user opacity (1 = identity).
-          std.opacity = snap.baseOpacity * beamCfg.opacity;
+
+          // ── Every-pass mutations: apply the user's overrides ONLY
+          // when they differ from the neutral default. This is what
+          // fixes the "touch any slider and the Y projection
+          // disappears" bug: when beamCfg matches the shipped default
+          // (white × 1 × the model's renderOrder), we leave the GLB
+          // material strictly untouched after the bootstrap above.
+          // Only an actual user-edit (non-identity color/opacity, or
+          // a custom textureUrl) reaches inside the material.
+
+          // 1. Texture swap — only when user provided a custom URL.
+          if (beamCfg.textureUrl) {
+            const customMap = getBeamTexture(projectionRole, beamCfg.textureUrl);
+            if (std.map !== customMap) std.map = customMap;
+          } else if (std.map !== snap.baseMap) {
+            // User cleared a previously-set custom URL → restore baked.
+            std.map = snap.baseMap;
+          }
+
+          // 2. Colour — multiply snap baseline × user tint. Skip the
+          //    write entirely if user kept the white default AND the
+          //    current colour is already at baseline (avoids re-writing
+          //    on every tick which can spuriously dirty the shader).
+          if (std.color) {
+            if (beamCfg.color === 0xffffff) {
+              // Neutral colour — restore baseline only if it drifted.
+              if (std.color.getHex() !== snap.baseColor) {
+                std.color.setHex(snap.baseColor);
+              }
+            } else {
+              std.color.setHex(snap.baseColor);
+              std.color.multiply(new THREE.Color().setHex(beamCfg.color));
+            }
+          }
+
+          // 3. Opacity — apply only if user moved the slider off 1.
+          //    Default Y is OPAQUE in the GLB; forcing a multiplied
+          //    opacity onto an OPAQUE material is fine (Three honours
+          //    it once transparent=true) but we don't want to flip
+          //    transparency on a material that was happily OPAQUE
+          //    just because the slider sits at 1.
+          if (beamCfg.opacity !== 1) {
+            std.opacity = snap.baseOpacity * beamCfg.opacity;
+            std.transparent = true;
+            std.depthWrite = false;
+          } else {
+            std.opacity = snap.baseOpacity;
+            std.transparent = snap.baseTransparent;
+            std.depthWrite = snap.baseDepthWrite;
+          }
+
           mesh.renderOrder = beamCfg.renderOrder;
           // Skip the rest of the loop body — projection meshes aren't
           // glass, paint, or anything else we'd want to touch.
@@ -776,19 +797,39 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           const std = mat as THREE.MeshStandardMaterial;
           const glassFin = cfg.glassFinish;
 
+          // Snap the GLB-native baseline ONCE per material on the
+          // material itself BEFORE any other mutation in this branch
+          // (the `glass_windows_fade` override below used to run
+          // FIRST and pollute std.opacity, so the snap captured our
+          // bumped opacity as the "GLB baseline" — that's why
+          // sliding outerWindowOpacity past the first tick had no
+          // visible effect: isEffectivelyOpaque flipped sides based
+          // on already-mutated state).
+          //
+          // baseOpacity is captured here too so the
+          // "is-this-mesh-actually-glass-or-an-opaque-panel?" check
+          // below stays anchored to the GLB-shipped value instead of
+          // drifting toward whatever opacity the last tick wrote.
+          type WithOuterBase = {
+            __thOuterBase?: { color: number; env: number; opacity: number };
+          };
+          const stdAny = std as unknown as WithOuterBase;
+          if (!stdAny.__thOuterBase) {
+            stdAny.__thOuterBase = {
+              color: std.color?.getHex() ?? 0xffffff,
+              env: std.envMapIntensity ?? 1,
+              opacity: std.opacity ?? 1,
+            };
+          }
+          const outerBase = stdAny.__thOuterBase;
+
           // Tesla's `Glass_Windows_Fade` (the windshield + rear hatch
           // glass merged onto the Fade mesh) is marked alphaMode=OPAQUE
           // in the source GLB even though it's meant to be tinted
-          // automotive glass — see audit-glb-materials.mjs output.
-          // Force it to BLEND mode here so it renders translucent
-          // exactly like the trunk's `Glass` material (alpha=0.16 BLEND
-          // by default). Without this override the windshield reads as
-          // a dark grey "wall" — the original user-reported bug.
-          if (/^glass_windows_fade$/i.test(matName)) {
-            std.transparent = true;
-            std.depthWrite = false;
-            std.opacity = glassFin.outerWindowOpacity;
-          }
+          // automotive glass — see audit-glb-materials.mjs output. We
+          // pretend it's translucent below so the slider-driven opacity
+          // takes effect instead of being routed to the opaque pass.
+          const isGlassFade = /^glass_windows_fade$/i.test(matName);
 
           // CRUCIAL: Tesla marks many opaque materials as
           // `alphaMode=BLEND` with alpha=1.0 in the source GLTF (see
@@ -802,8 +843,12 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           // materials back to actually-opaque so they go through the
           // depth-tested opaque pass and don't participate in the
           // transparent sort.
-          const effectiveOpacity = std.opacity ?? 1;
-          const isEffectivelyOpaque = effectiveOpacity >= 0.95;
+          //
+          // Decision uses the SNAPPED baseOpacity (not std.opacity)
+          // so it stays stable across memo re-runs once the slider has
+          // already mutated std.opacity below. `glass_windows_fade` is
+          // always routed to the translucent path (see above).
+          const isEffectivelyOpaque = !isGlassFade && outerBase.opacity >= 0.95;
 
           if (isEffectivelyOpaque) {
             std.transparent = false;
@@ -820,64 +865,44 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             // roof sits above other glass to avoid the windshield/roof
             // flicker at the pavilion seam.
             mesh.renderOrder = isRoof ? 3 : 2;
-            // Tesla ships `Glass` material with alpha=0.16 — the
-            // windshield ends up so transparent that the HDR sky shines
-            // straight through and we never see the tint. Bump opacity
-            // up to the dark-glass range so the colour is visible.
-            if (std.opacity !== undefined && std.opacity < 0.4) {
-              std.opacity = isRoof ? glassFin.outerRoofOpacity : glassFin.outerWindowOpacity;
+            // Tesla ships `Glass` material with alpha=0.16 — far too
+            // see-through to read as tinted automotive glass. Replace
+            // with the configured opacity so the Showroom slider
+            // actually moves the visible alpha (the previous gating
+            // `if (std.opacity < 0.4)` broke after the first tick
+            // because by then std.opacity already held our bumped
+            // value, so the slider became inert). The Fade material is
+            // also routed here even though its baseOpacity is 1, since
+            // we forced isGlassFade into the translucent branch.
+            if (isGlassFade || outerBase.opacity < 0.4) {
+              std.opacity = isRoof
+                ? glassFin.outerRoofOpacity
+                : glassFin.outerWindowOpacity;
             }
           }
 
-          // Dampen environment reflections + apply the diffuse tint —
-          // BUT only once per material instance. Tesla reuses the same
-          // `Glass_Interior` (and `Glass_Windows`) across multiple door
-          // windows; mutating in place on every traversal would
-          // multiply by 0.3 / 0.45 N times and drive the material to
-          // near-black after a few iterations. Mesh-level state
-          // (renderOrder, transparent, depthWrite) above must run for
-          // every mesh; only the material colour/env multipliers need
-          // the guard.
-          //
-          // We ALSO snapshot the baseline colour/env on first touch so a
-          // Showroom slider change can compute from the unmodified GLB
-          // value instead of compounding the previous tick's multiplier
-          // (envMapIntensity → 0, tint → black after a few drags).
-          if (!tintedOuterGlass.has(std)) {
-            tintedOuterGlass.add(std);
-            const baseEnv = std.envMapIntensity ?? 1;
-            (std as unknown as { __thBaseEnv?: number }).__thBaseEnv = baseEnv;
-            if (std.color) {
-              (std as unknown as { __thBaseColor?: number }).__thBaseColor =
-                std.color.getHex();
-            }
-          }
-          const baseEnv =
-            (std as unknown as { __thBaseEnv?: number }).__thBaseEnv ?? 1;
           if ('envMapIntensity' in std) {
-            std.envMapIntensity = baseEnv * glassFin.outerEnvMultiplier;
+            std.envMapIntensity = outerBase.env * glassFin.outerEnvMultiplier;
           }
           if (std.color) {
-            const baseColor =
-              (std as unknown as { __thBaseColor?: number }).__thBaseColor ?? 0xffffff;
-            std.color.setHex(baseColor);
+            std.color.setHex(outerBase.color);
             const c = std.color;
             if (c.r < 0.05 && c.g < 0.05 && c.b < 0.05) {
-              // GLB ships near-black — re-tint to a configurable shade so
-              // we don't render an opaque void.
-              c.setRGB(
-                isRoof ? glassFin.outerRoofTint * 0.5 : glassFin.outerWindowTint * 0.5,
-                isRoof ? glassFin.outerRoofTint * 0.5 : glassFin.outerWindowTint * 0.5,
-                isRoof ? glassFin.outerRoofTint * 0.5 : glassFin.outerWindowTint * 0.5,
-              );
+              // GLB ships near-black — re-tint to a configurable shade
+              // so we don't render an opaque void.
+              const v = isRoof
+                ? glassFin.outerRoofTint * 0.5
+                : glassFin.outerWindowTint * 0.5;
+              c.setRGB(v, v, v);
             } else {
-              c.multiplyScalar(isRoof ? glassFin.outerRoofTint : glassFin.outerWindowTint);
+              c.multiplyScalar(
+                isRoof ? glassFin.outerRoofTint : glassFin.outerWindowTint,
+              );
             }
           }
-          // Debug colorisation — overwrites everything else for this
-          // pane. Run LAST so it takes priority. The tint/env above
-          // still keep their snapshot logic so toggling debug off
-          // restores the calibrated look without compounding drift.
+          // Debug colorisation — runs LAST so it takes priority.
+          // Doesn't touch the snapshot, so toggling debug off in the
+          // next memo pass restores the calibrated look unchanged.
           if (debug.glass && std.color) {
             std.color.setHex(GLASS_DEBUG_COLORS.outer.color);
             std.opacity = GLASS_DEBUG_COLORS.outer.opacity;
@@ -890,7 +915,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           if (glassDebug.length < 48) {
             glassDebug.push(
               `${isRoof ? 'ROOF' : 'WIN'} ${mesh.name || '(unnamed)'} mat="${matName}" ` +
-                `opacity=${effectiveOpacity.toFixed(2)}→${isEffectivelyOpaque ? 'OPAQUE' : (std.opacity ?? 1).toFixed(2)}`,
+                `opacity=${outerBase.opacity.toFixed(2)}→${isEffectivelyOpaque ? 'OPAQUE' : (std.opacity ?? 1).toFixed(2)}`,
             );
           }
         } else if (INNER_GLASS_MAT.test(matName)) {
