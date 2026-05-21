@@ -1066,6 +1066,13 @@ interface Props {
    *  sliders / gizmos. Other consumers (Home, etc.) leave this
    *  undefined and get the saved overrides. */
   localOverrides?: ShowroomOverrides;
+  /** Render the viewer in CONFIGURATOR mode — no API commands fire on
+   *  any click, callouts are visual-only. Used by the Settings →
+   *  Showroom page so the user can play with the model without
+   *  accidentally opening their actual trunk or unlocking the car.
+   *  When omitted (Home, cards…) the viewer runs in LIVE mode and
+   *  callouts hit the Tesla Fleet API as before. */
+  showroomMode?: boolean;
 }
 
 /**
@@ -1085,7 +1092,7 @@ function vehiclePatch<TBody = void>(
   };
 }
 
-export default function VehicleTopView3D({ vehicle, localOverrides }: Props) {
+export default function VehicleTopView3D({ vehicle, localOverrides, showroomMode }: Props) {
   // Resolve the per-model config from the live carId + VIN. This is the
   // SINGLE place where the picker fires — every descendant reads the
   // result via `useActiveModel()` (or `useModelConsts()`) through the
@@ -1101,12 +1108,12 @@ export default function VehicleTopView3D({ vehicle, localOverrides }: Props) {
 
   return (
     <VehicleModelContext.Provider value={modelConfig}>
-      <VehicleTopView3DInner vehicle={vehicle} />
+      <VehicleTopView3DInner vehicle={vehicle} showroomMode={!!showroomMode} />
     </VehicleModelContext.Provider>
   );
 }
 
-function VehicleTopView3DInner({ vehicle }: Props) {
+function VehicleTopView3DInner({ vehicle, showroomMode }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null!);
   const cfg = useActiveModel();
   const wheelsAvailable = useAssetAvailable(cfg.wheelUrl);
@@ -1228,6 +1235,12 @@ function VehicleTopView3DInner({ vehicle }: Props) {
     (windowCmd.variables as { command?: string } | undefined)?.command === 'close';
 
   const actions: CalloutsActions | null = useMemo(() => {
+    // SAFETY: in Showroom (configurator) mode we MUST NOT expose any
+    // handler that could fire a Tesla command. Returning null hides
+    // the callouts entirely so a click can't even reach the mutation
+    // functions. The Showroom page provides its own visual-only
+    // action buttons in the right-hand panel.
+    if (showroomMode) return null;
     if (!vehicleId || !fleetReady || !paired || !mqttAvailable) return null;
     return {
       openFrunk: {
@@ -1268,6 +1281,7 @@ function VehicleTopView3DInner({ vehicle }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    showroomMode,
     vehicleId,
     fleetReady,
     paired,

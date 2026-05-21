@@ -45,6 +45,12 @@ import {
   BayberryConfig,
   type VehicleModelKey,
 } from './vehicleModelConfig';
+import {
+  type ShowroomVisualState,
+  DEFAULT_VISUAL_STATE,
+  buildShowroomStubVehicle,
+} from './showroomVisualState';
+import { ShowroomVisualSection } from './ShowroomVisualSection';
 
 // Lazy-load the viewer — same trick VehicleTopView.tsx uses to keep
 // the GLB/three.js bundle off the initial Settings page load.
@@ -88,6 +94,17 @@ export default function Showroom({ carId }: Props) {
   // In-flight edits — starts at the saved blob, updated as the user
   // tweaks sliders. Reset to saved on Discard / when carId changes.
   const [editedOverrides, setEditedOverrides] = useState<ShowroomOverrides>({});
+
+  // EPHEMERAL visual state — drives doors / charging / sentry / shift
+  // ONLY for the local Showroom preview. Never persisted. Reset to
+  // neutral whenever the user switches cars so the new car starts
+  // from a clean baseline.
+  const [visualState, setVisualState] = useState<ShowroomVisualState>(
+    DEFAULT_VISUAL_STATE,
+  );
+  useEffect(() => {
+    setVisualState(DEFAULT_VISUAL_STATE);
+  }, [carId]);
 
   // Hydrate `editedOverrides` from the saved blob on first load and
   // whenever the user switches cars. We intentionally don't depend on
@@ -184,6 +201,14 @@ export default function Showroom({ carId }: Props) {
     );
   }
 
+  // Build the SANDBOX vehicle for the viewer: identity (carId / vin /
+  // marketing name) flows through so the model picker still works,
+  // but every live body/security/charging/driving signal is replaced
+  // by `visualState`. The viewer's `useVehicleVisualSync` thinks it's
+  // reading a real car — it just happens to be a car the user is
+  // remote-controlling from the right-hand panel.
+  const stubVehicle = buildShowroomStubVehicle(vehicle, visualState);
+
   return (
     <div className="space-y-3">
       {/* Toolbar — sticky on scroll. Title + Save/Discard/Reset. */}
@@ -268,8 +293,9 @@ export default function Showroom({ carId }: Props) {
               }
             >
               <VehicleTopView3D
-                vehicle={vehicle}
+                vehicle={stubVehicle}
                 localOverrides={editedOverrides}
+                showroomMode
               />
             </Suspense>
           </div>
@@ -288,20 +314,27 @@ export default function Showroom({ carId }: Props) {
             vin={vehicle.vin}
           />
 
+          <div className="h-px bg-[#1a1a1a]" />
+
+          <ShowroomVisualSection
+            state={visualState}
+            onChange={setVisualState}
+          />
+
           {/* Placeholder for sections to come in next sub-phase:
               - Roues (per-corner sliders X/Y/Z + wheelUrl)
               - Charge port (sliders X/Y/Z + plug direction)
               - Cable ground anchor
               - Sentry cameras (7 sliders)
-              - Visuels (open all, drive D/R, brake, sentry, mirror fold,
-                lock flash, cable plugged)
               - Glass (sliders opacity + color)
               - Projections (sliders + color + texture URL)
-              All folded into <TuningPanel> in 3b. */}
+              - Intérieur (Decor/cupholder/Wing color pickers)
+              - Jantes (color + roughness + envMapIntensity)
+              All folded into <TuningPanel> in next sub-phases. */}
           <div className="text-[10px] text-[#4b5563] text-center pt-4 border-t border-[#1a1a1a]">
             {t(
               'showroom.moreSoon',
-              'Plus de réglages disponibles bientôt (roues, charge port, sentry, glass, projections…)',
+              'Sections à venir : roues, charge port, sentry, intérieur, jantes, vitres, projections…',
             )}
           </div>
         </div>
