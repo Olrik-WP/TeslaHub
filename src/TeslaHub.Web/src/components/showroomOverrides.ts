@@ -34,6 +34,7 @@
 import {
   PoppyseedConfig,
   VEHICLE_MODELS,
+  type ProjectionConfig,
   type VehicleModelConfig,
   type VehicleModelKey,
   type WheelFallbackPosition,
@@ -171,6 +172,9 @@ export interface ShowroomOverrides {
   /** Wheel finish tweaks (alloy roughness/tint, plastic finish). Each
    *  field shallow-merges over the model's `wheelFinish` default. */
   wheelFinish?: Partial<VehicleModelConfig['wheelFinish']>;
+  /** Per-light emissive boost (brake / reverse / headlight). Shallow
+   *  merge over `cfg.lightTuning` — pick any subset to tune. */
+  lightTuning?: Partial<VehicleModelConfig['lightTuning']>;
 
   // Glass / projections — currently magic numbers in VehicleTopView3D.tsx.
   // Wired through cfg in Phase 3 (DRY refactor); the fields are
@@ -296,6 +300,42 @@ export function mergeShowroomConfig(
     wheelFinish: overrides.wheelFinish
       ? { ...defaults.wheelFinish, ...overrides.wheelFinish }
       : defaults.wheelFinish,
+
+    // Light tuning — shallow merge (intensity + colour per slot).
+    lightTuning: overrides.lightTuning
+      ? { ...defaults.lightTuning, ...overrides.lightTuning }
+      : defaults.lightTuning,
+
+    // Ground projections — per-beam shallow merge. Each beam's
+    // sub-fields (textureUrl, color, opacity, renderOrder) are merged
+    // independently so the user can tune ONLY the headlight while
+    // keeping the stoplight stock.
+    projections: {
+      headlight: mergeProjection(
+        defaults.projections.headlight,
+        overrides.projections?.headlight,
+      ),
+      stoplight: mergeProjection(
+        defaults.projections.stoplight,
+        overrides.projections?.stoplight,
+      ),
+    },
+  };
+}
+
+/** Per-beam projection merge. Treats `textureUrl: ''` as "use default"
+ *  so the user can clear a custom URL via the UI without re-saving
+ *  the whole config blob. */
+function mergeProjection(
+  def: ProjectionConfig,
+  ov: Partial<ProjectionConfig> | undefined,
+): ProjectionConfig {
+  if (!ov) return def;
+  return {
+    textureUrl: ov.textureUrl && ov.textureUrl.length > 0 ? ov.textureUrl : def.textureUrl,
+    color: ov.color ?? def.color,
+    opacity: ov.opacity ?? def.opacity,
+    renderOrder: ov.renderOrder ?? def.renderOrder,
   };
 }
 

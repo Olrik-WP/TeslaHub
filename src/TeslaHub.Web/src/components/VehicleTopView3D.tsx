@@ -65,22 +65,29 @@ const HANDLE_URL = '/models/charger_handle.glb';
 // the same shape the Y already shows. Both textures share a single loader
 // instance and are cached at module level so they download once per page.
 const beamTextureLoader = new THREE.TextureLoader();
-let cachedHeadlightBeam: THREE.Texture | null = null;
-let cachedStoplightBeam: THREE.Texture | null = null;
+const beamTextureCache = new Map<string, THREE.Texture>();
 
-function getBeamTexture(role: 'headlight' | 'stoplight'): THREE.Texture {
-  if (role === 'headlight') {
-    if (!cachedHeadlightBeam) {
-      cachedHeadlightBeam = beamTextureLoader.load('/textures/headlight_beam.png');
-      cachedHeadlightBeam.colorSpace = THREE.SRGBColorSpace;
-    }
-    return cachedHeadlightBeam;
+const DEFAULT_HEADLIGHT_BEAM_URL = '/textures/headlight_beam.png';
+const DEFAULT_STOPLIGHT_BEAM_URL = '/textures/stoplight_beam.png';
+
+/**
+ * Returns a `THREE.Texture` for the requested beam URL — cached so we
+ * don't re-fetch the same PNG when the Showroom user toggles between
+ * the default and a custom URL. When `url` is undefined we fall back
+ * to the built-in Tesla beam (extracted from Bayberry, see
+ * /textures/*.png). Custom URLs can point to any HTTPS image hosted
+ * by the Caddy reverse-proxy or the user's own asset CDN.
+ */
+function getBeamTexture(role: 'headlight' | 'stoplight', url: string | undefined): THREE.Texture {
+  const finalUrl =
+    url ?? (role === 'headlight' ? DEFAULT_HEADLIGHT_BEAM_URL : DEFAULT_STOPLIGHT_BEAM_URL);
+  let tex = beamTextureCache.get(finalUrl);
+  if (!tex) {
+    tex = beamTextureLoader.load(finalUrl);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    beamTextureCache.set(finalUrl, tex);
   }
-  if (!cachedStoplightBeam) {
-    cachedStoplightBeam = beamTextureLoader.load('/textures/stoplight_beam.png');
-    cachedStoplightBeam.colorSpace = THREE.SRGBColorSpace;
-  }
-  return cachedStoplightBeam;
+  return tex;
 }
 
 // ---- Wheel polish ---------------------------------------------------------
@@ -528,36 +535,36 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         })();
         if (projectionRole) {
           const std = mat as THREE.MeshStandardMaterial;
-          const hasBaseTex = !!std.map;
-          if (!hasBaseTex) {
-            // Graft the Tesla baked beam texture onto the material.
-            // Keep MeshStandardMaterial so the existing reference (used
-            // by useGroundProjections for visibility toggling) stays
-            // valid — we just decorate it with the missing texture.
-            std.map = getBeamTexture(projectionRole);
+          const beamCfg = cfg.projections[projectionRole];
+          // Always (re-)apply the user-tuneable bits (color, opacity,
+          // renderOrder, texture URL) so a Showroom slider change is
+          // reflected immediately. The shader compile (`needsUpdate`)
+          // only fires when we ACTUALLY need to swap the texture
+          // sampler, so we don't pay it on every tweak.
+          const desiredTex = getBeamTexture(projectionRole, beamCfg.textureUrl);
+          if (std.map !== desiredTex) {
+            std.map = desiredTex;
             std.transparent = true;
             std.depthWrite = false;
             std.side = THREE.DoubleSide;
-            // Reset the flat grey/white baseColor to neutral so the
-            // texture renders at its true Tesla hue (warm white for the
-            // headlight beam, soft red for the brake beam). Opacity
-            // stays at 1 since the PNG alpha already handles the fade.
-            if (std.color) std.color.setHex(0xffffff);
-            std.opacity = 1;
-            // CRITICAL: the material was originally compiled WITHOUT a
-            // map (Tesla's M3 GLB ships these primitives texture-less),
-            // so three.js cached a shader that has no texture sampler.
+            // CRITICAL: the M3 material was originally compiled WITHOUT
+            // a map (Tesla ships these primitives texture-less), so
+            // three.js cached a shader that has no texture sampler.
             // Setting `map` afterwards alone is not enough — we must
             // force a shader recompile or the projection renders as a
             // black/transparent quad regardless of texture data.
             std.needsUpdate = true;
-            // Render AFTER everything else (the shadow floor, paint,
-            // glass…) so the beam composites on top instead of being
-            // hidden behind another transparent surface that was sorted
-            // closer to the camera. +10 keeps us safely above any
-            // model-internal renderOrder tweaks (windows use 0/1).
-            mesh.renderOrder = 10;
+          } else if (std.map && !std.transparent) {
+            // Bayberry case — texture pre-baked by Tesla. Make sure
+            // transparent + depthWrite are wired correctly the first
+            // time, but skip needsUpdate (shader already has sampler).
+            std.transparent = true;
+            std.depthWrite = false;
+            std.side = THREE.DoubleSide;
           }
+          if (std.color) std.color.setHex(beamCfg.color);
+          std.opacity = beamCfg.opacity;
+          mesh.renderOrder = beamCfg.renderOrder;
           // Skip the rest of the loop body — projection meshes aren't
           // glass, paint, or anything else we'd want to touch.
           continue;

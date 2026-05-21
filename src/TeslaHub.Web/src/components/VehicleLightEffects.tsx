@@ -55,11 +55,16 @@ export function VehicleLightEffects({ vehicle }: VehicleLightEffectsProps) {
   // restore() runs it reads the correct steady-state value.
   useGroundProjections(scene, vehicle?.shiftState ?? null, cfg.groundProjectionNodes);
   useLockFlash(scene, vehicle?.isLocked ?? null, cfg.groundProjectionNodes);
-  useBrakeAndReverseLights(scene, vehicle?.shiftState ?? null, {
-    brake: cfg.brakeLightNodes,
-    reverse: cfg.reverseLightNodes,
-    headlight: cfg.headlightNodes,
-  });
+  useBrakeAndReverseLights(
+    scene,
+    vehicle?.shiftState ?? null,
+    {
+      brake: cfg.brakeLightNodes,
+      reverse: cfg.reverseLightNodes,
+      headlight: cfg.headlightNodes,
+    },
+    cfg.lightTuning,
+  );
 
   return (
     <SentryIndicators
@@ -216,12 +221,10 @@ type MaterialSnapshot = {
   newClones: THREE.Material[];
 };
 
-const BRAKE_INTENSITY = 2.5;
-const BRAKE_COLOR = new THREE.Color('#ff1a1a');
-const REVERSE_INTENSITY = 1.8;
-const REVERSE_COLOR = new THREE.Color('#fff8e8');
-const HEADLIGHT_INTENSITY = 1.4;
-const HEADLIGHT_COLOR = new THREE.Color('#fff5e8');
+// Per-light tuning is now driven by `cfg.lightTuning`. The defaults
+// shipped on PoppyseedConfig/BayberryConfig match the old module-level
+// constants exactly, so visual behaviour is unchanged until the user
+// overrides one of them via Showroom.
 
 function useBrakeAndReverseLights(
   scene: THREE.Object3D,
@@ -230,6 +233,14 @@ function useBrakeAndReverseLights(
     brake: readonly string[];
     reverse: readonly string[];
     headlight: readonly string[];
+  },
+  tuning: {
+    brakeIntensity: number;
+    brakeColor: number;
+    reverseIntensity: number;
+    reverseColor: number;
+    headlightIntensity: number;
+    headlightColor: number;
   },
 ) {
   // Normalise: Tesla returns "P" / "R" / "N" / "D" or null when not
@@ -279,14 +290,18 @@ function useBrakeAndReverseLights(
       }
     };
 
+    const brakeColor = new THREE.Color().setHex(tuning.brakeColor);
+    const reverseColor = new THREE.Color().setHex(tuning.reverseColor);
+    const headlightColor = new THREE.Color().setHex(tuning.headlightColor);
+
     if (driving) {
-      boost(nodes.brake, BRAKE_INTENSITY, BRAKE_COLOR);
+      boost(nodes.brake, tuning.brakeIntensity, brakeColor);
       // Front headlights ON whenever we're in a drive gear — visually
       // balances the front (white DRL) with the rear (red brakes) and
       // matches how the real car behaves with auto-headlights enabled.
-      boost(nodes.headlight, HEADLIGHT_INTENSITY, HEADLIGHT_COLOR);
+      boost(nodes.headlight, tuning.headlightIntensity, headlightColor);
     }
-    if (reverseOn) boost(nodes.reverse, REVERSE_INTENSITY, REVERSE_COLOR);
+    if (reverseOn) boost(nodes.reverse, tuning.reverseIntensity, reverseColor);
 
     return () => {
       for (const s of snapshots) {
@@ -294,7 +309,20 @@ function useBrakeAndReverseLights(
         for (const c of s.newClones) c.dispose();
       }
     };
-  }, [scene, driving, reverseOn, nodes.brake, nodes.reverse, nodes.headlight]);
+  }, [
+    scene,
+    driving,
+    reverseOn,
+    nodes.brake,
+    nodes.reverse,
+    nodes.headlight,
+    tuning.brakeIntensity,
+    tuning.brakeColor,
+    tuning.reverseIntensity,
+    tuning.reverseColor,
+    tuning.headlightIntensity,
+    tuning.headlightColor,
+  ]);
 }
 
 // ---------------------------------------------------------------------------

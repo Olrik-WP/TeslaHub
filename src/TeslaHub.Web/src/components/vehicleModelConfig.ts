@@ -42,6 +42,22 @@ import { OPENINGS_BAYBERRY } from './bayberryOpenings';
 export type VehicleModelKey = 'poppyseed' | 'bayberry';
 
 /** Each wheel mount when the GLB doesn't ship anchor empties. */
+/** Single ground-projection beam configuration. */
+export interface ProjectionConfig {
+  /** Public URL of the beam PNG (alpha-channel = cone shape). When
+   *  undefined, the runtime falls back to the built-in
+   *  /textures/headlight_beam.png or /textures/stoplight_beam.png. */
+  textureUrl?: string;
+  /** RGB hex multiplied into the texture's diffuse. White = unchanged
+   *  Tesla warm-white / soft-red; tune to recolour the beam. */
+  color: number;
+  /** 0..1 alpha multiplier on top of the texture's own alpha. */
+  opacity: number;
+  /** Three.js renderOrder. +10 = above floor + paint, -1 = below
+   *  shadow. */
+  renderOrder: number;
+}
+
 export interface WheelFallbackPosition {
   id: 'LF' | 'RF' | 'LR' | 'RR';
   x: number;
@@ -229,6 +245,38 @@ export interface VehicleModelConfig {
     /** Optional override of `mat.metalness` (0..1). */
     metalness?: number;
   }>;
+
+  // ───────────────────────────────────────────────────────────────────
+  // Light tuning — emissive intensity + colour for body lights
+  // ───────────────────────────────────────────────────────────────────
+  /** Per-light emissive boost applied by VehicleLightEffects when the
+   *  corresponding state is active (brake = pedal pressed, reverse =
+   *  shift in R, headlight = drive gear). Each field is split into
+   *  intensity (linear emissive multiplier, ~1.4–3.0) and colour
+   *  (RGB hex). All required so the runtime never has to defensive-
+   *  check; the Showroom override layer can supply partials. */
+  lightTuning: {
+    brakeIntensity: number;
+    brakeColor: number;
+    reverseIntensity: number;
+    reverseColor: number;
+    headlightIntensity: number;
+    headlightColor: number;
+  };
+
+  // ───────────────────────────────────────────────────────────────────
+  // Ground projections — beam textures painted under the car
+  // ───────────────────────────────────────────────────────────────────
+  /** Per-beam tuning of the ground projection quads (Headlight in
+   *  front, Stoplight in back). `textureUrl` overrides the baked /
+   *  fallback PNG with a user-uploaded one; `color` is multiplied
+   *  into the texture (white = unchanged); `opacity` is the final
+   *  alpha multiplier; `renderOrder` controls the z-fight ordering
+   *  vs the floor and the body. */
+  projections: {
+    headlight: ProjectionConfig;
+    stoplight: ProjectionConfig;
+  };
 
   // ───────────────────────────────────────────────────────────────────
   // Wheel finish — material tweaks for alloy + plastic wheel pieces
@@ -421,6 +469,18 @@ export const PoppyseedConfig: VehicleModelConfig = {
     alloyEnvBoost: 1.6,
     plasticRoughness: 0.55,
     plasticEnvBoost: 1.5,
+  },
+  lightTuning: {
+    brakeIntensity: 2.5,
+    brakeColor: 0xff1a1a,
+    reverseIntensity: 1.8,
+    reverseColor: 0xfff8e8,
+    headlightIntensity: 1.4,
+    headlightColor: 0xfff5e8,
+  },
+  projections: {
+    headlight: { color: 0xffffff, opacity: 1, renderOrder: 10 },
+    stoplight: { color: 0xffffff, opacity: 1, renderOrder: 10 },
   },
   openings: OPENINGS_POPPYSEED,
   mirrorTracks: MIRROR_TRACKS_POPPYSEED,
@@ -641,6 +701,18 @@ export const BayberryConfig: VehicleModelConfig = {
     alloyEnvBoost: 1.6,
     plasticRoughness: 0.55,
     plasticEnvBoost: 1.5,
+  },
+  lightTuning: {
+    brakeIntensity: 2.5,
+    brakeColor: 0xff1a1a,
+    reverseIntensity: 1.8,
+    reverseColor: 0xfff8e8,
+    headlightIntensity: 1.4,
+    headlightColor: 0xfff5e8,
+  },
+  projections: {
+    headlight: { color: 0xffffff, opacity: 1, renderOrder: 10 },
+    stoplight: { color: 0xffffff, opacity: 1, renderOrder: 10 },
   },
 
   // Tesla MY Juniper ships privacy glass on the rear doors (much darker

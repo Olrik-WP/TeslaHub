@@ -55,6 +55,7 @@ import {
 import { ShowroomVisualSection } from './ShowroomVisualSection';
 import { ShowroomGeometrySection } from './ShowroomGeometrySection';
 import { ShowroomAestheticsSection } from './ShowroomAestheticsSection';
+import { ShowroomLightsSection } from './ShowroomLightsSection';
 
 // Lazy-load the viewer — same trick VehicleTopView.tsx uses to keep
 // the GLB/three.js bundle off the initial Settings page load.
@@ -395,15 +396,22 @@ export default function Showroom({ carId }: Props) {
             defaults={defaults}
           />
 
-          {/* Sections still pending — Phase 3b.3b/c:
-              - Vitres (5 sliders opacity + tint + reflection)
-              - Projections (color + opacity + texture URL custom)
+          <div className="h-px bg-[#1a1a1a]" />
+
+          <ShowroomLightsSection
+            overrides={editedOverrides}
+            onChange={setEditedOverrides}
+            defaults={defaults}
+          />
+
+          {/* Sections still pending — Phase 3b.3c:
+              - Vitres (refactor lourd : magic numbers INNER_GLASS_OPACITY)
               - Sentry cameras (7×XYZ sliders)
               + Phase 4 — drag-gizmos sur les callouts/anchors. */}
           <div className="text-[10px] text-[#4b5563] text-center pt-4 border-t border-[#1a1a1a]">
             {t(
               'showroom.moreSoon',
-              'À venir : vitres, projections, caméras sentinelles…',
+              'À venir : vitres, caméras sentinelles…',
             )}
           </div>
         </div>
