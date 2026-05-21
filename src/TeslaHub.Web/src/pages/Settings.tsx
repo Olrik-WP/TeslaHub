@@ -12,9 +12,10 @@ import CustomSelect from '../components/CustomSelect';
 import SecurityAlertsCard from '../components/SecurityAlertsCard';
 import FleetApiCostCard from '../components/FleetApiCostCard';
 import LoadSheddingPanel from '../components/LoadSheddingPanel';
+import Showroom from '../components/Showroom';
 
-type SettingsTab = 'general' | 'tesla';
-const VALID_TABS: SettingsTab[] = ['general', 'tesla'];
+type SettingsTab = 'general' | 'tesla' | 'showroom';
+const VALID_TABS: SettingsTab[] = ['general', 'tesla', 'showroom'];
 const TAB_STORAGE_KEY = 'teslahub_settings_tab';
 
 interface Props {
@@ -270,9 +271,14 @@ export default function Settings({ carId }: Props) {
           <span className="hidden sm:inline">{t('settings.tabs.tesla')}</span>
           <span className="sm:hidden">{t('settings.tabs.teslaShort')}</span>
         </button>
+        <button type="button" onClick={() => switchTab('showroom')} className={tabButtonClass('showroom')}>
+          {t('settings.tabs.showroom', 'Showroom 3D')}
+        </button>
       </div>
 
-      {activeTab === 'tesla' ? (
+      {activeTab === 'showroom' ? (
+        <Showroom carId={carId} />
+      ) : activeTab === 'tesla' ? (
         <>
           {/* Security Alerts (optional Tesla Fleet API integration) */}
           <SecurityAlertsCard />

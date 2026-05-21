@@ -242,6 +242,45 @@ public class CarImage
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>
+/// Per-car overrides for the 3D viewer (Showroom). Stored as opaque JSONB so
+/// the frontend owns the schema and can grow it (new tunable params, new
+/// wheel positions, paint colors, glass tints…) without forcing a backend
+/// migration every time. The backend only validates that the body is valid
+/// JSON; it never reads inside.
+///
+/// Why JSONB and not a typed schema:
+///   - The viewer config is dozens of nested fields (wheelOffsets per
+///     corner, glass opacity per layer, projection texture URL, sentry
+///     camera positions…). Modelling that in EF would mean a dozen tables
+///     and a JOIN nightmare for a tiny payload (<10 KB per car).
+///   - The frontend ALREADY has the shape in TypeScript
+///     (ShowroomOverrides). Duplicating it as C# records would force two
+///     places to update for every new tunable param.
+///   - JSONB on Postgres is indexable if we ever need to query inside
+///     (e.g. "find all cars where paint = Ultra Red").
+///
+/// One row per car (unique index on CarId). Absence = use repo defaults.
+/// </summary>
+public class CarShowroomConfig
+{
+    [Key]
+    public int Id { get; set; }
+
+    public int CarId { get; set; }
+
+    /// <summary>
+    /// Raw JSON payload as written by the frontend. Stored in a
+    /// PostgreSQL jsonb column (see OnModelCreating) so future server-side
+    /// queries can index/filter on individual fields without a schema
+    /// migration. Never null — we store "{}" for an empty override.
+    /// </summary>
+    [Column(TypeName = "jsonb")]
+    public string ConfigJson { get; set; } = "{}";
+
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
 // ─── DTOs ──────────────────────────────────────────────────────
 
 public record ChargingLocationCreateDto

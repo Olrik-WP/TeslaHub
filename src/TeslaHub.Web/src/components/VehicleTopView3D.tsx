@@ -28,10 +28,10 @@ import {
 import {
   PoppyseedConfig,
   VehicleModelContext,
-  pickModelForVin,
   useActiveModel,
-  type VehicleModelConfig,
 } from './vehicleModelConfig';
+import { useResolvedModelConfig } from './useResolvedModelConfig';
+import type { ShowroomOverrides } from './showroomOverrides';
 
 // Charging handle is universal across Tesla models — same physical part
 // regardless of which car it's plugged into. Not in the per-model config.
@@ -1060,6 +1060,12 @@ function useAssetAvailable(url: string): boolean | null {
 
 interface Props {
   vehicle: VehicleStatus;
+  /** In-flight Showroom edits, only set by the Settings → Showroom
+   *  page. When defined, takes precedence over the backend-stored
+   *  override blob so the user sees live preview as they drag
+   *  sliders / gizmos. Other consumers (Home, etc.) leave this
+   *  undefined and get the saved overrides. */
+  localOverrides?: ShowroomOverrides;
 }
 
 /**
@@ -1079,14 +1085,18 @@ function vehiclePatch<TBody = void>(
   };
 }
 
-export default function VehicleTopView3D({ vehicle }: Props) {
-  // Resolve the per-model config from the live VIN. This is the SINGLE
-  // place where the picker fires — every descendant reads the result via
-  // `useActiveModel()` (or `useModelConsts()`) through the Provider below,
-  // so swapping between his Model 3 and her Model Y is just a re-render.
-  const modelConfig = useMemo<VehicleModelConfig>(
-    () => pickModelForVin(vehicle.vin),
-    [vehicle.vin],
+export default function VehicleTopView3D({ vehicle, localOverrides }: Props) {
+  // Resolve the per-model config from the live carId + VIN. This is the
+  // SINGLE place where the picker fires — every descendant reads the
+  // result via `useActiveModel()` (or `useModelConsts()`) through the
+  // Provider below, so swapping between his Model 3 and her Model Y is
+  // just a re-render. The hook also merges per-car overrides stored
+  // server-side (Settings → Showroom), so the same model can be
+  // hand-calibrated per car and the calibration follows it everywhere.
+  const { config: modelConfig } = useResolvedModelConfig(
+    vehicle.carId,
+    vehicle.vin,
+    localOverrides,
   );
 
   return (

@@ -218,6 +218,7 @@ app.UseAuthorization();
 app.MapAuthEndpoints();
 app.MapVehicleEndpoints();
 app.MapVehicleImageEndpoints();
+app.MapShowroomEndpoints();
 app.MapDrivesEndpoints();
 app.MapChargingEndpoints();
 app.MapMapEndpoints();

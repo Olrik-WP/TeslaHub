@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<ChargingLocation> ChargingLocations => Set<ChargingLocation>();
     public DbSet<ChargingCostOverride> ChargingCostOverrides => Set<ChargingCostOverride>();
     public DbSet<CarImage> CarImages => Set<CarImage>();
+    public DbSet<CarShowroomConfig> CarShowroomConfigs => Set<CarShowroomConfig>();
     public DbSet<TeslaAccount> TeslaAccounts => Set<TeslaAccount>();
     public DbSet<TeslaVehicle> TeslaVehicles => Set<TeslaVehicle>();
     public DbSet<TeslaKeyPair> TeslaKeyPairs => Set<TeslaKeyPair>();
@@ -38,6 +39,10 @@ public class AppDbContext : DbContext
             .IsUnique();
 
         modelBuilder.Entity<CarImage>()
+            .HasIndex(c => c.CarId)
+            .IsUnique();
+
+        modelBuilder.Entity<CarShowroomConfig>()
             .HasIndex(c => c.CarId)
             .IsUnique();
 
