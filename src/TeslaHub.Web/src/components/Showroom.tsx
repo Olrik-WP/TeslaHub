@@ -56,6 +56,7 @@ import { ShowroomVisualSection } from './ShowroomVisualSection';
 import { ShowroomGeometrySection } from './ShowroomGeometrySection';
 import { ShowroomAestheticsSection } from './ShowroomAestheticsSection';
 import { ShowroomLightsSection } from './ShowroomLightsSection';
+import { ShowroomGlassSection } from './ShowroomGlassSection';
 
 // Lazy-load the viewer — same trick VehicleTopView.tsx uses to keep
 // the GLB/three.js bundle off the initial Settings page load.
@@ -109,6 +110,15 @@ export default function Showroom({ carId }: Props) {
   );
   useEffect(() => {
     setVisualState(DEFAULT_VISUAL_STATE);
+  }, [carId]);
+
+  // Ephemeral debug visualisation toggles (Showroom-only). Currently
+  // just glass coloration; will host paint-region / interior debug
+  // toggles in later phases. Always starts off — the colour-coded
+  // viewer is jarring as a default.
+  const [debugGlass, setDebugGlass] = useState(false);
+  useEffect(() => {
+    setDebugGlass(false);
   }, [carId]);
 
   // Hydrate `editedOverrides` from the saved blob on first load and
@@ -355,6 +365,7 @@ export default function Showroom({ carId }: Props) {
                 vehicle={stubVehicle}
                 localOverrides={editedOverrides}
                 showroomMode
+                debugMode={{ glass: debugGlass }}
               />
             </Suspense>
           </div>
@@ -404,14 +415,22 @@ export default function Showroom({ carId }: Props) {
             defaults={defaults}
           />
 
-          {/* Sections still pending — Phase 3b.3c:
-              - Vitres (refactor lourd : magic numbers INNER_GLASS_OPACITY)
-              - Sentry cameras (7×XYZ sliders)
+          <div className="h-px bg-[#1a1a1a]" />
+
+          <ShowroomGlassSection
+            overrides={editedOverrides}
+            onChange={setEditedOverrides}
+            defaults={defaults}
+            debugGlass={debugGlass}
+            onToggleDebugGlass={setDebugGlass}
+          />
+
+          {/* Restant — Phase 3b.3d : sentry cameras (XYZ × 7).
               + Phase 4 — drag-gizmos sur les callouts/anchors. */}
           <div className="text-[10px] text-[#4b5563] text-center pt-4 border-t border-[#1a1a1a]">
             {t(
               'showroom.moreSoon',
-              'À venir : vitres, caméras sentinelles…',
+              'À venir : caméras sentinelles, drag-gizmos…',
             )}
           </div>
         </div>

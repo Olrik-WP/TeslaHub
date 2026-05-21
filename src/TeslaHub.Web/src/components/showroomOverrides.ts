@@ -175,6 +175,10 @@ export interface ShowroomOverrides {
   /** Per-light emissive boost (brake / reverse / headlight). Shallow
    *  merge over `cfg.lightTuning` — pick any subset to tune. */
   lightTuning?: Partial<VehicleModelConfig['lightTuning']>;
+  /** Window glass finish tweaks (outer envMultiplier, opacity, tint;
+   *  inner mixed opacity, env; inner solo env). Shallow merge over
+   *  `cfg.glassFinish`. */
+  glassFinish?: Partial<VehicleModelConfig['glassFinish']>;
 
   // Glass / projections — currently magic numbers in VehicleTopView3D.tsx.
   // Wired through cfg in Phase 3 (DRY refactor); the fields are
@@ -305,6 +309,11 @@ export function mergeShowroomConfig(
     lightTuning: overrides.lightTuning
       ? { ...defaults.lightTuning, ...overrides.lightTuning }
       : defaults.lightTuning,
+
+    // Glass finish — shallow merge (outer + inner mixed/solo params).
+    glassFinish: overrides.glassFinish
+      ? { ...defaults.glassFinish, ...overrides.glassFinish }
+      : defaults.glassFinish,
 
     // Ground projections — per-beam shallow merge. Each beam's
     // sub-fields (textureUrl, color, opacity, renderOrder) are merged

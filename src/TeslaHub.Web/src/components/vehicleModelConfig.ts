@@ -247,6 +247,55 @@ export interface VehicleModelConfig {
   }>;
 
   // ───────────────────────────────────────────────────────────────────
+  // Glass finish — opacity / tint / reflection params for window glass
+  // ───────────────────────────────────────────────────────────────────
+  /** Tuning for the OUTER + INNER pane treatment that the viewer
+   *  applies to every glass mesh. All values are multiplicative or
+   *  absolute (opacity), defaults are conservative — increase
+   *  `outerEnvMultiplier` to see more sky reflection, decrease
+   *  `outerWindowTint` to darken windows further, etc.
+   *
+   *  Glossary of the three pane families the viewer recognises:
+   *   - **Outer**       : the cabin-side outer layer (windshield, door
+   *                       windows, panoramic roof). Carries the visible
+   *                       tint + reflection.
+   *   - **Inner mixed** : the inner pane behind an outer one (windshield
+   *                       inner, front door windows). Tesla layered them
+   *                       with a perfect-mirror material that we damp
+   *                       and collapse to a faint veil so we can see
+   *                       through the windshield.
+   *   - **Inner solo**  : the rear door windows on the Y — Tesla used
+   *                       ONLY the inner pane (no outer). The "mirror"
+   *                       here IS what reads as tinted glass; we keep a
+   *                       softened reflection. */
+  glassFinish: {
+    /** Multiplier applied to outer glass `envMapIntensity` — dampens
+     *  sky reflections so the tint is visible. Default 0.3. */
+    outerEnvMultiplier: number;
+    /** Forced opacity for the panoramic roof when the GLB ships it at
+     *  alpha < 0.4 (default 0.90 = nearly black). */
+    outerRoofOpacity: number;
+    /** Forced opacity for non-roof outer glass (default 0.55). */
+    outerWindowOpacity: number;
+    /** Scalar multiplied into the panoramic roof's diffuse colour —
+     *  darker than the side windows (default 0.15). */
+    outerRoofTint: number;
+    /** Scalar multiplied into side-window / windshield diffuse
+     *  (default 0.45). */
+    outerWindowTint: number;
+    /** Final opacity of the inner mixed pane (windshield inner). Very
+     *  low so the windshield reads as see-through. Default 0.08. */
+    innerMixedOpacity: number;
+    /** Multiplier on inner mixed `envMapIntensity` — kills the mirror
+     *  that would otherwise reflect the HDR sky through the windshield.
+     *  Default 0.02. */
+    innerMixedEnvMultiplier: number;
+    /** Multiplier on inner solo `envMapIntensity` — keeps a soft
+     *  reflection so the rear windows still read as glass. Default 0.6. */
+    innerSoloEnvMultiplier: number;
+  };
+
+  // ───────────────────────────────────────────────────────────────────
   // Light tuning — emissive intensity + colour for body lights
   // ───────────────────────────────────────────────────────────────────
   /** Per-light emissive boost applied by VehicleLightEffects when the
@@ -469,6 +518,16 @@ export const PoppyseedConfig: VehicleModelConfig = {
     alloyEnvBoost: 1.6,
     plasticRoughness: 0.55,
     plasticEnvBoost: 1.5,
+  },
+  glassFinish: {
+    outerEnvMultiplier: 0.3,
+    outerRoofOpacity: 0.9,
+    outerWindowOpacity: 0.55,
+    outerRoofTint: 0.15,
+    outerWindowTint: 0.45,
+    innerMixedOpacity: 0.08,
+    innerMixedEnvMultiplier: 0.02,
+    innerSoloEnvMultiplier: 0.6,
   },
   lightTuning: {
     brakeIntensity: 2.5,
@@ -701,6 +760,16 @@ export const BayberryConfig: VehicleModelConfig = {
     alloyEnvBoost: 1.6,
     plasticRoughness: 0.55,
     plasticEnvBoost: 1.5,
+  },
+  glassFinish: {
+    outerEnvMultiplier: 0.3,
+    outerRoofOpacity: 0.9,
+    outerWindowOpacity: 0.55,
+    outerRoofTint: 0.15,
+    outerWindowTint: 0.45,
+    innerMixedOpacity: 0.08,
+    innerMixedEnvMultiplier: 0.02,
+    innerSoloEnvMultiplier: 0.6,
   },
   lightTuning: {
     brakeIntensity: 2.5,
