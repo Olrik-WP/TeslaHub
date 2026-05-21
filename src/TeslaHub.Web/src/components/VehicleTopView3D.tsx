@@ -37,6 +37,52 @@ import {
 // regardless of which car it's plugged into. Not in the per-model config.
 const HANDLE_URL = '/models/charger_handle.glb';
 
+// ---- Ground-projection fallback ------------------------------------------
+// The Tesla mobile app draws two textured quads under the car as ambient
+// light overlays: `Headlights_Projection*` (warm fan in front) and
+// `Stoplights_Projection*` / `BrakeLightProjection*` (red glow behind).
+// Tesla bakes a radial-gradient base/alpha texture into each quad so the
+// edges fade off smoothly into the ground.
+//
+// PROBLEM: the Poppyseed (Model 3 Highland) GLB we extract from the APK
+// has been re-exported through Godot's gltf-transform pipeline WITHOUT
+// any textures — every material's baseColor is a flat colour and `baseTex`
+// is missing on all 62 materials. Bayberry (Model Y) survived with its
+// projection textures intact, so it renders the soft beam correctly; the
+// M3 quad ends up as a solid grey/white rectangle whenever
+// useGroundProjections toggles it visible (shiftState=D/R or during the
+// lock-flash chirp).
+//
+// FIX: load the authentic Tesla projection textures (extracted once from
+// Bayberry's GLB via Tesla-Godot-Test/extract-texture.mjs) and apply them
+// as `mat.map` on every projection material that lacks a baked texture.
+// Tesla shipped the Poppyseed (M3) GLB without textures on the projection
+// quads — they only have a flat baseColor — so without this fallback the
+// quads render as solid grey/white rectangles. Bayberry (Y) keeps its own
+// baked baseColorTexture so this code path is a no-op there. Textures are
+// PNG RGBA where the cone shape lives in the alpha channel; assigning as
+// `map` + `transparent: true` lets the alpha cut the rectangle and gives
+// the same shape the Y already shows. Both textures share a single loader
+// instance and are cached at module level so they download once per page.
+const beamTextureLoader = new THREE.TextureLoader();
+let cachedHeadlightBeam: THREE.Texture | null = null;
+let cachedStoplightBeam: THREE.Texture | null = null;
+
+function getBeamTexture(role: 'headlight' | 'stoplight'): THREE.Texture {
+  if (role === 'headlight') {
+    if (!cachedHeadlightBeam) {
+      cachedHeadlightBeam = beamTextureLoader.load('/textures/headlight_beam.png');
+      cachedHeadlightBeam.colorSpace = THREE.SRGBColorSpace;
+    }
+    return cachedHeadlightBeam;
+  }
+  if (!cachedStoplightBeam) {
+    cachedStoplightBeam = beamTextureLoader.load('/textures/stoplight_beam.png');
+    cachedStoplightBeam.colorSpace = THREE.SRGBColorSpace;
+  }
+  return cachedStoplightBeam;
+}
+
 // ---- Wheel polish ---------------------------------------------------------
 // The D50 base wheel set on the Highland is actually a BLACK PLASTIC
 // hubcap (Photon-style cover), not an alloy. So most of our wheel meshes
@@ -413,6 +459,59 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           }
           mesh.renderOrder = -10;
           floorFixed++;
+          continue;
+        }
+
+        // Ground projection fallback — Tesla's Poppyseed (M3) GLB was
+        // exported without textures, so the projection quads
+        // (`Headlights_Projections`, `Stoplights_Projections`) render as
+        // a flat grey/white rectangle whenever useGroundProjections
+        // toggles them visible. Bayberry kept its baked projection
+        // texture (`baseTex=#9`) so it doesn't need this fallback. We
+        // detect the case by checking that the mesh sits under a
+        // configured projection node AND that the material lacks a
+        // baked diffuse map, then graft on the authentic Tesla texture
+        // we extracted from Bayberry (headlight_beam.png /
+        // stoplight_beam.png live under /public/textures/). The PNGs
+        // are RGBA where the beam cone lives in the alpha channel, so
+        // assigning as `map` + `transparent` lets the alpha cut the
+        // rectangle and reproduces the same shape the Y already renders
+        // — no procedural approximation needed.
+        const projectionRole: 'headlight' | 'stoplight' | null = (() => {
+          const headName = cfg.groundProjectionNodes.headlights;
+          const stopName = cfg.groundProjectionNodes.stoplights;
+          let c: THREE.Object3D | null = mesh;
+          while (c) {
+            if (c.name === headName) return 'headlight';
+            if (c.name === stopName) return 'stoplight';
+            c = c.parent;
+          }
+          return null;
+        })();
+        if (projectionRole) {
+          const std = mat as THREE.MeshStandardMaterial;
+          const hasBaseTex = !!std.map;
+          if (!hasBaseTex) {
+            // Graft the Tesla baked beam texture onto the material.
+            // Keep MeshStandardMaterial so the existing reference (used
+            // by useGroundProjections for visibility toggling) stays
+            // valid — we just decorate it with the missing texture.
+            std.map = getBeamTexture(projectionRole);
+            std.transparent = true;
+            std.depthWrite = false;
+            std.side = THREE.DoubleSide;
+            // Reset the flat grey/white baseColor to neutral so the
+            // texture renders at its true Tesla hue (warm white for the
+            // headlight beam, soft red for the brake beam). Opacity
+            // stays at 1 since the PNG alpha already handles the fade.
+            if (std.color) std.color.setHex(0xffffff);
+            std.opacity = 1;
+            // Render after the floor shadow but before the body so the
+            // beam blends correctly on top of the dark ground texture.
+            mesh.renderOrder = -5;
+          }
+          // Skip the rest of the loop body — projection meshes aren't
+          // glass, paint, or anything else we'd want to touch.
           continue;
         }
 
