@@ -562,34 +562,86 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         if (projectionRole) {
           const std = mat as THREE.MeshStandardMaterial;
           const beamCfg = cfg.projections[projectionRole];
-          // Always (re-)apply the user-tuneable bits (color, opacity,
-          // renderOrder, texture URL) so a Showroom slider change is
-          // reflected immediately. The shader compile (`needsUpdate`)
-          // only fires when we ACTUALLY need to swap the texture
-          // sampler, so we don't pay it on every tweak.
-          const desiredTex = getBeamTexture(projectionRole, beamCfg.textureUrl);
-          if (std.map !== desiredTex) {
-            std.map = desiredTex;
-            std.transparent = true;
-            std.depthWrite = false;
-            std.side = THREE.DoubleSide;
-            // CRITICAL: the M3 material was originally compiled WITHOUT
-            // a map (Tesla ships these primitives texture-less), so
-            // three.js cached a shader that has no texture sampler.
-            // Setting `map` afterwards alone is not enough — we must
-            // force a shader recompile or the projection renders as a
-            // black/transparent quad regardless of texture data.
-            std.needsUpdate = true;
-          } else if (std.map && !std.transparent) {
-            // Bayberry case — texture pre-baked by Tesla. Make sure
-            // transparent + depthWrite are wired correctly the first
-            // time, but skip needsUpdate (shader already has sampler).
-            std.transparent = true;
-            std.depthWrite = false;
-            std.side = THREE.DoubleSide;
+
+          // First-touch snapshot — captures the GLB-native state
+          // (texture, color, opacity, transparent/depth flags) so we
+          // can ALWAYS restore the baseline before applying the user's
+          // override on top. Without this we'd compound mutations on
+          // every Showroom slider tick (opacity → 0, color → black) AND
+          // permanently lose the Bayberry baked texture the first time
+          // the M3 fallback is grafted on top of it.
+          type ProjSnap = {
+            baseMap: THREE.Texture | null;
+            baseColor: number;
+            baseOpacity: number;
+            baseTransparent: boolean;
+            baseDepthWrite: boolean;
+          };
+          type WithProjSnap = { __teslahub_proj_snap?: ProjSnap };
+          const stdAny = std as unknown as WithProjSnap;
+          let snap = stdAny.__teslahub_proj_snap;
+          if (!snap) {
+            snap = {
+              baseMap: std.map ?? null,
+              baseColor: std.color ? std.color.getHex() : 0xffffff,
+              baseOpacity: std.opacity ?? 1,
+              baseTransparent: std.transparent,
+              baseDepthWrite: std.depthWrite,
+            };
+            stdAny.__teslahub_proj_snap = snap;
           }
-          if (std.color) std.color.setHex(beamCfg.color);
-          std.opacity = beamCfg.opacity;
+
+          // Resolve the desired map:
+          //   1. User-provided URL (Showroom textureUrl override) wins
+          //   2. Otherwise restore the baked GLB map if any (Bayberry)
+          //   3. Otherwise graft the Tesla fallback PNG (Poppyseed M3
+          //      ships these primitives texture-less so we have to)
+          let desiredMap: THREE.Texture | null;
+          let needFallbackShader = false;
+          if (beamCfg.textureUrl) {
+            desiredMap = getBeamTexture(projectionRole, beamCfg.textureUrl);
+            needFallbackShader = !snap.baseMap; // M3 case
+          } else if (snap.baseMap) {
+            desiredMap = snap.baseMap;
+          } else {
+            desiredMap = getBeamTexture(projectionRole, undefined);
+            needFallbackShader = true; // M3 case
+          }
+          if (std.map !== desiredMap) {
+            std.map = desiredMap;
+            // CRITICAL when we go from null→texture: the M3 material
+            // was originally compiled WITHOUT a map sampler. Setting
+            // `map` alone is not enough — we must force a shader
+            // recompile or the projection renders as a black /
+            // transparent quad regardless of texture data.
+            if (needFallbackShader) std.needsUpdate = true;
+          }
+
+          // Wire transparency only when WE grafted a new map (M3 case).
+          // For Bayberry we keep the baked alphaMode the GLB already
+          // had — touching it would force-transparent every Y mesh and
+          // break the depth sort.
+          if (snap.baseMap) {
+            std.transparent = snap.baseTransparent;
+            std.depthWrite = snap.baseDepthWrite;
+          } else {
+            std.transparent = true;
+            std.depthWrite = false;
+          }
+          std.side = THREE.DoubleSide;
+
+          // Colour: restore baseline then multiply user tint over it
+          // (white = identity, so the default beamCfg leaves Bayberry's
+          // warm-white baked diffuse exactly as Tesla shipped it).
+          if (std.color) {
+            std.color.setHex(snap.baseColor);
+            if (beamCfg.color !== 0xffffff) {
+              const userColor = new THREE.Color().setHex(beamCfg.color);
+              std.color.multiply(userColor);
+            }
+          }
+          // Opacity: baseline × user opacity (1 = identity).
+          std.opacity = snap.baseOpacity * beamCfg.opacity;
           mesh.renderOrder = beamCfg.renderOrder;
           // Skip the rest of the loop body — projection meshes aren't
           // glass, paint, or anything else we'd want to touch.

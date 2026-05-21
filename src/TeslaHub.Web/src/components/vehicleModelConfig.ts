@@ -780,8 +780,11 @@ export const BayberryConfig: VehicleModelConfig = {
     headlightColor: 0xfff5e8,
   },
   projections: {
-    headlight: { color: 0xffffff, opacity: 1, renderOrder: 10 },
-    stoplight: { color: 0xffffff, opacity: 1, renderOrder: 10 },
+    // renderOrder = 0 to match Bayberry GLB baseline (Tesla ships
+    // these primitives with the texture already baked, so we don't
+    // need to push them above the opaque pass like we do for M3).
+    headlight: { color: 0xffffff, opacity: 1, renderOrder: 0 },
+    stoplight: { color: 0xffffff, opacity: 1, renderOrder: 0 },
   },
 
   // Tesla MY Juniper ships privacy glass on the rear doors (much darker
