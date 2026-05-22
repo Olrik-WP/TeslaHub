@@ -201,12 +201,14 @@ export function ShowroomGlassSection({
           unit="x"
         />
         <p className="text-[10px] text-[#6b7280] -mt-1">
-          Reflet ciel HDR sur TOUTES les vitres extérieures. 0 = mat,
-          2 = miroir. Affecte aussi le pane privacy.
+          Reflet ciel HDR sur les vitres extérieures. 0 = mat sans
+          reflet ; 1 = roughness GLB native ; au-delà de 1 on lisse
+          aussi la roughness vers 0.05 pour faire ressortir le reflet
+          (sinon Tesla ship des verres très rugueux qui noient l'env).
         </p>
       </SubSection>
 
-      <SubSection title="Portes (4 vitres latérales)" defaultOpen>
+      <SubSection title="Vitres de portes" defaultOpen>
         <ShowroomSlider
           label="Opac"
           value={gf.doorWindowOpacity ?? def.doorWindowOpacity}
@@ -226,8 +228,10 @@ export function ShowroomGlassSection({
           step={0.01}
         />
         <p className="text-[10px] text-[#6b7280] -mt-1">
-          Vitres des 4 portes uniquement. Tint = 0 noir, 1 = teinte
-          GLB native.
+          M3 : agit sur les 4 portes (mêmes vitres Glass + Glass_Interior).
+          Y : agit uniquement sur les 2 portes avant (Glass_Windows).
+          Les vitres arrière Y sont privacy → utiliser « Inner solo »
+          ci-dessous.
         </p>
       </SubSection>
 

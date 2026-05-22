@@ -676,64 +676,93 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         const matIsOuter =
           !isDimmedInner && isInGlassZone && OUTER_GLASS_MAT.test(matName);
         if (matIsOuter) {
-          const std = mat as THREE.MeshStandardMaterial;
           const glassFin = cfg.glassFinish;
 
-          // Snap the GLB-native baseline ONCE per material on the
-          // material itself BEFORE any other mutation in this branch
-          // (the `glass_windows_fade` override below used to run
-          // FIRST and pollute std.opacity, so the snap captured our
-          // bumped opacity as the "GLB baseline" — that's why a
-          // zone-opacity slider would become inert after the first
-          // tick: isEffectivelyOpaque flipped sides based on already-
-          // mutated state).
+          // ──────────────────────────────────────────────────────────
+          // PER-MESH CLONE — Tesla ships many glass meshes that all
+          // reference the SAME `MeshStandardMaterial` instance (e.g.
+          // on the Y, `Glass` is shared between Trunk_Cover_Main, the
+          // windshield primitive in Static_Exterior AND a piece of
+          // headlight cover). Without a per-mesh clone, dragging the
+          // TRUNK opacity slider would also tint the windshield and
+          // the lights because every `std.color.multiplyScalar(...)`
+          // mutates the shared instance.
           //
-          // baseOpacity is captured here too so the
-          // "is-this-mesh-actually-glass-or-an-opaque-panel?" check
-          // below stays anchored to the GLB-shipped value instead of
-          // drifting toward whatever opacity the last tick wrote.
-          type WithOuterBase = {
-            __thOuterBase?: { color: number; env: number; opacity: number };
+          // Strategy mirrors the INNER branch a few lines below:
+          //   1. Resolve the GLB-original material by following a
+          //      back-reference on the current `mat` (which may
+          //      already BE a clone left over from the previous
+          //      memo pass).
+          //   2. Snap baseline values on the ORIGINAL material once,
+          //      so every clone reads from un-mutated values.
+          //   3. Reuse the same clone across re-runs (cached in a
+          //      per-mesh WeakMap keyed on the original) so we
+          //      don't allocate a new material every drag tick.
+          // ──────────────────────────────────────────────────────────
+          type WithOriginRef = {
+            __teslahub_outer_origin?: THREE.MeshStandardMaterial;
           };
-          const stdAny = std as unknown as WithOuterBase;
-          if (!stdAny.__thOuterBase) {
-            stdAny.__thOuterBase = {
-              color: std.color?.getHex() ?? 0xffffff,
-              env: std.envMapIntensity ?? 1,
-              opacity: std.opacity ?? 1,
+          type WithBaseSnap = {
+            __thOuterBase?: {
+              color: number;
+              env: number;
+              opacity: number;
+              rough: number;
+            };
+          };
+          type WithCloneMap = {
+            __teslahub_outer_clones?: WeakMap<
+              THREE.MeshStandardMaterial,
+              THREE.MeshStandardMaterial
+            >;
+          };
+          const matAsAny = mat as unknown as WithOriginRef;
+          const original: THREE.MeshStandardMaterial =
+            matAsAny.__teslahub_outer_origin ?? (mat as THREE.MeshStandardMaterial);
+          const originalAny = original as unknown as WithBaseSnap;
+          if (!originalAny.__thOuterBase) {
+            originalAny.__thOuterBase = {
+              color: original.color?.getHex() ?? 0xffffff,
+              env: original.envMapIntensity ?? 1,
+              opacity: original.opacity ?? 1,
+              rough: original.roughness ?? 0.5,
             };
           }
-          const outerBase = stdAny.__thOuterBase;
+          const outerBase = originalAny.__thOuterBase;
 
-          // Tesla's `Glass_Windows_Fade` (the windshield + rear hatch
-          // glass merged onto the Fade mesh) is marked alphaMode=OPAQUE
-          // in the source GLB even though it's meant to be tinted
-          // automotive glass — see audit-glb-materials.mjs output. We
-          // pretend it's translucent below so the slider-driven opacity
-          // takes effect instead of being routed to the opaque pass.
+          const meshAny = mesh as unknown as WithCloneMap;
+          if (!meshAny.__teslahub_outer_clones) {
+            meshAny.__teslahub_outer_clones = new WeakMap();
+          }
+          const cloneMap = meshAny.__teslahub_outer_clones;
+          let std = cloneMap.get(original);
+          if (!std) {
+            std = original.clone();
+            (std as unknown as WithOriginRef).__teslahub_outer_origin = original;
+            cloneMap.set(original, std);
+            // Substitute the clone into the mesh's material slot.
+            if (Array.isArray(mesh.material)) {
+              const idx = mesh.material.indexOf(mat as THREE.Material);
+              if (idx >= 0) mesh.material[idx] = std;
+            } else {
+              mesh.material = std;
+            }
+          }
+
+          // Tesla's `Glass_Windows_Fade` ships marked alphaMode=OPAQUE
+          // even though it's meant to be tinted automotive glass —
+          // force it into the translucent branch so the slider-driven
+          // opacity takes effect.
           const isGlassFade = /^glass_windows_fade$/i.test(matName);
 
-          // CRUCIAL: Tesla marks many opaque materials as
-          // `alphaMode=BLEND` with alpha=1.0 in the source GLTF (see
-          // Bayberry's Fade mesh: Interior_Fade, Trim_Fade, Cover_Fade,
-          // Interior_Fade2 — all alpha=1.0 but BLEND). GLTFLoader sets
-          // mat.transparent=true on them, then everything in the
-          // transparent pass gets depth-sorted by camera distance,
-          // causing flicker between near-coplanar surfaces (panoramic
-          // roof + windshield, headliner + roof glass) as the orbit
-          // changes the sort order. We override BLEND-but-opaque
-          // materials back to actually-opaque so they go through the
-          // depth-tested opaque pass and don't participate in the
-          // transparent sort.
-          //
-          // Decision uses the SNAPPED baseOpacity (not std.opacity)
-          // so it stays stable across memo re-runs once the slider has
-          // already mutated std.opacity below. `glass_windows_fade` is
-          // always routed to the translucent path (see above).
+          // Tesla marks many alpha=1.0 materials as BLEND in source,
+          // which makes GLTFLoader sort them in the transparent pass
+          // and flicker between coplanar surfaces. Demote those to
+          // truly opaque so they pass through depth-tested opaque.
+          // The decision uses the SNAPPED baseOpacity so it's stable
+          // across re-runs.
           const isEffectivelyOpaque = !isGlassFade && outerBase.opacity >= 0.95;
 
-          // Per-zone opacity + tint pickers — the heart of the new
-          // glass routing. Each zone has its own slider in Showroom.
           const zoneOpacity =
             isRoof
               ? glassFin.panoroofOpacity
@@ -751,32 +780,45 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             std.transparent = false;
             std.depthWrite = true;
             std.side = THREE.DoubleSide;
-            // Do NOT change renderOrder — let the opaque pass handle
-            // depth sort naturally (renderOrder defaults to 0).
+            std.opacity = 1;
           } else {
             std.transparent = true;
             std.depthWrite = false;
             std.side = THREE.DoubleSide;
-            // Stable draw order between TRULY transparent layers only.
-            // Higher renderOrder draws later (= on top); panoramic
-            // roof sits above other glass to avoid the windshield/roof
-            // flicker at the pavilion seam.
             mesh.renderOrder = isRoof ? 3 : isTrunk ? 2 : 2;
-            // Tesla ships `Glass` material with alpha=0.16 — far too
-            // see-through to read as tinted automotive glass. Force
-            // the per-zone opacity (door / pano / trunk) so the
-            // Showroom slider actually moves the visible alpha. The
-            // Fade material is also routed here even though its
-            // baseOpacity is 1 (isGlassFade forces the translucent
-            // branch).
-            if (isGlassFade || outerBase.opacity < 0.4) {
-              std.opacity = zoneOpacity;
+            // ALWAYS apply the zone opacity in the translucent branch.
+            // The previous `if (opacity < 0.4)` gate meant materials
+            // shipping at 0.45–0.5 (Y Glass_Windows, M3 Glass_Tinted)
+            // would never be touched by the slider — that's why OPAC
+            // was inert on both models.
+            std.opacity = zoneOpacity;
+          }
+
+          // ENV REFLECTION — Tesla ships many glass materials very
+          // rough (Y Glass_Windows = 0.83) which blurs the HDR sky
+          // into a flat grey, so envMapIntensity has no visible
+          // effect. Couple the env multiplier to a roughness cap so
+          // dialling the slider up actually sharpens the reflection.
+          //
+          //   envMul = 0     → reflection killed
+          //   envMul = 1     → GLB-baked roughness preserved
+          //   envMul > 1     → roughness pulled toward 0.05 (mirror)
+          if ('envMapIntensity' in std) {
+            std.envMapIntensity = glassFin.outerEnvMultiplier;
+          }
+          if ('roughness' in std) {
+            const envMul = glassFin.outerEnvMultiplier;
+            if (envMul <= 1) {
+              // Sub-1 mul keeps the baked roughness (no over-correction).
+              std.roughness = outerBase.rough;
+            } else {
+              // Above 1, pull roughness from baked value down to 0.05
+              // proportionally — at envMul = 2 we're a clear mirror.
+              const t = Math.min(1, (envMul - 1));
+              std.roughness = outerBase.rough * (1 - t) + 0.05 * t;
             }
           }
 
-          if ('envMapIntensity' in std) {
-            std.envMapIntensity = outerBase.env * glassFin.outerEnvMultiplier;
-          }
           if (std.color) {
             std.color.setHex(outerBase.color);
             const c = std.color;
