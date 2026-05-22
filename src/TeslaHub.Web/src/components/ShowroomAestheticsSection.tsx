@@ -27,7 +27,8 @@ import { ShowroomSlider } from './ShowroomSlider';
 import {
   useUploadShowroomWrap,
   useDeleteShowroomWrap,
-  wrapPngUrl,
+  wrapPngUrlById,
+  type ShowroomWrap,
 } from './useResolvedModelConfig';
 
 interface Props {
@@ -38,16 +39,14 @@ interface Props {
 
 interface WrapProps extends Props {
   /** Car id used to upload / delete / fetch the per-car PNG. The
-   *  wrap is car-scoped on the backend so each vehicle can carry its
-   *  own livery without interfering with siblings on the same account. */
+   *  wrap library is car-scoped on the backend so each vehicle can
+   *  carry its own liveries without interfering with siblings on
+   *  the same account. */
   carId: number | undefined;
-  /** True when the backend has a wrap PNG persisted for this car
-   *  (sourced from `useResolvedModelConfig.wrapExists`). */
-  wrapExists: boolean;
-  /** Bust the browser cache for the wrap thumbnail after the user
-   *  uploads / deletes — passed as `?v=…` query string. Usually the
-   *  last `updatedAt` ISO timestamp. */
-  cacheKey: string | null;
+  /** Every wrap PNG uploaded for this car, most-recent first.
+   *  Sourced from `useResolvedModelConfig.wraps`. The gallery
+   *  renders one tile per entry. */
+  wraps: ShowroomWrap[];
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -336,13 +335,23 @@ function wrapLabel(file: string): string {
   return file.replace(/\.png$/i, '').replace(/_/g, ' ');
 }
 
+/**
+ * Strip the cache-busting query string from a URL so two URLs that
+ * differ only by `?v=…` still compare equal. Used to spot the active
+ * wrap in the gallery regardless of when it was uploaded.
+ */
+function urlWithoutQuery(url: string | undefined | null): string | null {
+  if (!url) return null;
+  const qIdx = url.indexOf('?');
+  return qIdx >= 0 ? url.slice(0, qIdx) : url;
+}
+
 function WrapSection({
   overrides,
   onChange,
   defaults,
   carId,
-  wrapExists,
-  cacheKey,
+  wraps,
 }: WrapProps) {
   const uploadMutation = useUploadShowroomWrap(carId);
   const deleteMutation = useDeleteShowroomWrap(carId);
@@ -350,20 +359,25 @@ function WrapSection({
   const [dragHover, setDragHover] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // `paintTextureUrl` override wins over a server-uploaded wrap —
-  // used by the template gallery to preview a stock PNG without
-  // round-tripping through upload.
-  const templateUrl = overrides.wraps?.paintTextureUrl;
-  const hasWrap = !!templateUrl || (wrapExists && !!carId);
-  const wrapKind: 'template' | 'upload' | null = templateUrl
-    ? 'template'
-    : wrapExists && carId
-      ? 'upload'
-      : null;
-  // What URL to show in the preview thumbnail.
-  const previewUrl =
-    templateUrl ??
-    (wrapExists && carId ? wrapPngUrl(carId, cacheKey ?? undefined) : null);
+  // `paintTextureUrl` is the single source of truth for "which wrap
+  // is currently applied". It can point to a Tesla template under
+  // /public/wraps/, a library upload under /api/.../wraps/{id}, or a
+  // synthesised data: URL (test pattern).
+  //
+  // Special case: when there is NO explicit paintTextureUrl but the
+  // car has uploads, the renderer falls back to the most-recent
+  // upload via the legacy /wrap endpoint. We mirror that here so the
+  // gallery tile reflects what the user actually sees on the 3D body.
+  const explicitTextureUrl = overrides.wraps?.paintTextureUrl;
+  const effectiveTextureUrlNoQuery = useMemo<string | null>(() => {
+    if (explicitTextureUrl) return urlWithoutQuery(explicitTextureUrl);
+    if (carId && wraps.length > 0) {
+      return urlWithoutQuery(wrapPngUrlById(carId, wraps[0]!.id));
+    }
+    return null;
+  }, [explicitTextureUrl, wraps, carId]);
+
+  const hasWrap = !!effectiveTextureUrlNoQuery;
 
   const handleFiles = async (files: FileList | null) => {
     setErrorMsg(null);
@@ -382,13 +396,17 @@ function WrapSection({
       return;
     }
     try {
-      await uploadMutation.mutateAsync(file);
-      // If a template URL was previewed, clear it so the new upload wins.
-      if (overrides.wraps?.paintTextureUrl) {
-        const { wraps: _, ...rest } = overrides;
-        void _;
-        onChange(rest);
-      }
+      const created = await uploadMutation.mutateAsync(file);
+      // Pin the freshly uploaded wrap as the active one so the
+      // viewer re-renders against it AND the gallery highlights
+      // the right tile after the upload completes.
+      onChange({
+        ...overrides,
+        wraps: {
+          ...(overrides.wraps ?? {}),
+          paintTextureUrl: wrapPngUrlById(carId, created.id, created.uploadedAt),
+        },
+      });
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Upload échoué');
     }
@@ -400,6 +418,39 @@ function WrapSection({
       ...overrides,
       wraps: { ...(overrides.wraps ?? {}), paintTextureUrl: url },
     });
+  };
+
+  const handleSelectUpload = (w: ShowroomWrap) => {
+    setErrorMsg(null);
+    if (!carId) return;
+    onChange({
+      ...overrides,
+      wraps: {
+        ...(overrides.wraps ?? {}),
+        paintTextureUrl: wrapPngUrlById(carId, w.id, w.uploadedAt),
+      },
+    });
+  };
+
+  const handleDeleteUpload = async (w: ShowroomWrap) => {
+    setErrorMsg(null);
+    if (!carId) return;
+    try {
+      await deleteMutation.mutateAsync(w.id);
+      // If the deleted wrap was the active one, clear the
+      // paintTextureUrl so the renderer falls back cleanly.
+      const deletedUrl = urlWithoutQuery(wrapPngUrlById(carId, w.id));
+      if (
+        explicitTextureUrl &&
+        urlWithoutQuery(explicitTextureUrl) === deletedUrl
+      ) {
+        const { wraps: _drop, ...rest } = overrides;
+        void _drop;
+        onChange(rest);
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Suppression échouée');
+    }
   };
 
   /** Inject a synthesised checker pattern as the wrap — gives the user
@@ -450,20 +501,15 @@ function WrapSection({
     });
   };
 
-  const handleRemoveTemplate = () => {
-    const { wraps: _, ...rest } = overrides;
-    void _;
+  /**
+   * "↺ Retirer" only DESELECTS the active wrap — it does NOT delete
+   * any upload from the library. The user is expected to use the
+   * per-tile delete button in the "Mes wraps" gallery for that.
+   */
+  const handleDeselectWrap = () => {
+    const { wraps: _drop, ...rest } = overrides;
+    void _drop;
     onChange(rest);
-  };
-
-  const handleRemoveUpload = async () => {
-    setErrorMsg(null);
-    if (!carId) return;
-    try {
-      await deleteMutation.mutateAsync();
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Suppression échouée');
-    }
   };
 
   const activeModelKey = (defaults.key as 'poppyseed' | 'bayberry') ?? 'poppyseed';
@@ -491,12 +537,9 @@ function WrapSection({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              if (wrapKind === 'template') {
-                handleRemoveTemplate();
-              } else {
-                void handleRemoveUpload();
-              }
+              handleDeselectWrap();
             }}
+            title="Désactive le wrap (les uploads restent dans la bibliothèque)"
             className="text-[10px] text-[#6b7280] hover:text-red-400"
           >
             ↺ Retirer
@@ -510,32 +553,8 @@ function WrapSection({
         mates). Format Tesla : 1024×1024 max, 1 MB max.
       </p>
 
-      {/* Preview thumbnail when a wrap is active */}
-      {previewUrl && (
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2 p-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded-md">
-            <img
-              src={previewUrl}
-              alt="Wrap"
-              className="w-14 h-14 rounded object-cover border border-[#2a2a2a]"
-              style={{ background: '#181818' }}
-            />
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] text-white truncate">
-                {wrapKind === 'template' ? 'Template Tesla' : 'PNG uploadé'}
-              </p>
-              <p className="text-[10px] text-[#6b7280] truncate">
-                {wrapKind === 'template'
-                  ? previewUrl.split('/').pop()
-                  : 'Désactive le picker couleur peinture.'}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Drag & drop upload zone — always visible so the user can
-          replace the current wrap by dropping a new PNG. */}
+      {/* Drag & drop upload zone — every drop ADDS to the library
+          and the new entry becomes the active wrap automatically. */}
       {carId ? (
         <label
           onDragOver={(e) => {
@@ -565,9 +584,7 @@ function WrapSection({
           <p className="text-[11px] text-[#d4d4d4]">
             {uploadMutation.isPending
               ? 'Envoi en cours…'
-              : wrapExists
-                ? 'Glisse un nouveau PNG pour remplacer'
-                : 'Glisse un PNG ici ou clique pour parcourir'}
+              : 'Glisse un PNG ici ou clique pour ajouter à la bibliothèque'}
           </p>
           <p className="text-[10px] text-[#6b7280]">PNG · max 1 MB · 1024×1024 recommandé</p>
         </label>
@@ -579,6 +596,75 @@ function WrapSection({
 
       {errorMsg && (
         <p className="text-[10px] text-red-400 px-1">⚠ {errorMsg}</p>
+      )}
+
+      {/* "Mes wraps" — every PNG the user has uploaded for this
+          car, sticky across reloads and selectable in one click.
+          Each tile previews the raw PNG (NOT how it looks on the
+          car). The active tile is highlighted; the trash button
+          per-tile removes that specific wrap from the library. */}
+      {carId && wraps.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[10px] uppercase tracking-wider text-[#6b7280]">
+            Mes wraps ({wraps.length})
+          </p>
+          <p className="text-[10px] text-[#6b7280] leading-snug">
+            Tes PNG uploadés. Clique pour appliquer, X pour supprimer
+            de la bibliothèque. Le wrap actif est encadré en rouge.
+          </p>
+          <div className="grid grid-cols-4 gap-1">
+            {wraps.map((w) => {
+              const tileUrl = wrapPngUrlById(carId, w.id, w.uploadedAt);
+              const active =
+                effectiveTextureUrlNoQuery === urlWithoutQuery(tileUrl);
+              return (
+                <div
+                  key={w.id}
+                  className={
+                    'group relative aspect-square rounded overflow-hidden transition-all ' +
+                    (active
+                      ? 'ring-2 ring-[#e31937] ring-offset-1 ring-offset-[#141414]'
+                      : 'hover:ring-1 hover:ring-white')
+                  }
+                  style={{ backgroundColor: '#181818' }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleSelectUpload(w)}
+                    title={w.name}
+                    className="absolute inset-0 w-full h-full"
+                  >
+                    <img
+                      src={tileUrl}
+                      alt={w.name}
+                      loading="lazy"
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleDeleteUpload(w);
+                    }}
+                    title={`Supprimer "${w.name}"`}
+                    className="absolute top-0.5 right-0.5 w-4 h-4 flex items-center justify-center text-[10px] rounded bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-opacity"
+                  >
+                    ×
+                  </button>
+                  <span
+                    className={
+                      'absolute bottom-0 left-0 right-0 text-[8px] text-white bg-black/60 px-1 truncate ' +
+                      (active ? '' : 'opacity-0 group-hover:opacity-100')
+                    }
+                  >
+                    {w.name}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Quick diagnostic — applies a coloured checker pattern as the
@@ -608,7 +694,7 @@ function WrapSection({
           </p>
           <div className="grid grid-cols-4 gap-1">
             {templatesForModel.map((tpl) => {
-              const active = templateUrl === tpl.file;
+              const active = explicitTextureUrl === tpl.file;
               return (
                 <button
                   key={tpl.file}
@@ -907,13 +993,11 @@ function WheelsSection({ overrides, onChange, defaults }: Props) {
 // ────────────────────────────────────────────────────────────────────
 
 interface AestheticsProps extends Props {
-  /** Car id — required for wrap upload/delete (per-car PNG endpoint). */
+  /** Car id — required for wrap upload/delete (per-car endpoints). */
   carId: number | undefined;
-  /** True when the backend has a wrap PNG persisted for this car. */
-  wrapExists: boolean;
-  /** Cache bust for the wrap thumbnail after upload — pass last
-   *  `updatedAt` ISO string. */
-  cacheKey: string | null;
+  /** Every uploaded wrap PNG (metadata only) for this car, most-
+   *  recent first. Empty array when the user has never uploaded. */
+  wraps: ShowroomWrap[];
 }
 
 export function ShowroomAestheticsSection({
@@ -921,14 +1005,15 @@ export function ShowroomAestheticsSection({
   onChange,
   defaults,
   carId,
-  wrapExists,
-  cacheKey,
+  wraps,
 }: AestheticsProps) {
   // Wrap and solid paint are mutually exclusive. When a wrap is active
   // (template OR uploaded), hide the paint colour picker — its picker
   // would be visually meaningless (the wrap overrides the colour).
+  // "Active" here means either an explicit paintTextureUrl OR an
+  // implicit fallback to the most-recent upload.
   const wrapActive =
-    !!overrides.wraps?.paintTextureUrl || (wrapExists && !!carId);
+    !!overrides.wraps?.paintTextureUrl || (!!carId && wraps.length > 0);
 
   return (
     <section className="space-y-3">
@@ -945,8 +1030,7 @@ export function ShowroomAestheticsSection({
         onChange={onChange}
         defaults={defaults}
         carId={carId}
-        wrapExists={wrapExists}
-        cacheKey={cacheKey}
+        wraps={wraps}
       />
       {!wrapActive && (
         <PaintSection overrides={overrides} onChange={onChange} defaults={defaults} />

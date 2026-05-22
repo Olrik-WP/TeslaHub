@@ -30,6 +30,16 @@ import type { VehicleModelConfig } from './vehicleModelConfig';
 
 // ─── DTOs (mirror C# ShowroomConfigDto) ───────────────────────────────────
 
+/** One uploaded wrap PNG in the car's library (metadata only — the
+ *  bytes are fetched on demand from /wraps/{id}). Mirrors C#
+ *  `ShowroomWrapDto`. */
+export interface ShowroomWrap {
+  id: number;
+  name: string;
+  sizeBytes: number;
+  uploadedAt: string;
+}
+
 export interface ShowroomConfigResponse {
   carId: number;
   /** Raw override blob from the DB. The server stores arbitrary JSON,
@@ -39,17 +49,35 @@ export interface ShowroomConfigResponse {
   config: Record<string, unknown>;
   /** ISO-8601 timestamp of the last save. Null when no row exists. */
   updatedAt: string | null;
-  /** True when a custom body wrap PNG exists for this car on the
-   *  server. The PNG bytes are served on a separate endpoint
-   *  (`/vehicle/{carId}/showroom/wrap`) to keep this response small. */
+  /** True when at least one wrap is in the library. Kept for older
+   *  bundles still in browser cache — new code reads `wraps.length`. */
   wrapExists: boolean;
+  /** Library of every wrap PNG uploaded for this car, most-recent
+   *  first. Empty array when the car has never had an upload. */
+  wraps: ShowroomWrap[];
 }
 
 /**
- * Stable URL where the per-car user-uploaded wrap PNG lives. Encodes
- * a cache-busting timestamp when the server says the wrap was just
- * updated so the renderer / Showroom thumbnail pick up the new PNG
- * without a hard refresh.
+ * Stable URL for a SPECIFIC wrap upload (by its DB id). The Showroom
+ * gallery uses this as the value of `wraps.paintTextureUrl` to pin a
+ * given library entry as the active wrap. Embeds the upload date as a
+ * cache key so reuploads under the same id (shouldn't happen but
+ * defends against any future "in-place edit" flow) bust the browser
+ * cache without a hard refresh.
+ */
+export function wrapPngUrlById(
+  carId: number,
+  wrapId: number,
+  cacheKey?: string | number,
+): string {
+  const bust = cacheKey ? `?v=${encodeURIComponent(cacheKey)}` : '';
+  return `/api/vehicle/${carId}/showroom/wraps/${wrapId}${bust}`;
+}
+
+/**
+ * Legacy URL — points at the single-wrap endpoint that now aliases
+ * the most-recent upload. Old code paths still call this; new code
+ * should prefer `wrapPngUrlById`.
  */
 export function wrapPngUrl(carId: number, cacheKey?: string | number): string {
   const bust = cacheKey ? `?v=${encodeURIComponent(cacheKey)}` : '';
@@ -81,8 +109,12 @@ export function useResolvedModelConfig(
   config: VehicleModelConfig;
   extras: ResolvedModelExtras;
   savedOverrides: ShowroomOverrides | undefined;
-  /** Server-side flag: a custom wrap PNG was uploaded for this car. */
+  /** Server-side flag: at least one custom wrap PNG was uploaded
+   *  for this car. */
   wrapExists: boolean;
+  /** Library of every uploaded wrap PNG (metadata only — the PNG
+   *  bytes are fetched on demand from `wrapPngUrlById`). */
+  wraps: ShowroomWrap[];
   /** ISO timestamp of the last save — used to bust the wrap PNG
    *  browser cache after the user uploads a new image. */
   updatedAt: string | null;
@@ -122,7 +154,8 @@ export function useResolvedModelConfig(
     config: extras.config,
     extras,
     savedOverrides,
-    wrapExists: data?.wrapExists ?? false,
+    wrapExists: (data?.wraps?.length ?? 0) > 0 || (data?.wrapExists ?? false),
+    wraps: data?.wraps ?? [],
     updatedAt: data?.updatedAt ?? null,
     isLoading,
   };
@@ -178,27 +211,37 @@ export function useSaveShowroom(carId: number | null | undefined) {
 }
 
 /**
- * Upload (replace) the custom body wrap PNG for a car. Accepts a
- * single PNG `File` from a `<input type="file">` or a drag-and-drop
- * `DataTransfer`. The backend enforces PNG signature + 1 MB size cap.
- * On success we invalidate the showroom query so `wrapExists` flips
- * to true and the renderer re-mounts the texture against the new PNG.
+ * Strip the file extension and any path component from a File.name
+ * so we keep just the user-friendly stem for the wrap library label.
+ */
+function deriveWrapNameFromFile(file: File): string {
+  const base = file.name.split(/[\\/]/).pop() ?? file.name;
+  const dotIdx = base.lastIndexOf('.');
+  const stem = dotIdx > 0 ? base.slice(0, dotIdx) : base;
+  return stem.trim() || 'wrap';
+}
+
+/**
+ * Add a new wrap PNG to the car's library. Accepts a `File` from a
+ * `<input type="file">` / drag-and-drop, or `{ file, name }` to pin
+ * an explicit name. The backend enforces PNG signature + 1 MB size
+ * cap and returns the freshly created row so the caller can switch
+ * the active wrap to it.
  */
 export function useUploadShowroomWrap(carId: number | null | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (input: File | { file: File; name?: string }) => {
       if (!carId) throw new Error('No carId — cannot upload wrap');
-      // Reuse the `api` helper so the bearer token + 401-refresh
-      // pipeline runs the same as every other authenticated call.
-      // The Content-Type override + ArrayBuffer body bypass the
-      // default JSON serialisation; the response is still JSON so
-      // api()'s `res.json()` works as-is.
+      const file = input instanceof File ? input : input.file;
+      const name =
+        input instanceof File ? deriveWrapNameFromFile(input) : (input.name ?? deriveWrapNameFromFile(input.file));
       const buffer = await file.arrayBuffer();
-      return api<{ success: boolean; bytes: number; updatedAt: string }>(
-        `/vehicle/${carId}/showroom/wrap`,
+      const qs = name ? `?name=${encodeURIComponent(name)}` : '';
+      return api<ShowroomWrap>(
+        `/vehicle/${carId}/showroom/wraps${qs}`,
         {
-          method: 'PUT',
+          method: 'POST',
           headers: { 'Content-Type': 'image/png' },
           body: buffer,
         },
@@ -211,19 +254,21 @@ export function useUploadShowroomWrap(carId: number | null | undefined) {
 }
 
 /**
- * Remove the custom body wrap PNG for a car. The rest of the
- * showroom config (sliders, palette, etc.) is preserved — only the
- * wrap column is nulled out server-side.
+ * Delete a single wrap from the library by its DB id. The rest of
+ * the showroom config (sliders, palette, etc.) and any OTHER wraps
+ * in the library are preserved. Pass no argument to drop the whole
+ * library (legacy "reset wraps" behaviour).
  */
 export function useDeleteShowroomWrap(carId: number | null | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => {
+    mutationFn: (wrapId?: number) => {
       if (!carId) return Promise.reject(new Error('No carId — cannot delete wrap'));
-      return api<{ success: boolean }>(
-        `/vehicle/${carId}/showroom/wrap`,
-        { method: 'DELETE' },
-      );
+      const url =
+        typeof wrapId === 'number'
+          ? `/vehicle/${carId}/showroom/wraps/${wrapId}`
+          : `/vehicle/${carId}/showroom/wraps`;
+      return api<{ success: boolean }>(url, { method: 'DELETE' });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: showroomQueryKey(carId) });

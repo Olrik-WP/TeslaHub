@@ -119,8 +119,7 @@ export default function Showroom({ carId }: Props) {
   // request even though both consume the data).
   const {
     savedOverrides,
-    wrapExists,
-    updatedAt: configUpdatedAt,
+    wraps,
     isLoading: cfgLoading,
   } = useResolvedModelConfig(carId, vehicle?.vin ?? null);
 
@@ -441,8 +440,7 @@ export default function Showroom({ carId }: Props) {
             onChange={setEditedOverrides}
             defaults={defaults}
             carId={carId}
-            wrapExists={wrapExists}
-            cacheKey={configUpdatedAt}
+            wraps={wraps}
           />
 
           <div className="h-px bg-[#1a1a1a]" />
