@@ -147,96 +147,6 @@ function useModelConsts() {
 // real vehicle state (vehicle.headlightsOn, vehicle.chargeState, etc.).
 // We'll revisit this when wiring the Phase 2 dynamic state.
 
-// ---------------------------------------------------------------------------
-// Runtime planar UV authoring for the custom wrap pipeline.
-//
-// Tesla's API-extracted GLBs ship the `Paint` material as a solid colour
-// (no `baseTex`), so the body meshes were exported WITHOUT any
-// `TEXCOORD_0` attribute. When we later assign a wrap PNG as `mat.map`,
-// three.js falls back to all-zero UVs and every fragment samples a
-// single pixel (the wrap's bottom-left corner, white in Tesla's
-// liveries) — the body then renders as a flat uniform colour.
-//
-// To get a usable wrap we synthesise UVs ourselves at runtime: a
-// top-down planar projection (X → U, Z → V) scaled across the COMBINED
-// body bounding box. That way every body panel shares the same UV
-// space and the wrap stretches across the whole car (instead of each
-// panel rendering the full image, which would look like 13 tiled
-// copies). Original UVs (when present) are snapshotted onto the
-// geometry so the wrap-removal path can put them back unchanged.
-//
-// Stashed on the geometry as a non-enumerable field so React Devtools
-// / inspector serialisation skip it.
-// ---------------------------------------------------------------------------
-
-const ORIGINAL_UV_KEY = '__teslahubOriginalUV';
-
-function applyPlanarUVs(meshes: ReadonlyArray<THREE.Mesh>) {
-  if (meshes.length === 0) return;
-
-  // First pass: compute a combined bounding box across every paint
-  // mesh so the projection covers the whole car uniformly.
-  const bbox = new THREE.Box3();
-  for (const mesh of meshes) {
-    const pos = mesh.geometry?.attributes?.position;
-    if (!pos) continue;
-    for (let i = 0; i < pos.count; i++) {
-      bbox.expandByPoint(
-        new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)),
-      );
-    }
-  }
-  if (bbox.isEmpty()) return;
-  const sizeX = (bbox.max.x - bbox.min.x) || 1;
-  const sizeZ = (bbox.max.z - bbox.min.z) || 1;
-
-  // Second pass: stamp planar UVs onto every mesh, snapshotting the
-  // original UV attribute (if any) for the restore path.
-  for (const mesh of meshes) {
-    const geom = mesh.geometry;
-    const pos = geom?.attributes?.position;
-    if (!pos) continue;
-
-    // Don't double-snapshot if a previous wrap apply already saved
-    // the original — we'd otherwise overwrite the snapshot with our
-    // OWN synthesised UVs on a subsequent re-run.
-    const stash = geom as unknown as Record<string, unknown>;
-    if (!(ORIGINAL_UV_KEY in stash)) {
-      stash[ORIGINAL_UV_KEY] = geom.attributes.uv ?? null;
-    }
-
-    const uvArr = new Float32Array(pos.count * 2);
-    for (let i = 0; i < pos.count; i++) {
-      uvArr[i * 2] = (pos.getX(i) - bbox.min.x) / sizeX;
-      uvArr[i * 2 + 1] = (pos.getZ(i) - bbox.min.z) / sizeZ;
-    }
-    geom.setAttribute('uv', new THREE.BufferAttribute(uvArr, 2));
-  }
-
-  // eslint-disable-next-line no-console
-  console.log(
-    `[Wrap] Authored planar UVs across ${meshes.length} Paint mesh(es). ` +
-    `Body bbox: X=${(bbox.max.x - bbox.min.x).toFixed(2)}m  ` +
-    `Z=${(bbox.max.z - bbox.min.z).toFixed(2)}m.`,
-  );
-}
-
-function restorePlanarUVs(meshes: ReadonlyArray<THREE.Mesh>) {
-  for (const mesh of meshes) {
-    const geom = mesh.geometry;
-    if (!geom) continue;
-    const stash = geom as unknown as Record<string, unknown>;
-    if (!(ORIGINAL_UV_KEY in stash)) continue;
-    const orig = stash[ORIGINAL_UV_KEY] as THREE.BufferAttribute | null;
-    if (orig) {
-      geom.setAttribute('uv', orig);
-    } else if (geom.attributes.uv) {
-      geom.deleteAttribute('uv');
-    }
-    delete stash[ORIGINAL_UV_KEY];
-  }
-}
-
 function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
   const {
     cfg,
@@ -1298,7 +1208,9 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         (uvMeshCount > 0
           ? `Bounds: U ∈ [${uvUMin.toFixed(3)}, ${uvUMax.toFixed(3)}]  ` +
             `V ∈ [${uvVMin.toFixed(3)}, ${uvVMax.toFixed(3)}].`
-          : 'No usable UVs found → falling back to runtime top-down planar projection.'),
+          : 'NO UVs found on this GLB — wrap will sample a single pixel and ' +
+            'render flat. Re-run optimize-glb.ps1 with --keep-attributes true ' +
+            '(see optimize-glb.ps1 header for the rationale).'),
       );
     }
 
@@ -1312,20 +1224,8 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         mat.color.setHex(cfg.bodyPaintColor);
         mat.needsUpdate = true;
       }
-      // Also restore any planar UVs we synthesised earlier so the
-      // original GLB authoring (typically: no UV at all) is back in
-      // place when the wrap is removed.
-      restorePlanarUVs(paintMeshes);
       return;
     }
-
-    // Ensure every Paint mesh has UVs spanning [0, 1] across the
-    // COMBINED body bounding box so the wrap stretches across the
-    // whole car (and not panel-by-panel). If the GLB already shipped
-    // usable UVs we leave them alone — the snapshot logic preserves
-    // the original on the geometry so restorePlanarUVs() can put it
-    // back when the wrap is removed.
-    applyPlanarUVs(paintMeshes);
 
     // Load the PNG through an Image + Canvas so we can FLATTEN any
     // transparent regions onto a white background BEFORE handing the
