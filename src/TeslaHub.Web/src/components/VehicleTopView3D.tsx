@@ -69,16 +69,29 @@ const WrapUrlContext = createContext<WrapContextValue>({
 });
 
 // ---------------------------------------------------------------------------
-// Tesla in-car wrap pipeline (opaque_skybox.shader from the mobile APK).
+// Tesla in-car wrap pipeline — faithful port of `opaque_skybox.shader`
+// (Tesla-APK-Android/recover/godot/shaders/opaque_skybox.shader).
 //
-// Wrap PNGs from teslamotors/custom-wraps are authored against a template
-// whose islands align with TEXCOORD_1 on body meshes (Godot `UV2`, three.js
-// r184 attribute `uv1`, map channel 1). The stock `Paint` material is solid
-// colour on UV0; wraps sample on TEXCOORD_1 and alpha-blend over base paint:
-// mix(color.rgb, wrap.rgb, wrap.a).
+// Reference shader (Godot 3):
+//   vec4 custom_color = texture(custom_albedo_texture, UV2);
+//   vec3 final_color  = mix(color.rgb, custom_color.rgb / 10.0, custom_color.a);
+//   ROUGHNESS = mix(ROUGHNESS, 0.9, custom_color.a);
+//   METALLIC  = mix(METALLIC,  0.0, custom_color.a);
+//   ALBEDO    = final_color;
 //
-// three.js r184 routes each map through its own varying (`vMapUv`) derived
-// from `mat.map.channel` — there is no global `vUv2` anymore.
+// Key points faithfully reproduced below:
+// - UV2 in Godot == TEXCOORD_1 in glTF == `uv1` in three.js r184. We feed it
+//   via `mat.map.channel = 1` so three.js wires `vMapUv` to the second UV set.
+// - `/ 10.0` is Tesla's HDR tonemap compensation — the wrap PNG is authored
+//   for the Godot mobile pipeline which renders into a 10x-overbright buffer.
+//   We respect it via a `wrapBrightness = 0.1` uniform applied in the shader.
+// - Roughness lerps to 0.9 (matte) where the wrap is opaque; metallic to 0.
+// - Meshes WITHOUT TEXCOORD_1 (Y's `Static_Door_Exterior`, `Underhood_Piece`)
+//   still carry the PaintSkybox material in Tesla's scene (BayberryE41.tscn).
+//   In Godot they sample UV2=(0,0) → wrap PNG corner pixel, which on every
+//   Tesla template is transparent → mesh stays at body paint colour.
+//   We replicate this by injecting a zeroed uv1 BufferAttribute on those
+//   meshes so three.js samples the same corner pixel (same result).
 // ---------------------------------------------------------------------------
 
 type WrapMatHookState = {
@@ -86,25 +99,69 @@ type WrapMatHookState = {
   priorCacheKey: (() => string) | undefined;
   priorMap: THREE.Texture | null;
   priorMapChannel: number;
+  priorRoughness: number;
+  priorMetalness: number;
 };
 
 const WRAP_MAT_HOOK_KEY = '__teslahubWrapHook';
+const WRAP_UV1_PATCHED_KEY = '__teslahubWrapUv1Patched';
 
+// Faithful port of opaque_skybox.shader's body — adapted to three.js
+// MeshStandardMaterial's chunk system. Note: Tesla's `/ 10.0` divisor is
+// passed as a uniform (`wrapBrightness`) so we can tweak it without
+// recompiling, and so the cacheKey can stay stable per material.
 const MAP_FRAGMENT_REPLACE = `#ifdef USE_MAP
 	vec4 wrapSample = texture2D( map, vMapUv );
 	#ifdef DECODE_VIDEO_TEXTURE
 		wrapSample = sRGBTransferEOTF( wrapSample );
 	#endif
-	diffuseColor.rgb = mix( diffuseColor.rgb, wrapSample.rgb, wrapSample.a );
+	diffuseColor.rgb = mix( diffuseColor.rgb, wrapSample.rgb * wrapBrightness, wrapSample.a );
 #endif`;
 
-function meshWrapUvChannel(geometry: THREE.BufferGeometry | undefined): 0 | 1 | -1 {
-  if (!geometry) return -1;
+const ROUGHNESS_FRAGMENT_REPLACE = `float roughnessFactor = roughness;
+#ifdef USE_ROUGHNESSMAP
+	vec4 texelRoughness = texture2D( roughnessMap, vRoughnessMapUv );
+	roughnessFactor *= texelRoughness.g;
+#endif
+#ifdef USE_MAP
+	roughnessFactor = mix( roughnessFactor, 0.9, texture2D( map, vMapUv ).a );
+#endif`;
+
+const METALNESS_FRAGMENT_REPLACE = `float metalnessFactor = metalness;
+#ifdef USE_METALNESSMAP
+	vec4 texelMetalness = texture2D( metalnessMap, vMetalnessMapUv );
+	metalnessFactor *= texelMetalness.b;
+#endif
+#ifdef USE_MAP
+	metalnessFactor = mix( metalnessFactor, 0.0, texture2D( map, vMapUv ).a );
+#endif`;
+
+function meshHasWrapUv(geometry: THREE.BufferGeometry | undefined): boolean {
+  if (!geometry) return false;
   const attrs = geometry.attributes;
   // GLTFLoader maps TEXCOORD_1 → `uv1` in three r184; older builds used `uv2`.
-  if ((attrs.uv1 ?? attrs.uv2)?.itemSize === 2) return 1;
-  if (attrs.uv?.itemSize === 2) return 0;
-  return -1;
+  return (attrs.uv1 ?? attrs.uv2)?.itemSize === 2;
+}
+
+/**
+ * Inject a zero-filled uv1 attribute on a mesh that lacks TEXCOORD_1.
+ * Mirrors Godot's default-vec2(0,0) behaviour for missing vertex
+ * attributes — the wrap shader will then sample the (0,0) pixel of the
+ * wrap PNG, which on every Tesla custom-wrap template is transparent
+ * (alpha=0) → the mesh keeps the underlying paint colour exactly like
+ * Tesla's in-car renderer does for `Static_Door_Exterior` / `Underhood_Piece`.
+ *
+ * Idempotent: a flag on the geometry prevents re-allocating on every
+ * wrap toggle.
+ */
+function ensureZeroUv1(geometry: THREE.BufferGeometry): void {
+  const tagged = geometry as THREE.BufferGeometry & { [WRAP_UV1_PATCHED_KEY]?: boolean };
+  if (tagged[WRAP_UV1_PATCHED_KEY]) return;
+  const vertexCount = geometry.attributes.position?.count;
+  if (!vertexCount) return;
+  const zeros = new Float32Array(vertexCount * 2);
+  geometry.setAttribute('uv1', new THREE.BufferAttribute(zeros, 2));
+  tagged[WRAP_UV1_PATCHED_KEY] = true;
 }
 
 function matWrapHook(mat: THREE.MeshStandardMaterial): WrapMatHookState {
@@ -115,6 +172,8 @@ function matWrapHook(mat: THREE.MeshStandardMaterial): WrapMatHookState {
       priorCacheKey: mat.customProgramCacheKey,
       priorMap: mat.map,
       priorMapChannel: mat.map?.channel ?? 0,
+      priorRoughness: mat.roughness,
+      priorMetalness: mat.metalness,
     };
   }
   return bag[WRAP_MAT_HOOK_KEY]!;
@@ -123,22 +182,42 @@ function matWrapHook(mat: THREE.MeshStandardMaterial): WrapMatHookState {
 function installTeslaWrapShader(
   mat: THREE.MeshStandardMaterial,
   wrapTex: THREE.Texture,
-  channel: 0 | 1,
 ) {
   const hook = matWrapHook(mat);
 
   mat.map = wrapTex;
-  mat.map.channel = channel;
+  mat.map.channel = 1;
+  // PaintSkybox.tres defaults: metallic=0.7 / roughness=0.1 (glossy painted
+  // metal). Match Tesla's baseline so the unwrapped (transparent) regions
+  // render with the right finish.
+  mat.roughness = 0.1;
+  mat.metalness = 0.7;
 
   const priorCompile = hook.priorOnBeforeCompile;
   mat.onBeforeCompile = (shader, renderer) => {
     priorCompile?.(shader, renderer);
+    // Tesla's `/ 10.0` HDR compensation. Exposed as a uniform so we
+    // can A/B-test alternate values without changing the cache key.
+    shader.uniforms.wrapBrightness = { value: 1.0 / 10.0 };
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `#include <common>
+uniform float wrapBrightness;`,
+    );
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <map_fragment>',
       MAP_FRAGMENT_REPLACE,
     );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <roughnessmap_fragment>',
+      ROUGHNESS_FRAGMENT_REPLACE,
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <metalnessmap_fragment>',
+      METALNESS_FRAGMENT_REPLACE,
+    );
   };
-  mat.customProgramCacheKey = () => `teslahub-wrap-${wrapTex.uuid}-ch${channel}`;
+  mat.customProgramCacheKey = () => `teslahub-wrap-${wrapTex.uuid}`;
   mat.needsUpdate = true;
 }
 
@@ -150,6 +229,8 @@ function clearTeslaWrapShader(mat: THREE.MeshStandardMaterial, paintHex: number)
     mat.customProgramCacheKey = hook.priorCacheKey ?? (() => '');
     mat.map = hook.priorMap;
     if (mat.map) mat.map.channel = hook.priorMapChannel;
+    mat.roughness = hook.priorRoughness;
+    mat.metalness = hook.priorMetalness;
     delete bag[WRAP_MAT_HOOK_KEY];
   } else {
     mat.onBeforeCompile = () => {};
@@ -1223,8 +1304,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
   useEffect(() => {
     const targets: THREE.MeshStandardMaterial[] = [];
     const paintMeshes: THREE.Mesh[] = [];
-    let uv1MeshCount = 0;
-    let uv0OnlyMeshCount = 0;
+    const paintMeshesWithoutUv1: THREE.Mesh[] = [];
 
     cleanedScene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
@@ -1240,9 +1320,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       }
       if (isPaintMesh) {
         paintMeshes.push(mesh);
-        const ch = meshWrapUvChannel(mesh.geometry);
-        if (ch === 1) uv1MeshCount++;
-        else if (ch === 0) uv0OnlyMeshCount++;
+        if (!meshHasWrapUv(mesh.geometry)) paintMeshesWithoutUv1.push(mesh);
       }
     });
 
@@ -1256,34 +1334,28 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       return;
     }
 
-    // Pick the UV channel for the WHOLE body — must be uniform across all
-    // Paint mats so the shader cacheKey stays stable. Prefer TEXCOORD_1
-    // (Tesla wrap layout); fall back to TEXCOORD_0 if the GLB is older
-    // and the second UV set was stripped by gltf-transform/prune.
-    let wrapChannel: 0 | 1 = 0;
-    if (uv1MeshCount === paintMeshes.length && uv1MeshCount > 0) {
-      wrapChannel = 1;
-    } else if (uv1MeshCount > 0) {
-      wrapChannel = 1;
-      console.warn(
-        `[Wrap] Mixed UV channels (uv1 on ${uv1MeshCount}, uv0-only on ${uv0OnlyMeshCount}). ` +
-        `Forcing TEXCOORD_1; uv0-only meshes will be untextured.`,
+    // Patch meshes that lack TEXCOORD_1 with a zero-filled uv1 attribute.
+    // This matches Tesla's runtime behaviour: Static_Door_Exterior and
+    // Underhood_Piece on the Y carry the PaintSkybox material in the source
+    // .tscn scene but ship without UV2 in the GLB. Godot falls back to
+    // vec2(0,0) for missing vertex attributes → wrap PNG corner pixel
+    // (transparent) → mesh keeps the body paint colour. We replicate.
+    if (paintMeshesWithoutUv1.length > 0) {
+      for (const mesh of paintMeshesWithoutUv1) {
+        if (mesh.geometry) ensureZeroUv1(mesh.geometry);
+      }
+      console.log(
+        `[Wrap] Patched ${paintMeshesWithoutUv1.length} Paint mesh(es) lacking ` +
+        `TEXCOORD_1 with zero-uv1 fallback (Tesla skybox parity): ` +
+        paintMeshesWithoutUv1.map((m) => m.name || '(unnamed)').join(', '),
       );
-    } else if (uv0OnlyMeshCount > 0) {
-      console.warn(
-        '[Wrap] No TEXCOORD_1 on Paint meshes — falling back to TEXCOORD_0. ' +
-        'Result will be mis-oriented (wrap PNG is authored for UV1). Rebuild the GLB ' +
-        'with optimize-glb.ps1 --keep-attributes true to restore the Tesla layout.',
-      );
-    } else {
-      console.warn('[Wrap] Paint meshes have no UV attributes at all. Cannot apply wrap.');
-      return;
     }
 
     console.log(
       `[Wrap] Loading wrap → ${targets.length} Paint mat(s), ` +
-      `${paintMeshes.length} mesh(es), channel=${wrapChannel} ` +
-      `(${wrapChannel === 1 ? 'TEXCOORD_1 / Tesla layout' : 'TEXCOORD_0 / fallback'}).`,
+      `${paintMeshes.length} mesh(es) total ` +
+      `(${paintMeshes.length - paintMeshesWithoutUv1.length} native uv1, ` +
+      `${paintMeshesWithoutUv1.length} patched).`,
     );
 
     const img = new Image();
@@ -1297,7 +1369,6 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       // glTF convention: textures expect Y=0 at the top of the image (flipY=false).
       // The Tesla wrap PNG templates (custom-wraps + Skins) follow that convention
       // since the UV1 layout in the GLB was authored against the same orientation.
-      // Forcing flipY=true was inverting front/rear on the body (hood↔trunk swap).
       tex.flipY = false;
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = 8;
@@ -1307,11 +1378,11 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       const uniqueTargets = [...new Set(targets)];
       for (const mat of uniqueTargets) {
         mat.color.setHex(cfg.bodyPaintColor);
-        installTeslaWrapShader(mat, tex, wrapChannel);
+        installTeslaWrapShader(mat, tex);
       }
       console.log(
-        `[Wrap] Applied on map.channel=${wrapChannel} ` +
-        `(${uniqueTargets.length} unique Paint material(s)).`,
+        `[Wrap] Applied opaque_skybox.shader port on ${uniqueTargets.length} ` +
+        `unique Paint material(s) (channel=1, brightness=0.1, rough→0.9, metal→0).`,
       );
     };
     img.onerror = () => console.warn(`[Wrap] Image load failed: ${wrapUrl.slice(0, 80)}`);
