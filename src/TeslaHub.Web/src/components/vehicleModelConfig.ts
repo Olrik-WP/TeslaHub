@@ -699,23 +699,22 @@ export const PoppyseedConfig: VehicleModelConfig = {
       defaultOption: 'longRange',
       options: [
         // NOTE on the seat geometry — Tesla packs each front seat as
-        //   two physical meshes:
-        //     - Seat_Bottom_LF / Seat_Bottom_RF (mesh#11, SHARED) —
-        //       the structural shell (plastic + alu + black fabric)
-        //     - Seat_Top_LF   / Seat_Top_RF    (mesh#13/#16) —
-        //       the back-rest shell (Long Range / D50 silhouette)
-        //   and one COLOUR overlay mesh per trim that sits on top:
-        //     - Seat_Top_*_Color           → fabric colour cushion
-        //     - Seat_Bottom_*_Color        → fabric colour cushion
-        //     - Seat_Top_Perf_*_Color etc. → Perf-specific fabric
-        //     - Seat_Bottom_D50_*          → D50 all-in-one cushion
+        //   two physical meshes + colour overlays:
+        //     - Seat_Bottom_LF / Seat_Bottom_RF  (mesh#11, SHARED) —
+        //       structural shell (plastic + alu + black base fabric)
+        //     - Seat_Top_LF   / Seat_Top_RF     (mesh#13/#16) —
+        //       back-rest shell (Long Range / D50 silhouette)
+        //     - Seat_Top_*_Color, Seat_Bottom_*_Color → LR fabric overlay
+        //     - Seat_Top_Perf_*[_Color]                → Perf bucket + fabric
+        //     - Seat_Bottom_D50_*                      → D50 all-in-one cushion
         //
-        //   Consequence: `Seat_Bottom_LF/RF` (the shell) must STAY
-        //   visible on every trim, otherwise the seat looks like it
-        //   has no base. Performance has its OWN top shell
-        //   (`Seat_Top_Perf_*`, sport bucket with wings) so the
-        //   standard `Seat_Top_*` shell must hide when Perf is
-        //   active. All these constraints are reflected below.
+        //   CRITICAL: Tesla ships the Poppyseed GLB with the seat
+        //   shells `Seat_Bottom_LF/RF` set to `visible = false` by
+        //   default — they expect a runtime (the Tesla configurator)
+        //   to toggle them on per trim. We must therefore re-assert
+        //   them visible in EVERY trim that uses them (LR, D50, Perf
+        //   all do); leaving them out of `ownedNodes` leaves the
+        //   shells hidden and the seats look like floating back-rests.
         {
           id: 'longRange',
           label: 'Long Range (RWD / AWD)',
@@ -727,7 +726,10 @@ export const PoppyseedConfig: VehicleModelConfig = {
             'Reverse_Light',
             // Interior — classic Center Console (no D50 alu accents)
             'Center_Console',
-            // Seat-top shell (standard back-rest, also reused by D50)
+            // Seat shells (must be re-asserted visible — Tesla
+            // exports them hidden by default for the configurator)
+            'Seat_Bottom_LF',
+            'Seat_Bottom_RF',
             'Seat_Top_LF',
             'Seat_Top_RF',
             // Seat colour overlays (LR fabric)
@@ -752,13 +754,16 @@ export const PoppyseedConfig: VehicleModelConfig = {
             'Fascia_Cam_D50',
             // Interior — D50-specific aluminium-dark Center Console
             'Center_Console_D50',
-            // Seat-top shell (shared with LR — standard back-rest)
+            // Seat shells (re-asserted visible — see CRITICAL note above)
+            'Seat_Bottom_LF',
+            'Seat_Bottom_RF',
             'Seat_Top_LF',
             'Seat_Top_RF',
             // Top colour overlay (D50 reuses LR fabric on the back-rest)
             'Seat_Top_LF_Color',
             'Seat_Top_RF_Color',
-            // D50-specific bottom cushion (all-in-one, no _Color split)
+            // D50-specific bottom cushion (mesh#79/#80, single
+            // `Plastic_Black_Seats` primitive — sits over the shell)
             'Seat_Bottom_D50_LF',
             'Seat_Bottom_D50_RF',
           ],
@@ -775,6 +780,9 @@ export const PoppyseedConfig: VehicleModelConfig = {
             // Interior — Perf reuses the Long Range Center Console
             // (no D50 alu accents on Performance either).
             'Center_Console',
+            // Seat shells (re-asserted visible — see CRITICAL note above)
+            'Seat_Bottom_LF',
+            'Seat_Bottom_RF',
             // Sport back-rest shell (with wings — replaces Seat_Top_*)
             'Seat_Top_Perf_LF',
             'Seat_Top_Perf_RF',

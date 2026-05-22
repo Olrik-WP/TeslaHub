@@ -77,18 +77,21 @@ const GLASS_DEBUG_COLORS = {
 // use Plastic_Black_D50 / Rubber_D50 materials. Polished alloy treatment
 // stays in this file for later when we add real alloy variants (Glider,
 // Helix_19, Wishbone, ZeroG, etc). Tesla reuses these material names
-// (`Aluminum_*`, `Plastic_Black_*`, `Rubber_*`) verbatim across every
-// Godot scene we've inspected, hence file-level regex.
-//
-//   ALLOY    → mat the brushed-aluminum look, boost env reflections so
-//              the dark chrome doesn't render as flat black.
-//   PLASTIC  → keep the matte-black plastic feel, but lift envMap a bit
-//              so the spoke design stays readable instead of pitch black.
-// Material-name regexes — pure pattern, no tuning here (the numbers
-// they pair with moved into VehicleModelConfig.wheelFinish so the
-// Showroom can override them per car).
-const WHEEL_ALLOY_MAT_RE = /^(aluminum|aluminium|chrome|metal_anodized|silver)/i;
-const WHEEL_PLASTIC_MAT_RE = /^(plastic_black|rubber)/i;
+// Wheel material classification:
+//   TIRE  → matches tire brand / "Tire" naming (Pirelli, Conti, Tire,
+//           legacy Plastic_Black/Rubber). Kept matte-black, but envMap
+//           lifted a bit so the spoke design stays readable.
+//   ALLOY → EVERYTHING ELSE on the wheel mesh. Each wheel design ships
+//           its rim under its own bespoke material name
+//           (`Helix2_Dark2`, `GeminiDark3`, `Arachnid_V2_213`,
+//           `BayberryE41Material`, untitled primitives on D50
+//           Highland…). Earlier we tried to match the rim with a
+//           "starts-with-aluminum|chrome|silver" regex and it FAILED
+//           on every modern Tesla wheel GLB — the Showroom alloy
+//           sliders were silently no-op. Default-to-alloy is robust:
+//           every primitive whose material isn't a tire gets the
+//           polish (roughness, envBoost, optional tint).
+const WHEEL_TIRE_MAT_RE = /^(tire|pirelli|conti(nental)?|michelin|rubber|plastic_black)/i;
 
 // ---- Per-model derived constants -----------------------------------------
 // Returns the same shape as the old file-level CFG block, but driven by
@@ -211,7 +214,16 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
             };
             snap!.set(mat, base);
           }
-          if (WHEEL_ALLOY_MAT_RE.test(matName)) {
+          if (WHEEL_TIRE_MAT_RE.test(matName)) {
+            mat.metalness = 0;
+            mat.roughness = finish.plasticRoughness;
+            mat.envMapIntensity = base.envMapIntensity * finish.plasticEnvBoost;
+            plasticCount++;
+          } else {
+            // Everything that's not a tire on a wheel mesh is treated
+            // as alloy/rim — covers all the bespoke Tesla material
+            // names (Helix2_Dark2, GeminiDark3, Arachnid_V2_213,
+            // BayberryE41Material, untitled primitives on D50, etc.).
             mat.roughness = Math.max(base.roughness, finish.alloyRoughnessMin);
             mat.envMapIntensity = base.envMapIntensity * finish.alloyEnvBoost;
             if (mat.color) {
@@ -222,11 +234,6 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
               }
             }
             alloyCount++;
-          } else if (WHEEL_PLASTIC_MAT_RE.test(matName)) {
-            mat.metalness = 0;
-            mat.roughness = finish.plasticRoughness;
-            mat.envMapIntensity = base.envMapIntensity * finish.plasticEnvBoost;
-            plasticCount++;
           }
         }
       });
