@@ -278,6 +278,16 @@ public class CarShowroomConfig
     [Column(TypeName = "jsonb")]
     public string ConfigJson { get; set; } = "{}";
 
+    /// <summary>
+    /// Optional custom body wrap as a raw PNG byte array. Stored in the
+    /// SAME row as the rest of the showroom config (instead of in the
+    /// jsonb blob) so the GET-config endpoint stays small/fast — the
+    /// PNG is served on its own URL via the dedicated wrap endpoints.
+    /// Limited at the API layer to ~1 MB (Tesla's own configurator limit
+    /// for /Wraps PNGs on the in-car USB workflow).
+    /// </summary>
+    public byte[]? WrapPng { get; set; }
+
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 

@@ -39,6 +39,21 @@ export interface ShowroomConfigResponse {
   config: Record<string, unknown>;
   /** ISO-8601 timestamp of the last save. Null when no row exists. */
   updatedAt: string | null;
+  /** True when a custom body wrap PNG exists for this car on the
+   *  server. The PNG bytes are served on a separate endpoint
+   *  (`/vehicle/{carId}/showroom/wrap`) to keep this response small. */
+  wrapExists: boolean;
+}
+
+/**
+ * Stable URL where the per-car user-uploaded wrap PNG lives. Encodes
+ * a cache-busting timestamp when the server says the wrap was just
+ * updated so the renderer / Showroom thumbnail pick up the new PNG
+ * without a hard refresh.
+ */
+export function wrapPngUrl(carId: number, cacheKey?: string | number): string {
+  const bust = cacheKey ? `?v=${encodeURIComponent(cacheKey)}` : '';
+  return `/api/vehicle/${carId}/showroom/wrap${bust}`;
 }
 
 // ─── Query keys ───────────────────────────────────────────────────────────
@@ -66,6 +81,11 @@ export function useResolvedModelConfig(
   config: VehicleModelConfig;
   extras: ResolvedModelExtras;
   savedOverrides: ShowroomOverrides | undefined;
+  /** Server-side flag: a custom wrap PNG was uploaded for this car. */
+  wrapExists: boolean;
+  /** ISO timestamp of the last save — used to bust the wrap PNG
+   *  browser cache after the user uploads a new image. */
+  updatedAt: string | null;
   isLoading: boolean;
 } {
   const { data, isLoading } = useQuery<ShowroomConfigResponse>({
@@ -102,6 +122,8 @@ export function useResolvedModelConfig(
     config: extras.config,
     extras,
     savedOverrides,
+    wrapExists: data?.wrapExists ?? false,
+    updatedAt: data?.updatedAt ?? null,
     isLoading,
   };
 }
@@ -147,6 +169,66 @@ export function useSaveShowroom(carId: number | null | undefined) {
           method: 'PUT',
           body: JSON.stringify(overrides),
         },
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: showroomQueryKey(carId) });
+    },
+  });
+}
+
+/**
+ * Upload (replace) the custom body wrap PNG for a car. Accepts a
+ * single PNG `File` from a `<input type="file">` or a drag-and-drop
+ * `DataTransfer`. The backend enforces PNG signature + 1 MB size cap.
+ * On success we invalidate the showroom query so `wrapExists` flips
+ * to true and the renderer re-mounts the texture against the new PNG.
+ */
+export function useUploadShowroomWrap(carId: number | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      if (!carId) throw new Error('No carId — cannot upload wrap');
+      // Hand-roll the request: `api` helper always wraps the body in
+      // JSON which would double-encode the PNG bytes. Plain fetch +
+      // credentials:'include' carries the auth cookie, same surface
+      // as the JSON endpoints.
+      const buffer = await file.arrayBuffer();
+      const res = await fetch(`/api/vehicle/${carId}/showroom/wrap`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'image/png' },
+        body: buffer,
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        throw new Error(`Upload wrap failed: ${res.status} ${detail}`);
+      }
+      return (await res.json()) as {
+        success: boolean;
+        bytes: number;
+        updatedAt: string;
+      };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: showroomQueryKey(carId) });
+    },
+  });
+}
+
+/**
+ * Remove the custom body wrap PNG for a car. The rest of the
+ * showroom config (sliders, palette, etc.) is preserved — only the
+ * wrap column is nulled out server-side.
+ */
+export function useDeleteShowroomWrap(carId: number | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => {
+      if (!carId) return Promise.reject(new Error('No carId — cannot delete wrap'));
+      return api<{ success: boolean }>(
+        `/vehicle/${carId}/showroom/wrap`,
+        { method: 'DELETE' },
       );
     },
     onSuccess: () => {

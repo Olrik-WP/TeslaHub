@@ -30,7 +30,7 @@ import {
   VehicleModelContext,
   useActiveModel,
 } from './vehicleModelConfig';
-import { useResolvedModelConfig } from './useResolvedModelConfig';
+import { useResolvedModelConfig, wrapPngUrl } from './useResolvedModelConfig';
 import type { ShowroomOverrides } from './showroomOverrides';
 
 // Charging handle is universal across Tesla models — same physical part
@@ -51,6 +51,12 @@ export interface ShowroomDebugFlags {
 }
 const DEFAULT_DEBUG_FLAGS: ShowroomDebugFlags = { glass: false };
 const ShowroomDebugContext = createContext<ShowroomDebugFlags>(DEFAULT_DEBUG_FLAGS);
+// URL of the custom body wrap PNG to apply on top of the `Paint`
+// material (NOT `PaintRough`). `null` = no wrap, render solid paint
+// via `bodyPaintColor`. Resolved in the outer VehicleTopView3D from
+// the override blob + per-car upload existence flag, then consumed
+// by `PoppyseedModel` to load + apply the texture.
+const WrapUrlContext = createContext<string | null>(null);
 // Bright per-role colours; saturated enough to read clearly through
 // the HDR environment lighting even at low opacity.
 const GLASS_DEBUG_COLORS = {
@@ -1109,6 +1115,98 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
   //   as cable unlock when plugged in. See `VehicleCallouts` for the rebuilt
   //   Tesla Car Browser-style UI.
 
+  // ── Custom body wrap (PNG overlay) ────────────────────────────────
+  // Applies the active wrap URL (from WrapUrlContext) as the
+  // baseColorTexture of the `Paint` material — and ONLY `Paint`, not
+  // `PaintRough` (the latter covers low-sheen plastic-y body parts
+  // that look terrible wrapped; matches Tesla's own configurator).
+  //
+  // Restoration is deliberate: when the URL clears we re-color the
+  // material with `cfg.bodyPaintColor` so the GLB returns to its
+  // solid-paint look. Reusing `mat.color.setHex` rather than
+  // snapshotting the original `mat.color` keeps a single source of
+  // truth (cfg.bodyPaintColor) — the Showroom paint picker already
+  // writes there, so the swap is symmetric.
+  const wrapUrl = useContext(WrapUrlContext);
+  useEffect(() => {
+    const targets: THREE.MeshStandardMaterial[] = [];
+    cleanedScene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) {
+        const std = m as THREE.MeshStandardMaterial;
+        const matName = (std as { name?: string }).name ?? '';
+        // STRICT: exact match on `Paint` only. `PaintRough`, `Paint_Inner`
+        // and similar variants are skipped on purpose.
+        if (matName === 'Paint') targets.push(std);
+      }
+    });
+
+    if (targets.length === 0) return;
+
+    if (!wrapUrl) {
+      // No wrap → clear any previously-applied map and restore solid colour.
+      for (const mat of targets) {
+        if (mat.map) {
+          mat.map.dispose();
+          mat.map = null;
+        }
+        mat.color.setHex(cfg.bodyPaintColor);
+        mat.needsUpdate = true;
+      }
+      return;
+    }
+
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+    let cancelled = false;
+    let loadedTex: THREE.Texture | null = null;
+    loader.load(
+      wrapUrl,
+      (tex) => {
+        if (cancelled) {
+          tex.dispose();
+          return;
+        }
+        loadedTex = tex;
+        // glTF authoring convention: textures live in linear UV with
+        // origin at top-left, sRGB for baseColor. Tesla's templates
+        // follow the same convention so we match it here.
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.flipY = false;
+        for (const mat of targets) {
+          // Dispose any previously-loaded wrap on the same material
+          // to avoid leaking GPU memory between successive uploads.
+          if (mat.map && mat.map !== tex) mat.map.dispose();
+          mat.map = tex;
+          // Neutral white tint so the PNG colours render unmodified.
+          mat.color.setHex(0xffffff);
+          mat.needsUpdate = true;
+        }
+      },
+      undefined,
+      (err) => {
+        // eslint-disable-next-line no-console
+        console.warn(`[Wrap] failed to load ${wrapUrl}:`, err);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+      if (loadedTex) {
+        for (const mat of targets) {
+          if (mat.map === loadedTex) {
+            mat.map = null;
+            mat.color.setHex(cfg.bodyPaintColor);
+            mat.needsUpdate = true;
+          }
+        }
+        loadedTex.dispose();
+      }
+    };
+  }, [cleanedScene, wrapUrl, cfg.bodyPaintColor]);
+
   return (
     <>
       <primitive object={cleanedScene} />
@@ -1252,6 +1350,53 @@ function Loader() {
 // returns 404, crashing the whole viewer instead of just hiding the
 // wheels. We tie the state to the probed URL so a URL mismatch always
 // reads as null and the consumer unmounts safely until we know.
+/**
+ * Yellow banner that overlays the top of the viewer when the active
+ * model's GLB couldn't be loaded. Three cases handled:
+ *   1. VIN reads Model Y (char#4 === 'Y') but `bayberry_e41.glb`
+ *      404s → "Y détecté, GLB manquant" + tells the user where to
+ *      drop the file.
+ *   2. No VIN at all → "Aucun véhicule détecté"; we still render the
+ *      default M3 scene so the Showroom is usable for visual setup.
+ *   3. Generic "GLB indisponible" for any other model resolution
+ *      failure (rare — usually a typo in `cfg.modelUrl`).
+ *
+ * The banner sits ABOVE the Canvas (absolutely positioned at the
+ * top-left), so it doesn't interfere with OrbitControls drag or the
+ * floating callouts. It auto-hides when the probe succeeds.
+ */
+function ModelAvailabilityBanner({ vin }: { vin: string | null | undefined }) {
+  const cfg = useActiveModel();
+  const available = useAssetAvailable(cfg.modelUrl);
+
+  // Still probing or available — nothing to show.
+  if (available === null || available === true) return null;
+
+  const fileName = cfg.modelUrl.split('/').pop() ?? cfg.modelUrl;
+  const code = vin?.toUpperCase().charAt(3);
+  const isY = code === 'Y';
+
+  let message: string;
+  if (!vin) {
+    message =
+      `Aucun véhicule détecté — rendu avec le modèle par défaut (${fileName} indisponible).`;
+  } else if (isY) {
+    message =
+      `Model Y détecté (VIN …${vin.slice(-4)}) — le fichier ${fileName} ` +
+      `est introuvable. Dépose-le dans /public/models/ pour activer le rendu Y.`;
+  } else {
+    message =
+      `Modèle introuvable : ${fileName}. Vérifie qu'il est bien présent dans /public/models/.`;
+  }
+
+  return (
+    <div className="absolute top-2 left-2 right-2 z-10 px-3 py-2 bg-yellow-500/10 border border-yellow-500/40 rounded-md text-yellow-200 text-[11px] leading-snug">
+      <span className="font-semibold text-yellow-100">3D · </span>
+      {message}
+    </div>
+  );
+}
+
 function useAssetAvailable(url: string): boolean | null {
   const [state, setState] = useState<{ url: string; available: boolean } | null>(null);
   useEffect(() => {
@@ -1326,17 +1471,38 @@ export default function VehicleTopView3D({ vehicle, localOverrides, showroomMode
   // just a re-render. The hook also merges per-car overrides stored
   // server-side (Settings → Showroom), so the same model can be
   // hand-calibrated per car and the calibration follows it everywhere.
-  const { config: modelConfig } = useResolvedModelConfig(
-    vehicle.carId,
-    vehicle.vin,
-    localOverrides,
-  );
+  const {
+    config: modelConfig,
+    extras,
+    wrapExists,
+    updatedAt,
+  } = useResolvedModelConfig(vehicle.carId, vehicle.vin, localOverrides);
+
+  // Resolve the wrap PNG URL once at this layer so every descendant
+  // (PoppyseedModel inside the Canvas, future inspector panels, etc.)
+  // reads the same source via WrapUrlContext. Priority:
+  //   1. `wraps.paintTextureUrl` override (Tesla template preset or
+  //      remote test PNG) — wins for previews.
+  //   2. Server-uploaded wrap if `wrapExists` is true — keyed by the
+  //      config `updatedAt` so a freshly-uploaded PNG busts the
+  //      browser cache automatically.
+  //   3. null — render solid paint via `cfg.bodyPaintColor`.
+  const wrapOverride = extras.wraps?.paintTextureUrl;
+  const wrapUrl = useMemo<string | null>(() => {
+    if (wrapOverride) return wrapOverride;
+    if (wrapExists && vehicle.carId) {
+      return wrapPngUrl(vehicle.carId, updatedAt ?? undefined);
+    }
+    return null;
+  }, [wrapOverride, wrapExists, vehicle.carId, updatedAt]);
 
   return (
     <VehicleModelContext.Provider value={modelConfig}>
-      <ShowroomDebugContext.Provider value={debugMode ?? DEFAULT_DEBUG_FLAGS}>
-        <VehicleTopView3DInner vehicle={vehicle} showroomMode={!!showroomMode} />
-      </ShowroomDebugContext.Provider>
+      <WrapUrlContext.Provider value={wrapUrl}>
+        <ShowroomDebugContext.Provider value={debugMode ?? DEFAULT_DEBUG_FLAGS}>
+          <VehicleTopView3DInner vehicle={vehicle} showroomMode={!!showroomMode} />
+        </ShowroomDebugContext.Provider>
+      </WrapUrlContext.Provider>
     </VehicleModelContext.Provider>
   );
 }
@@ -1543,6 +1709,7 @@ function VehicleTopView3DInner({ vehicle, showroomMode }: Props) {
   return (
     <OpeningsProvider>
       <div className="relative w-full" style={{ height: 360 }}>
+        <ModelAvailabilityBanner vin={vehicle.vin} />
         <Canvas
           ref={canvasRef}
           camera={{ position: cfg.cameraPose.position, fov: cfg.cameraPose.fov }}

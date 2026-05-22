@@ -20,15 +20,34 @@
  *     "Tesla default" checkbox: ticking it removes the tint override
  *     so the GLB's native chrome shows through, untouched.
  */
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import type { ShowroomOverrides } from './showroomOverrides';
 import type { VehicleModelConfig } from './vehicleModelConfig';
 import { ShowroomSlider } from './ShowroomSlider';
+import {
+  useUploadShowroomWrap,
+  useDeleteShowroomWrap,
+  wrapPngUrl,
+} from './useResolvedModelConfig';
 
 interface Props {
   overrides: ShowroomOverrides;
   onChange: (next: ShowroomOverrides) => void;
   defaults: VehicleModelConfig;
+}
+
+interface WrapProps extends Props {
+  /** Car id used to upload / delete / fetch the per-car PNG. The
+   *  wrap is car-scoped on the backend so each vehicle can carry its
+   *  own livery without interfering with siblings on the same account. */
+  carId: number | undefined;
+  /** True when the backend has a wrap PNG persisted for this car
+   *  (sourced from `useResolvedModelConfig.wrapExists`). */
+  wrapExists: boolean;
+  /** Bust the browser cache for the wrap thumbnail after the user
+   *  uploads / deletes — passed as `?v=…` query string. Usually the
+   *  last `updatedAt` ISO timestamp. */
+  cacheKey: string | null;
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -253,6 +272,268 @@ function VariantAxesSection({ overrides, onChange, defaults }: Props) {
           </div>
         );
       })}
+    </SubSection>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// WRAP — custom PNG body livery (upload + Tesla template gallery)
+//
+// Tesla's own configurator lets the user upload a 1024×1024 PNG via
+// USB (Toybox → Paint Shop → Wraps) and applies it as the body
+// material's baseColorTexture. We mirror that workflow in the
+// Showroom: drag-and-drop a PNG (≤ 1 MB), it's POSTed to
+// `/vehicle/{carId}/showroom/wrap`, the backend stores it as a
+// bytea column, and the renderer fetches it back as a texture.
+//
+// When a wrap is active, the paint colour picker is hidden — wrap
+// and solid colour are mutually exclusive (mixing them would tint
+// the wrap colours unpredictably). The Tesla template gallery below
+// the upload zone exposes a few official wraps from
+// github.com/teslamotors/custom-wraps as one-click presets.
+// ────────────────────────────────────────────────────────────────────
+
+interface TeslaTemplate {
+  /** Public URL (under /public/wraps/). */
+  url: string;
+  /** Display name (Tesla's own template name). */
+  name: string;
+  /** Which model the template targets — used to filter the gallery
+   *  so the user doesn't see a Y template while configuring an M3. */
+  modelKey: 'poppyseed' | 'bayberry';
+}
+
+const TESLA_TEMPLATES: ReadonlyArray<TeslaTemplate> = [
+  // Wired in /public/wraps/* — see README of teslamotors/custom-wraps
+  // for the source PNGs.
+  { url: '/wraps/m3-classic.png',   name: 'M3 Classic',       modelKey: 'poppyseed' },
+  { url: '/wraps/m3-camo.png',      name: 'M3 Camo',          modelKey: 'poppyseed' },
+  { url: '/wraps/my-classic.png',   name: 'MY Classic',       modelKey: 'bayberry' },
+  { url: '/wraps/my-stripes.png',   name: 'MY Stripes',       modelKey: 'bayberry' },
+];
+
+function WrapSection({
+  overrides,
+  onChange,
+  defaults,
+  carId,
+  wrapExists,
+  cacheKey,
+}: WrapProps) {
+  const uploadMutation = useUploadShowroomWrap(carId);
+  const deleteMutation = useDeleteShowroomWrap(carId);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragHover, setDragHover] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // `paintTextureUrl` override wins over a server-uploaded wrap —
+  // used by the template gallery to preview a stock PNG without
+  // round-tripping through upload.
+  const templateUrl = overrides.wraps?.paintTextureUrl;
+  const hasWrap = !!templateUrl || (wrapExists && !!carId);
+  const wrapKind: 'template' | 'upload' | null = templateUrl
+    ? 'template'
+    : wrapExists && carId
+      ? 'upload'
+      : null;
+  // What URL to show in the preview thumbnail.
+  const previewUrl =
+    templateUrl ??
+    (wrapExists && carId ? wrapPngUrl(carId, cacheKey ?? undefined) : null);
+
+  const handleFiles = async (files: FileList | null) => {
+    setErrorMsg(null);
+    const file = files?.[0];
+    if (!file) return;
+    if (!file.type.includes('png') && !file.name.toLowerCase().endsWith('.png')) {
+      setErrorMsg('Format invalide — PNG uniquement.');
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setErrorMsg(`Fichier trop volumineux (${(file.size / 1024).toFixed(0)} KB > 1024 KB).`);
+      return;
+    }
+    if (!carId) {
+      setErrorMsg('Aucune voiture sélectionnée.');
+      return;
+    }
+    try {
+      await uploadMutation.mutateAsync(file);
+      // If a template URL was previewed, clear it so the new upload wins.
+      if (overrides.wraps?.paintTextureUrl) {
+        const { wraps: _, ...rest } = overrides;
+        void _;
+        onChange(rest);
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Upload échoué');
+    }
+  };
+
+  const handleSelectTemplate = (url: string) => {
+    setErrorMsg(null);
+    onChange({
+      ...overrides,
+      wraps: { ...(overrides.wraps ?? {}), paintTextureUrl: url },
+    });
+  };
+
+  const handleRemoveTemplate = () => {
+    const { wraps: _, ...rest } = overrides;
+    void _;
+    onChange(rest);
+  };
+
+  const handleRemoveUpload = async () => {
+    setErrorMsg(null);
+    if (!carId) return;
+    try {
+      await deleteMutation.mutateAsync();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Suppression échouée');
+    }
+  };
+
+  const activeModelKey = (defaults.key as 'poppyseed' | 'bayberry') ?? 'poppyseed';
+  const templatesForModel = TESLA_TEMPLATES.filter((t) => t.modelKey === activeModelKey);
+
+  return (
+    <SubSection
+      title="Wrap (livrée custom)"
+      defaultOpen={hasWrap}
+      rightSlot={
+        hasWrap ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (wrapKind === 'template') {
+                handleRemoveTemplate();
+              } else {
+                void handleRemoveUpload();
+              }
+            }}
+            className="text-[10px] text-[#6b7280] hover:text-red-400"
+          >
+            ↺ Retirer
+          </button>
+        ) : null
+      }
+    >
+      <p className="text-[10px] text-[#6b7280] -mt-1">
+        Remplace la peinture par une image PNG appliquée sur la
+        carrosserie (matériau Paint uniquement — pas les parties
+        mates). Format Tesla : 1024×1024 max, 1 MB max.
+      </p>
+
+      {/* Preview thumbnail when a wrap is active */}
+      {previewUrl && (
+        <div className="flex items-center gap-2 p-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded-md">
+          <img
+            src={previewUrl}
+            alt="Wrap"
+            className="w-14 h-14 rounded object-cover border border-[#2a2a2a]"
+            style={{ background: '#181818' }}
+          />
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-white truncate">
+              {wrapKind === 'template' ? 'Template Tesla' : 'PNG uploadé'}
+            </p>
+            <p className="text-[10px] text-[#6b7280] truncate">
+              {wrapKind === 'template'
+                ? previewUrl.split('/').pop()
+                : 'Désactive le picker couleur peinture.'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Drag & drop upload zone — always visible so the user can
+          replace the current wrap by dropping a new PNG. */}
+      {carId ? (
+        <label
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragHover(true);
+          }}
+          onDragLeave={() => setDragHover(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragHover(false);
+            void handleFiles(e.dataTransfer.files);
+          }}
+          className={
+            'flex flex-col items-center justify-center gap-1 p-3 rounded-md border-2 border-dashed cursor-pointer transition-colors ' +
+            (dragHover
+              ? 'border-[#e31937] bg-[#e31937]/5'
+              : 'border-[#2a2a2a] hover:border-[#3a3a3a] bg-[#0a0a0a]')
+          }
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png"
+            className="hidden"
+            onChange={(e) => void handleFiles(e.target.files)}
+          />
+          <p className="text-[11px] text-[#d4d4d4]">
+            {uploadMutation.isPending
+              ? 'Envoi en cours…'
+              : wrapExists
+                ? 'Glisse un nouveau PNG pour remplacer'
+                : 'Glisse un PNG ici ou clique pour parcourir'}
+          </p>
+          <p className="text-[10px] text-[#6b7280]">PNG · max 1 MB · 1024×1024 recommandé</p>
+        </label>
+      ) : (
+        <p className="text-[10px] text-[#6b7280] italic">
+          Sélectionne une voiture pour uploader un wrap.
+        </p>
+      )}
+
+      {errorMsg && (
+        <p className="text-[10px] text-red-400 px-1">⚠ {errorMsg}</p>
+      )}
+
+      {/* Tesla official templates — one-click presets */}
+      {templatesForModel.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[10px] uppercase tracking-wider text-[#6b7280]">
+            Templates Tesla officiels
+          </p>
+          <div className="grid grid-cols-4 gap-1">
+            {templatesForModel.map((tpl) => {
+              const active = templateUrl === tpl.url;
+              return (
+                <button
+                  key={tpl.url}
+                  type="button"
+                  onClick={() => handleSelectTemplate(tpl.url)}
+                  title={tpl.name}
+                  className={
+                    'aspect-square rounded transition-all overflow-hidden ' +
+                    (active
+                      ? 'ring-2 ring-[#e31937] ring-offset-1 ring-offset-[#141414]'
+                      : 'hover:ring-1 hover:ring-white')
+                  }
+                  style={{ backgroundColor: '#181818' }}
+                >
+                  <img
+                    src={tpl.url}
+                    alt={tpl.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Hide the broken image silently — the template
+                      // PNG hasn't been bundled in /public/wraps/ yet.
+                      (e.currentTarget as HTMLImageElement).style.opacity = '0.3';
+                    }}
+                  />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </SubSection>
   );
 }
@@ -514,18 +795,51 @@ function WheelsSection({ overrides, onChange, defaults }: Props) {
 // Aggregator
 // ────────────────────────────────────────────────────────────────────
 
-export function ShowroomAestheticsSection({ overrides, onChange, defaults }: Props) {
+interface AestheticsProps extends Props {
+  /** Car id — required for wrap upload/delete (per-car PNG endpoint). */
+  carId: number | undefined;
+  /** True when the backend has a wrap PNG persisted for this car. */
+  wrapExists: boolean;
+  /** Cache bust for the wrap thumbnail after upload — pass last
+   *  `updatedAt` ISO string. */
+  cacheKey: string | null;
+}
+
+export function ShowroomAestheticsSection({
+  overrides,
+  onChange,
+  defaults,
+  carId,
+  wrapExists,
+  cacheKey,
+}: AestheticsProps) {
+  // Wrap and solid paint are mutually exclusive. When a wrap is active
+  // (template OR uploaded), hide the paint colour picker — its picker
+  // would be visually meaningless (the wrap overrides the colour).
+  const wrapActive =
+    !!overrides.wraps?.paintTextureUrl || (wrapExists && !!carId);
+
   return (
     <section className="space-y-3">
       <h3 className="text-xs uppercase tracking-wider text-[#9ca3af] font-medium">
         Esthétique
       </h3>
       <p className="text-[10px] text-[#6b7280] -mt-2">
-        Configuration (trim, conduite, marché, audio), peinture,
+        Configuration (trim, conduite, marché, audio), wrap / peinture,
         intérieur, finition des jantes. Sauvegardé par voiture.
       </p>
       <VariantAxesSection overrides={overrides} onChange={onChange} defaults={defaults} />
-      <PaintSection overrides={overrides} onChange={onChange} defaults={defaults} />
+      <WrapSection
+        overrides={overrides}
+        onChange={onChange}
+        defaults={defaults}
+        carId={carId}
+        wrapExists={wrapExists}
+        cacheKey={cacheKey}
+      />
+      {!wrapActive && (
+        <PaintSection overrides={overrides} onChange={onChange} defaults={defaults} />
+      )}
       <InteriorSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <WheelsSection overrides={overrides} onChange={onChange} defaults={defaults} />
     </section>

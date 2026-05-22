@@ -47,6 +47,7 @@ export function ShowroomGeometrySection({ overrides, onChange, defaults }: Props
       <WheelsSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <ChargePortSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <CableSection overrides={overrides} onChange={onChange} defaults={defaults} />
+      <SentryCamerasSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <CameraSection overrides={overrides} onChange={onChange} defaults={defaults} />
     </section>
   );
@@ -384,6 +385,146 @@ function CableSection({ overrides, onChange, defaults }: Props) {
         X négatif = derrière la voiture. Z négatif = à gauche. Y = 0 (sol).
         Typiquement -3 à -4m derrière + 1 à 2m sur le côté.
       </p>
+    </SubSection>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// CAMÉRAS SENTRY — XYZ per camera (7 cameras on M3 Highland / Y Juniper)
+//
+// Tesla's Sentinel mode lights up small red pulsing markers at the
+// approximate world position of each surveillance camera. The defaults
+// in `vehicleModelConfig` are eye-calibrated against the real car —
+// good but not pixel-perfect, hence the per-camera Showroom override.
+//
+// Storage: the FULL array is replaced when ANY camera is touched. We
+// reconstruct the array by overlaying the override on top of the
+// defaults at the same index so a single-camera tweak doesn't blow
+// away the other six. When every camera matches its default after a
+// reset, the override is dropped entirely to keep the saved blob
+// minimal.
+// ────────────────────────────────────────────────────────────────────
+
+const SENTRY_CAMERA_LABELS: ReadonlyArray<string> = [
+  'Rétroviseur intérieur (haut pare-brise)',
+  'Pare-chocs avant centre',
+  'Aile avant gauche',
+  'Aile avant droite',
+  'Pied milieu (B-pillar) gauche',
+  'Pied milieu (B-pillar) droit',
+  'Hayon (au-dessus plaque)',
+];
+
+function SentryCamerasSection({ overrides, onChange, defaults }: Props) {
+  const defaultsCams = defaults.sentryCameraPositions as ReadonlyArray<
+    [number, number, number]
+  >;
+  if (!defaultsCams || defaultsCams.length === 0) return null;
+
+  const overrideCams = overrides.sentryCameraPositions;
+  // Reconstruct the active list slot-by-slot — overrideCams may have
+  // fewer entries than defaults (e.g. saved blob predates a camera
+  // being added to the model config); we fall back to the default at
+  // each index that the override doesn't cover.
+  const current: Array<[number, number, number]> = defaultsCams.map((d, i) => {
+    const ov = overrideCams?.[i];
+    return ov ? [ov[0], ov[1], ov[2]] : [d[0], d[1], d[2]];
+  });
+
+  const eq = (a: [number, number, number], b: readonly [number, number, number]) =>
+    Math.abs(a[0] - b[0]) < 1e-6 &&
+    Math.abs(a[1] - b[1]) < 1e-6 &&
+    Math.abs(a[2] - b[2]) < 1e-6;
+
+  const commitNext = (next: Array<[number, number, number]>) => {
+    const allDefault = next.every((c, i) => eq(c, defaultsCams[i]));
+    if (allDefault) {
+      const { sentryCameraPositions: _, ...rest } = overrides;
+      void _;
+      onChange(rest);
+    } else {
+      onChange({ ...overrides, sentryCameraPositions: next });
+    }
+  };
+
+  const setCamera = (idx: number, v: [number, number, number]) => {
+    const next = current.map((c, i) => (i === idx ? v : c));
+    commitNext(next);
+  };
+
+  const resetCamera = (idx: number) => {
+    const next = current.map((c, i) =>
+      i === idx ? ([...defaultsCams[idx]] as [number, number, number]) : c,
+    );
+    commitNext(next);
+  };
+
+  const resetAll = () => {
+    const { sentryCameraPositions: _, ...rest } = overrides;
+    void _;
+    onChange(rest);
+  };
+
+  const overridden = !!overrideCams;
+
+  return (
+    <SubSection
+      title={`Caméras Sentry (${defaultsCams.length})`}
+      rightSlot={
+        overridden ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              resetAll();
+            }}
+            className="text-[10px] text-[#6b7280] hover:text-white"
+          >
+            ↺ Reset
+          </button>
+        ) : null
+      }
+    >
+      <p className="text-[10px] text-[#6b7280] -mt-1">
+        Les points rouges pulsants qui apparaissent quand la Sentinelle
+        est activée. Active le toggle « Sentinelle » dans la section
+        Visuels pour les voir pendant le calage.
+      </p>
+      {defaultsCams.map((def, idx) => {
+        const isOverridden = !eq(current[idx], def);
+        return (
+          <div
+            key={idx}
+            className="border border-[#1a1a1a] rounded-md p-2 space-y-1"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] uppercase tracking-wider text-[#9ca3af] font-mono truncate">
+                {idx + 1}. {SENTRY_CAMERA_LABELS[idx] ?? `Caméra ${idx + 1}`}
+              </p>
+              {isOverridden && (
+                <button
+                  type="button"
+                  onClick={() => resetCamera(idx)}
+                  title="Réinitialiser cette caméra"
+                  className="text-[10px] text-[#6b7280] hover:text-white shrink-0"
+                >
+                  ↺
+                </button>
+              )}
+            </div>
+            <ShowroomVec3Slider
+              label=""
+              value={current[idx]}
+              onChange={(v) => setCamera(idx, v)}
+              defaultValue={def as [number, number, number]}
+              min={-3}
+              max={3}
+              step={0.01}
+              unit="m"
+            />
+          </div>
+        );
+      })}
     </SubSection>
   );
 }

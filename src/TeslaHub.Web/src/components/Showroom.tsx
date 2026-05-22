@@ -66,14 +66,39 @@ interface Props {
   carId: number | undefined;
 }
 
-/** Shallow JSON equality — good enough to detect dirty state on the
- *  small override blob (no functions, no Map/Set, no Date). Used to
- *  enable/disable the Save button and trigger the leave-warning. */
+/** Deterministic JSON stringify — sorts object keys recursively so
+ *  two structurally-equivalent objects always serialise to the SAME
+ *  string regardless of insertion order. Critical for the dirty
+ *  check: the React-state copy keeps insertion order, but Postgres
+ *  `jsonb` (the backend storage) re-orders keys alphabetically on
+ *  the round-trip. A naive `JSON.stringify` then reports the just-
+ *  saved blob as still dirty and the yellow "Modifications non
+ *  sauvegardées" badge would never disappear. */
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return '[' + value.map((v) => stableStringify(v)).join(',') + ']';
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  return (
+    '{' +
+    keys
+      .map((k) => JSON.stringify(k) + ':' + stableStringify(obj[k]))
+      .join(',') +
+    '}'
+  );
+}
+
+/** Structural equality on the override blob — order-insensitive,
+ *  good enough for the small JSON we manipulate (no functions, no
+ *  Map/Set, no Date). Used to enable/disable Save and to clear the
+ *  unsaved-changes warning. */
 function isOverrideEqual(
   a: ShowroomOverrides | null | undefined,
   b: ShowroomOverrides | null | undefined,
 ): boolean {
-  return JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
+  return stableStringify(a ?? {}) === stableStringify(b ?? {});
 }
 
 export default function Showroom({ carId }: Props) {
@@ -92,10 +117,12 @@ export default function Showroom({ carId }: Props) {
   // Fetch the persisted override blob. We use the same hook the
   // viewer uses so they share the React Query cache (single network
   // request even though both consume the data).
-  const { savedOverrides, isLoading: cfgLoading } = useResolvedModelConfig(
-    carId,
-    vehicle?.vin ?? null,
-  );
+  const {
+    savedOverrides,
+    wrapExists,
+    updatedAt: configUpdatedAt,
+    isLoading: cfgLoading,
+  } = useResolvedModelConfig(carId, vehicle?.vin ?? null);
 
   // In-flight edits — starts at the saved blob, updated as the user
   // tweaks sliders. Reset to saved on Discard / when carId changes.
@@ -411,6 +438,9 @@ export default function Showroom({ carId }: Props) {
             overrides={editedOverrides}
             onChange={setEditedOverrides}
             defaults={defaults}
+            carId={carId}
+            wrapExists={wrapExists}
+            cacheKey={configUpdatedAt}
           />
 
           <div className="h-px bg-[#1a1a1a]" />

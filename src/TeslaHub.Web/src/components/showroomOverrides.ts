@@ -171,10 +171,14 @@ export interface ShowroomOverrides {
   // Legacy glass fine-tuning (still in transit toward `glassFinish`).
   glass?: GlassOverrides;
 
-  // Phase 5+: custom wraps (per-paint PNG overlay). Reserved.
+  // Custom wraps (per-paint PNG overlay).
   wraps?: {
-    /** URL of a PNG that gets applied as baseColorTexture on every
-     *  body paint material. Disabled until the wrap pipeline ships. */
+    /** Override the wrap source URL. When set, takes precedence over
+     *  the user-uploaded wrap. Used by the Showroom "Templates Tesla"
+     *  preset grid to preview one of the bundled wraps under
+     *  `/public/wraps/` without uploading it first. When unset AND a
+     *  user wrap exists on the server, the renderer falls back to
+     *  `/api/vehicle/{carId}/showroom/wrap`. */
     paintTextureUrl?: string;
   };
 }

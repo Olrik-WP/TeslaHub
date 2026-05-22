@@ -155,9 +155,11 @@ export function ShowroomVec3Slider({
 }: Vec3SliderProps) {
   return (
     <div className="space-y-1.5">
-      <p className="text-[10px] uppercase tracking-wider text-[#6b7280]">
-        {label}
-      </p>
+      {label !== '' && (
+        <p className="text-[10px] uppercase tracking-wider text-[#6b7280]">
+          {label}
+        </p>
+      )}
       <ShowroomSlider
         label="X"
         value={value[0]}
