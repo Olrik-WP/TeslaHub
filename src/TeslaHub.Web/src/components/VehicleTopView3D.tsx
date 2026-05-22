@@ -1220,11 +1220,20 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     // Pre-multiplying onto white sidesteps the issue entirely and
     // makes the body read as solid white where the wrap is empty,
     // matching Tesla's in-car configurator behaviour.
+    // eslint-disable-next-line no-console
+    console.log(`[Wrap] Starting image load (${targets.length} target Paint mat(s))…`);
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    // Don't set crossOrigin for data URLs (same-origin by definition);
+    // setting it can occasionally confuse some browsers' caching layer.
+    if (!wrapUrl.startsWith('data:')) img.crossOrigin = 'anonymous';
     let cancelled = false;
     let loadedTex: THREE.Texture | null = null;
     img.onload = () => {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[Wrap] ✅ Image loaded: ${img.naturalWidth}×${img.naturalHeight} ` +
+        `(cancelled=${cancelled}, targets=${targets.length})`,
+      );
       if (cancelled) return;
       const w = img.naturalWidth || img.width;
       const h = img.naturalHeight || img.height;
@@ -1251,17 +1260,24 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       tex.needsUpdate = true;
       loadedTex = tex;
 
+      let applied = 0;
       for (const mat of targets) {
         if (mat.map && mat.map !== tex) mat.map.dispose();
         mat.map = tex;
         // Neutral white tint so the PNG colours render unmodified.
         mat.color.setHex(0xffffff);
         mat.needsUpdate = true;
+        applied++;
       }
+      // eslint-disable-next-line no-console
+      console.log(
+        `[Wrap] ✅ Texture applied to ${applied} Paint material(s) — ` +
+        `should be visible on next frame.`,
+      );
     };
     img.onerror = (err) => {
       // eslint-disable-next-line no-console
-      console.warn(`[Wrap] failed to load ${wrapUrl}:`, err);
+      console.warn(`[Wrap] ❌ Image load failed for ${wrapUrl.slice(0, 80)}:`, err);
     };
     img.src = wrapUrl;
 
