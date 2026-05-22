@@ -698,6 +698,24 @@ export const PoppyseedConfig: VehicleModelConfig = {
       // pick Propulsion (D50 — Highland 2026) or Performance per car.
       defaultOption: 'longRange',
       options: [
+        // NOTE on the seat geometry — Tesla packs each front seat as
+        //   two physical meshes:
+        //     - Seat_Bottom_LF / Seat_Bottom_RF (mesh#11, SHARED) —
+        //       the structural shell (plastic + alu + black fabric)
+        //     - Seat_Top_LF   / Seat_Top_RF    (mesh#13/#16) —
+        //       the back-rest shell (Long Range / D50 silhouette)
+        //   and one COLOUR overlay mesh per trim that sits on top:
+        //     - Seat_Top_*_Color           → fabric colour cushion
+        //     - Seat_Bottom_*_Color        → fabric colour cushion
+        //     - Seat_Top_Perf_*_Color etc. → Perf-specific fabric
+        //     - Seat_Bottom_D50_*          → D50 all-in-one cushion
+        //
+        //   Consequence: `Seat_Bottom_LF/RF` (the shell) must STAY
+        //   visible on every trim, otherwise the seat looks like it
+        //   has no base. Performance has its OWN top shell
+        //   (`Seat_Top_Perf_*`, sport bucket with wings) so the
+        //   standard `Seat_Top_*` shell must hide when Perf is
+        //   active. All these constraints are reflected below.
         {
           id: 'longRange',
           label: 'Long Range (RWD / AWD)',
@@ -709,13 +727,12 @@ export const PoppyseedConfig: VehicleModelConfig = {
             'Reverse_Light',
             // Interior — classic Center Console (no D50 alu accents)
             'Center_Console',
-            // Seats — physical mesh + colour overlay
+            // Seat-top shell (standard back-rest, also reused by D50)
             'Seat_Top_LF',
             'Seat_Top_RF',
+            // Seat colour overlays (LR fabric)
             'Seat_Top_LF_Color',
             'Seat_Top_RF_Color',
-            'Seat_Bottom_LF',
-            'Seat_Bottom_RF',
             'Seat_Bottom_LF_Color',
             'Seat_Bottom_RF_Color',
           ],
@@ -735,12 +752,13 @@ export const PoppyseedConfig: VehicleModelConfig = {
             'Fascia_Cam_D50',
             // Interior — D50-specific aluminium-dark Center Console
             'Center_Console_D50',
-            // Seats — D50 has its OWN seat bottom mesh (lighter
-            // bucket, no _Color overlay). Top stays shared with LR.
+            // Seat-top shell (shared with LR — standard back-rest)
             'Seat_Top_LF',
             'Seat_Top_RF',
+            // Top colour overlay (D50 reuses LR fabric on the back-rest)
             'Seat_Top_LF_Color',
             'Seat_Top_RF_Color',
+            // D50-specific bottom cushion (all-in-one, no _Color split)
             'Seat_Bottom_D50_LF',
             'Seat_Bottom_D50_RF',
           ],
@@ -757,15 +775,12 @@ export const PoppyseedConfig: VehicleModelConfig = {
             // Interior — Perf reuses the Long Range Center Console
             // (no D50 alu accents on Performance either).
             'Center_Console',
-            // Seats — Perf has its OWN sport top (with wings) and
-            // Perf-specific colour overlay. Bottom shares the
-            // Long Range physical mesh + Perf colour overlay.
+            // Sport back-rest shell (with wings — replaces Seat_Top_*)
             'Seat_Top_Perf_LF',
             'Seat_Top_Perf_RF',
+            // Perf-specific fabric overlays (top + bottom)
             'Seat_Top_Perf_LF_Color',
             'Seat_Top_Perf_RF_Color',
-            'Seat_Bottom_LF',
-            'Seat_Bottom_RF',
             'Seat_Bottom_Perf_LF_Color',
             'Seat_Bottom_Perf_RF_Color',
           ],
