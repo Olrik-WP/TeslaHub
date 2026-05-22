@@ -34,7 +34,6 @@
 import {
   PoppyseedConfig,
   VEHICLE_MODELS,
-  type ProjectionConfig,
   type VehicleModelConfig,
   type VehicleModelKey,
   type WheelFallbackPosition,
@@ -94,27 +93,6 @@ export interface GlassOverrides {
    *  reflection that otherwise looks like a chrome mirror. Default
    *  0.25 on Y, ~1.0 on M3. */
   envMapIntensity?: number;
-}
-
-/**
- * Per-projection tweaks (headlight / brake-light fan on the ground).
- * The texture URL lets the user swap the Tesla beam for a custom PNG;
- * color/opacity adjust the rendered hue and intensity; renderOrder is
- * the magic z-fight knob (positive = draw on top of everything).
- *
- * All optional; undefined = use in-code default.
- */
-export interface ProjectionOverride {
-  /** Public URL of the PNG used as the beam texture. The PNG should
-   *  carry the cone shape in its alpha channel (Tesla's own format). */
-  textureUrl?: string;
-  /** Hex RGB of the tint (warm white = 0xfff5e8, red = 0xff1a1a). */
-  color?: number;
-  /** 0..1, multiplies the alpha. */
-  opacity?: number;
-  /** Three.js renderOrder. Positive draws on top of opaques + studio
-   *  shadow; negative draws below. */
-  renderOrder?: number;
 }
 
 /**
@@ -180,14 +158,8 @@ export interface ShowroomOverrides {
    *  `cfg.glassFinish`. */
   glassFinish?: Partial<VehicleModelConfig['glassFinish']>;
 
-  // Glass / projections — currently magic numbers in VehicleTopView3D.tsx.
-  // Wired through cfg in Phase 3 (DRY refactor); the fields are
-  // pre-declared here so the JSON schema is stable.
+  // Legacy glass fine-tuning (still in transit toward `glassFinish`).
   glass?: GlassOverrides;
-  projections?: {
-    headlight?: ProjectionOverride;
-    stoplight?: ProjectionOverride;
-  };
 
   // Phase 5+: custom wraps (per-paint PNG overlay). Reserved.
   wraps?: {
@@ -247,10 +219,10 @@ function mergeWheelPositions(
  *   - Object with sub-fields     : SHALLOW MERGE (sub-field-by-sub-field).
  *   - wheelFallbackPositions     : per-corner merge (see helper above).
  *
- * Fields that don't exist on `VehicleModelConfig` yet (glass,
- * projections, wraps) are PASSED THROUGH on the result object so
- * downstream consumers can read them via a type cast — until the
- * Phase 3 refactor brings them into `VehicleModelConfig` proper.
+ * Fields that don't exist on `VehicleModelConfig` yet (glass, wraps)
+ * are PASSED THROUGH on the result object so downstream consumers can
+ * read them via a type cast — until the Phase 3 refactor brings them
+ * into `VehicleModelConfig` proper.
  */
 export function mergeShowroomConfig(
   defaults: VehicleModelConfig,
@@ -314,37 +286,6 @@ export function mergeShowroomConfig(
     glassFinish: overrides.glassFinish
       ? { ...defaults.glassFinish, ...overrides.glassFinish }
       : defaults.glassFinish,
-
-    // Ground projections — per-beam shallow merge. Each beam's
-    // sub-fields (textureUrl, color, opacity, renderOrder) are merged
-    // independently so the user can tune ONLY the headlight while
-    // keeping the stoplight stock.
-    projections: {
-      headlight: mergeProjection(
-        defaults.projections.headlight,
-        overrides.projections?.headlight,
-      ),
-      stoplight: mergeProjection(
-        defaults.projections.stoplight,
-        overrides.projections?.stoplight,
-      ),
-    },
-  };
-}
-
-/** Per-beam projection merge. Treats `textureUrl: ''` as "use default"
- *  so the user can clear a custom URL via the UI without re-saving
- *  the whole config blob. */
-function mergeProjection(
-  def: ProjectionConfig,
-  ov: Partial<ProjectionConfig> | undefined,
-): ProjectionConfig {
-  if (!ov) return def;
-  return {
-    textureUrl: ov.textureUrl && ov.textureUrl.length > 0 ? ov.textureUrl : def.textureUrl,
-    color: ov.color ?? def.color,
-    opacity: ov.opacity ?? def.opacity,
-    renderOrder: ov.renderOrder ?? def.renderOrder,
   };
 }
 
@@ -365,17 +306,14 @@ export function resolveModelConfig(
 
 /**
  * The Showroom often needs the "extended" config that includes glass
- * and projection tweaks (not yet on `VehicleModelConfig` — they're
- * being migrated in Phase 3). This helper returns the merged config
- * PLUS the raw glass/projection overrides so the viewer can read them
- * during the transition. Once the Phase 3 refactor lands, these
- * extras will be regular fields on `VehicleModelConfig` and this
- * helper can be removed.
+ * tweaks (not yet on `VehicleModelConfig` — being migrated in Phase 3)
+ * and reserved future fields (wraps). This helper returns the merged
+ * config PLUS the raw overrides so the viewer can read them during the
+ * transition.
  */
 export interface ResolvedModelExtras {
   config: VehicleModelConfig;
   glass: GlassOverrides | undefined;
-  projections: ShowroomOverrides['projections'] | undefined;
   wraps: ShowroomOverrides['wraps'] | undefined;
 }
 
@@ -386,7 +324,6 @@ export function resolveModelExtras(
   return {
     config: resolveModelConfig(vin, overrides),
     glass: overrides?.glass,
-    projections: overrides?.projections,
     wraps: overrides?.wraps,
   };
 }

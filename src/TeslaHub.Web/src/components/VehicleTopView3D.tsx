@@ -61,141 +61,15 @@ const GLASS_DEBUG_COLORS = {
   nomatPrivacy:  { color: 0xff00ff, opacity: 0.55 }, // violet
 } as const;
 
-// ---- Ground-projection fallback ------------------------------------------
+// ---- Ground projections ---------------------------------------------------
 // The Tesla mobile app draws two textured quads under the car as ambient
-// light overlays: `Headlights_Projection*` (warm fan in front) and
-// `Stoplights_Projection*` / `BrakeLightProjection*` (red glow behind).
-// Tesla bakes a radial-gradient base/alpha texture into each quad so the
-// edges fade off smoothly into the ground.
-//
-// PROBLEM: the Poppyseed (Model 3 Highland) GLB we extract from the APK
-// has been re-exported through Godot's gltf-transform pipeline WITHOUT
-// any textures — every material's baseColor is a flat colour and `baseTex`
-// is missing on all 62 materials. Bayberry (Model Y) survived with its
-// projection textures intact, so it renders the soft beam correctly; the
-// M3 quad ends up as a solid grey/white rectangle whenever
-// useGroundProjections toggles it visible (shiftState=D/R or during the
-// lock-flash chirp).
-//
-// FIX: load the authentic Tesla projection textures (extracted once from
-// Bayberry's GLB via Tesla-Godot-Test/extract-texture.mjs) and apply them
-// as `mat.map` on every projection material that lacks a baked texture.
-// Tesla shipped the Poppyseed (M3) GLB without textures on the projection
-// quads — they only have a flat baseColor — so without this fallback the
-// quads render as solid grey/white rectangles. Bayberry (Y) keeps its own
-// baked baseColorTexture so this code path is a no-op there. Textures are
-// PNG RGBA where the cone shape lives in the alpha channel; assigning as
-// `map` + `transparent: true` lets the alpha cut the rectangle and gives
-// the same shape the Y already shows. Both textures share a single loader
-// instance and are cached at module level so they download once per page.
-const beamTextureLoader = new THREE.TextureLoader();
-const beamTextureCache = new Map<string, THREE.Texture>();
-
-const DEFAULT_HEADLIGHT_BEAM_URL = '/textures/headlight_beam.png';
-const DEFAULT_STOPLIGHT_BEAM_URL = '/textures/stoplight_beam.png';
-
-/** Snapshot stored on the projection MESH (not the material — we may
- *  swap the material to MeshBasicMaterial for unlit PNG beams). */
-type ProjectionSnap = {
-  originalMat: THREE.Material;
-  hasBaked: boolean;
-  baseMap: THREE.Texture;
-  baseColor: number;
-  baseOpacity: number;
-  baseTransparent: boolean;
-  baseDepthWrite: boolean;
-};
-
-type MeshWithProjSnap = THREE.Mesh & { __teslahub_proj_snap?: ProjectionSnap };
-
-/** Fire `cb` once the texture image is decoded (handles async PNG load). */
-function whenTextureReady(tex: THREE.Texture, cb: () => void): void {
-  const img = tex.image as HTMLImageElement | undefined;
-  if (img && 'complete' in img && img.complete && img.naturalWidth > 0) {
-    cb();
-    return;
-  }
-  if (img && 'addEventListener' in img) {
-    img.addEventListener('load', () => cb(), { once: true });
-    img.addEventListener('error', () => cb(), { once: true });
-    return;
-  }
-  requestAnimationFrame(cb);
-}
-
-/**
- * Returns a `THREE.Texture` for the requested beam URL — cached so we
- * don't re-fetch the same PNG when the Showroom user toggles between
- * the default and a custom URL. When `url` is undefined we fall back
- * to the built-in Tesla beam (extracted from Bayberry, see
- * /textures/*.png). Custom URLs can point to any HTTPS image hosted
- * by the Caddy reverse-proxy or the user's own asset CDN.
- */
-function getBeamTexture(
-  role: 'headlight' | 'stoplight',
-  url: string | undefined,
-  onLoad?: (tex: THREE.Texture) => void,
-): THREE.Texture {
-  const finalUrl =
-    url ?? (role === 'headlight' ? DEFAULT_HEADLIGHT_BEAM_URL : DEFAULT_STOPLIGHT_BEAM_URL);
-  const cached = beamTextureCache.get(finalUrl);
-  if (cached) {
-    if (onLoad) whenTextureReady(cached, () => onLoad(cached));
-    return cached;
-  }
-  const tex = beamTextureLoader.load(
-    finalUrl,
-    (loaded) => {
-      loaded.colorSpace = THREE.SRGBColorSpace;
-      onLoad?.(loaded);
-    },
-    undefined,
-    (err) => {
-      // eslint-disable-next-line no-console
-      console.error('[BeamTexture] load failed:', finalUrl, err);
-    },
-  );
-  tex.colorSpace = THREE.SRGBColorSpace;
-  beamTextureCache.set(finalUrl, tex);
-  return tex;
-}
-
-/** Unlit projection quad — same pattern as the floor shadow fix. The
- *  Tesla beam PNG stores the cone shape in the ALPHA channel; wiring
- *  it as both `map` and `alphaMap` on a MeshBasicMaterial reproduces
- *  the cut-out fan without PBR lighting washing it to black on the M3. */
-function applyUnlitProjectionMaterial(
-  mesh: THREE.Mesh,
-  tex: THREE.Texture,
-  color: number,
-  opacity: number,
-): THREE.MeshBasicMaterial {
-  const cur = mesh.material as THREE.MeshBasicMaterial;
-  let basic: THREE.MeshBasicMaterial;
-  if (cur instanceof THREE.MeshBasicMaterial && (cur as unknown as { __th_proj?: boolean }).__th_proj) {
-    basic = cur;
-  } else {
-    basic = new THREE.MeshBasicMaterial({
-      transparent: true,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-    (basic as unknown as { __th_proj?: boolean }).__th_proj = true;
-    mesh.material = basic;
-  }
-  tex.colorSpace = THREE.SRGBColorSpace;
-  basic.map = tex;
-  basic.alphaMap = tex;
-  basic.color.setHex(color);
-  basic.opacity = opacity;
-  basic.transparent = true;
-  basic.depthWrite = false;
-  basic.needsUpdate = true;
-  whenTextureReady(tex, () => {
-    basic.needsUpdate = true;
-  });
-  return basic;
-}
+// light overlays: `Headlights_Projection*` in front, `Stoplights_*` /
+// `BrakeLightProjection*` behind. Each model's GLB now ships with the
+// proper baked baseColorTexture on those meshes (the Model 3 projections
+// were rebaked from the Bayberry materials in Godot — see
+// docs/3d-viewer-spec.md). The runtime no longer touches the projection
+// materials; visibility is toggled by `useGroundProjections` in
+// VehicleLightEffects based on shift state (D/R).
 
 // ---- Wheel polish ---------------------------------------------------------
 // The D50 base wheel set on the Highland is actually a BLACK PLASTIC
@@ -607,107 +481,24 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           continue;
         }
 
-        // Ground projection fallback — Tesla's Poppyseed (M3) GLB was
-        // exported without textures, so the projection quads
-        // (`Headlights_Projections`, `Stoplights_Projections`) render as
-        // a flat grey/white rectangle whenever useGroundProjections
-        // toggles them visible. Bayberry kept its baked projection
-        // texture (`baseTex=#9`) so it doesn't need this fallback. We
-        // detect the case by checking that the mesh sits under a
-        // configured projection node AND that the material lacks a
-        // baked diffuse map, then graft on the authentic Tesla texture
-        // we extracted from Bayberry (headlight_beam.png /
-        // stoplight_beam.png live under /public/textures/). The PNGs
-        // are RGBA where the beam cone lives in the alpha channel, so
-        // assigning as `map` + `transparent` lets the alpha cut the
-        // rectangle and reproduces the same shape the Y already renders
-        // — no procedural approximation needed.
-        const projectionRole: 'headlight' | 'stoplight' | null = (() => {
-          const headName = cfg.groundProjectionNodes.headlights;
-          const stopName = cfg.groundProjectionNodes.stoplights;
-          let c: THREE.Object3D | null = mesh;
-          while (c) {
-            if (c.name === headName) return 'headlight';
-            if (c.name === stopName) return 'stoplight';
-            c = c.parent;
+        // Ground projection quads — every GLB now ships the baked Tesla
+        // beam texture on `Headlights_Projection*` / `Stoplights_*` /
+        // `BrakeLightProjection*` (the M3 export was rebaked from the
+        // Bayberry materials in Godot). GLTFLoader compiles the
+        // MeshStandardMaterial with its baked baseColorTexture intact;
+        // we just skip these meshes here so the glass / paint logic
+        // below doesn't run on them. Visibility (D/R) is toggled by
+        // useGroundProjections.
+        const headName = cfg.groundProjectionNodes.headlights;
+        const stopName = cfg.groundProjectionNodes.stoplights;
+        let isProjection = false;
+        for (let c: THREE.Object3D | null = mesh; c; c = c.parent) {
+          if (c.name === headName || c.name === stopName) {
+            isProjection = true;
+            break;
           }
-          return null;
-        })();
-        if (projectionRole) {
-          const beamCfg = cfg.projections[projectionRole];
-          const meshProj = mesh as MeshWithProjSnap;
-          const std = mat as THREE.MeshStandardMaterial;
-
-          if (!meshProj.__teslahub_proj_snap) {
-            const hasBaked = !!std.map;
-            meshProj.__teslahub_proj_snap = {
-              originalMat: mat,
-              hasBaked,
-              baseMap: hasBaked
-                ? (std.map as THREE.Texture)
-                : getBeamTexture(projectionRole, undefined),
-              baseColor: hasBaked ? (std.color?.getHex() ?? 0xffffff) : 0xffffff,
-              baseOpacity: hasBaked ? (std.opacity ?? 1) : 1,
-              baseTransparent: hasBaked ? std.transparent : true,
-              baseDepthWrite: hasBaked ? std.depthWrite : false,
-            };
-          }
-          const snap = meshProj.__teslahub_proj_snap;
-          const usingCustomUrl = !!beamCfg.textureUrl;
-          // M3 ships texture-less → always unlit PNG graft.
-          // Y baked works natively, but a user-provided PNG needs the
-          // same unlit alphaMap path (otherwise alpha is ignored on the
-          // GLB's OPAQUE StandardMaterial and the beam vanishes).
-          const needsUnlit = !snap.hasBaked || usingCustomUrl;
-
-          if (needsUnlit) {
-            const tex = usingCustomUrl
-              ? getBeamTexture(projectionRole, beamCfg.textureUrl)
-              : snap.baseMap;
-            let tint = snap.baseColor;
-            if (beamCfg.color !== 0xffffff) {
-              tint = snap.baseColor;
-              const c = new THREE.Color().setHex(tint);
-              c.multiply(new THREE.Color().setHex(beamCfg.color));
-              tint = c.getHex();
-            }
-            applyUnlitProjectionMaterial(
-              mesh,
-              tex,
-              tint,
-              snap.baseOpacity * beamCfg.opacity,
-            );
-          } else {
-            // Y native baked — restore the GLB StandardMaterial if we
-            // previously swapped to Basic for a custom URL experiment.
-            if (mesh.material !== snap.originalMat) {
-              mesh.material = snap.originalMat;
-            }
-            const baked = snap.originalMat as THREE.MeshStandardMaterial;
-            if (baked.color) {
-              if (beamCfg.color === 0xffffff) {
-                if (baked.color.getHex() !== snap.baseColor) {
-                  baked.color.setHex(snap.baseColor);
-                }
-              } else {
-                baked.color.setHex(snap.baseColor);
-                baked.color.multiply(new THREE.Color().setHex(beamCfg.color));
-              }
-            }
-            if (beamCfg.opacity !== 1) {
-              baked.opacity = snap.baseOpacity * beamCfg.opacity;
-              baked.transparent = true;
-              baked.depthWrite = false;
-            } else {
-              baked.opacity = snap.baseOpacity;
-              baked.transparent = snap.baseTransparent;
-              baked.depthWrite = snap.baseDepthWrite;
-            }
-          }
-
-          mesh.renderOrder = beamCfg.renderOrder;
-          continue;
         }
+        if (isProjection) continue;
 
         // GLTFLoader's default material — bright white CHROME (metalness=1).
         // Tesla exports the Bayberry windshield as a primitive WITHOUT a

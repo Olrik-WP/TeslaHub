@@ -42,22 +42,6 @@ import { OPENINGS_BAYBERRY } from './bayberryOpenings';
 export type VehicleModelKey = 'poppyseed' | 'bayberry';
 
 /** Each wheel mount when the GLB doesn't ship anchor empties. */
-/** Single ground-projection beam configuration. */
-export interface ProjectionConfig {
-  /** Public URL of the beam PNG (alpha-channel = cone shape). When
-   *  undefined, the runtime falls back to the built-in
-   *  /textures/headlight_beam.png or /textures/stoplight_beam.png. */
-  textureUrl?: string;
-  /** RGB hex multiplied into the texture's diffuse. White = unchanged
-   *  Tesla warm-white / soft-red; tune to recolour the beam. */
-  color: number;
-  /** 0..1 alpha multiplier on top of the texture's own alpha. */
-  opacity: number;
-  /** Three.js renderOrder. +10 = above floor + paint, -1 = below
-   *  shadow. */
-  renderOrder: number;
-}
-
 export interface WheelFallbackPosition {
   id: 'LF' | 'RF' | 'LR' | 'RR';
   x: number;
@@ -314,20 +298,6 @@ export interface VehicleModelConfig {
   };
 
   // ───────────────────────────────────────────────────────────────────
-  // Ground projections — beam textures painted under the car
-  // ───────────────────────────────────────────────────────────────────
-  /** Per-beam tuning of the ground projection quads (Headlight in
-   *  front, Stoplight in back). `textureUrl` overrides the baked /
-   *  fallback PNG with a user-uploaded one; `color` is multiplied
-   *  into the texture (white = unchanged); `opacity` is the final
-   *  alpha multiplier; `renderOrder` controls the z-fight ordering
-   *  vs the floor and the body. */
-  projections: {
-    headlight: ProjectionConfig;
-    stoplight: ProjectionConfig;
-  };
-
-  // ───────────────────────────────────────────────────────────────────
   // Wheel finish — material tweaks for alloy + plastic wheel pieces
   // ───────────────────────────────────────────────────────────────────
   /** Polish parameters applied to every wheel mesh whose material name
@@ -536,10 +506,6 @@ export const PoppyseedConfig: VehicleModelConfig = {
     reverseColor: 0xfff8e8,
     headlightIntensity: 1.4,
     headlightColor: 0xfff5e8,
-  },
-  projections: {
-    headlight: { color: 0xffffff, opacity: 1, renderOrder: 10 },
-    stoplight: { color: 0xffffff, opacity: 1, renderOrder: 10 },
   },
   openings: OPENINGS_POPPYSEED,
   mirrorTracks: MIRROR_TRACKS_POPPYSEED,
@@ -779,14 +745,6 @@ export const BayberryConfig: VehicleModelConfig = {
     headlightIntensity: 1.4,
     headlightColor: 0xfff5e8,
   },
-  projections: {
-    // renderOrder = 0 to match Bayberry GLB baseline (Tesla ships
-    // these primitives with the texture already baked, so we don't
-    // need to push them above the opaque pass like we do for M3).
-    headlight: { color: 0xffffff, opacity: 1, renderOrder: 0 },
-    stoplight: { color: 0xffffff, opacity: 1, renderOrder: 0 },
-  },
-
   // Tesla MY Juniper ships privacy glass on the rear doors (much darker
   // than the front side windows). In the GLB the rear-window geometry
   // is paired as `(no mat)` outer + `Glass_Interior` inner — without an
