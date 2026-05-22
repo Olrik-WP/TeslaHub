@@ -20,7 +20,7 @@
  *     "Tesla default" checkbox: ticking it removes the tint override
  *     so the GLB's native chrome shows through, untouched.
  */
-import { useState, useRef } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import type { ShowroomOverrides } from './showroomOverrides';
 import type { VehicleModelConfig } from './vehicleModelConfig';
 import { ShowroomSlider } from './ShowroomSlider';
@@ -294,23 +294,47 @@ function VariantAxesSection({ overrides, onChange, defaults }: Props) {
 // ────────────────────────────────────────────────────────────────────
 
 interface TeslaTemplate {
-  /** Public URL (under /public/wraps/). */
-  url: string;
-  /** Display name (Tesla's own template name). */
+  /** File name under /public/wraps/{m3|my}/ — the matching subfolder
+   *  is picked at render time from the active model key. */
+  file: string;
+  /** Human-readable label derived from the file name. */
   name: string;
-  /** Which model the template targets — used to filter the gallery
-   *  so the user doesn't see a Y template while configuring an M3. */
-  modelKey: 'poppyseed' | 'bayberry';
 }
 
-const TESLA_TEMPLATES: ReadonlyArray<TeslaTemplate> = [
-  // Wired in /public/wraps/* — see README of teslamotors/custom-wraps
-  // for the source PNGs.
-  { url: '/wraps/m3-classic.png',   name: 'M3 Classic',       modelKey: 'poppyseed' },
-  { url: '/wraps/m3-camo.png',      name: 'M3 Camo',          modelKey: 'poppyseed' },
-  { url: '/wraps/my-classic.png',   name: 'MY Classic',       modelKey: 'bayberry' },
-  { url: '/wraps/my-stripes.png',   name: 'MY Stripes',       modelKey: 'bayberry' },
+/**
+ * 20 official Tesla wrap examples shipped from
+ * github.com/teslamotors/custom-wraps. Both `m3/` and `my/` folders
+ * carry the SAME 20 file names (Tesla published one image per livery
+ * per model with model-specific UV mapping), so a single list is
+ * enough — the active model key picks which folder to serve from.
+ */
+const TESLA_WRAP_FILES: ReadonlyArray<string> = [
+  'Acid_Drip.png',
+  'Ani.png',
+  'Apocalypse.png',
+  'Avocado_Green.png',
+  'Camo.png',
+  'Cosmic_Burst.png',
+  'Divide.png',
+  'Doge.png',
+  'Dot_Matrix.png',
+  'Ice_Cream.png',
+  'Leopard.png',
+  'Pixel_Art.png',
+  'Reindeer.png',
+  'Rudi.png',
+  'Sakura.png',
+  'Sketch.png',
+  'String_Lights.png',
+  'Valentine.png',
+  'Vintage_Gradient.png',
+  'Vintage_Stripes.png',
 ];
+
+/** "Acid_Drip.png" → "Acid Drip". Cheap on-the-fly label. */
+function wrapLabel(file: string): string {
+  return file.replace(/\.png$/i, '').replace(/_/g, ' ');
+}
 
 function WrapSection({
   overrides,
@@ -395,7 +419,19 @@ function WrapSection({
   };
 
   const activeModelKey = (defaults.key as 'poppyseed' | 'bayberry') ?? 'poppyseed';
-  const templatesForModel = TESLA_TEMPLATES.filter((t) => t.modelKey === activeModelKey);
+  // Tesla ships per-model UV mapping for each wrap — the same livery
+  // PNG looks different on M3 vs Y because the underlying UV layouts
+  // differ. We pick the folder based on the active model so the
+  // gallery thumbnail matches what's rendered on the 3D body.
+  const wrapFolder = activeModelKey === 'bayberry' ? 'my' : 'm3';
+  const templatesForModel = useMemo<TeslaTemplate[]>(
+    () =>
+      TESLA_WRAP_FILES.map((file) => ({
+        file: `/wraps/${wrapFolder}/${file}`,
+        name: wrapLabel(file),
+      })),
+    [wrapFolder],
+  );
 
   return (
     <SubSection
@@ -495,23 +531,26 @@ function WrapSection({
         <p className="text-[10px] text-red-400 px-1">⚠ {errorMsg}</p>
       )}
 
-      {/* Tesla official templates — one-click presets */}
+      {/* Tesla official wraps — one-click presets. 20 livery examples
+          shipped with the repo, picked from the `m3/` or `my/` folder
+          based on the active model so the thumbnail matches the
+          actual UV mapping applied to the 3D body. */}
       {templatesForModel.length > 0 && (
         <div className="space-y-1">
           <p className="text-[10px] uppercase tracking-wider text-[#6b7280]">
-            Templates Tesla officiels
+            Wraps Tesla officiels ({templatesForModel.length})
           </p>
           <div className="grid grid-cols-4 gap-1">
             {templatesForModel.map((tpl) => {
-              const active = templateUrl === tpl.url;
+              const active = templateUrl === tpl.file;
               return (
                 <button
-                  key={tpl.url}
+                  key={tpl.file}
                   type="button"
-                  onClick={() => handleSelectTemplate(tpl.url)}
+                  onClick={() => handleSelectTemplate(tpl.file)}
                   title={tpl.name}
                   className={
-                    'aspect-square rounded transition-all overflow-hidden ' +
+                    'aspect-square rounded transition-all overflow-hidden relative ' +
                     (active
                       ? 'ring-2 ring-[#e31937] ring-offset-1 ring-offset-[#141414]'
                       : 'hover:ring-1 hover:ring-white')
@@ -519,8 +558,9 @@ function WrapSection({
                   style={{ backgroundColor: '#181818' }}
                 >
                   <img
-                    src={tpl.url}
+                    src={tpl.file}
                     alt={tpl.name}
+                    loading="lazy"
                     className="w-full h-full object-cover"
                     onError={(e) => {
                       // Hide the broken image silently — the template
@@ -528,6 +568,11 @@ function WrapSection({
                       (e.currentTarget as HTMLImageElement).style.opacity = '0.3';
                     }}
                   />
+                  {active && (
+                    <span className="absolute bottom-0 left-0 right-0 text-[8px] text-white bg-black/60 px-1 truncate">
+                      {tpl.name}
+                    </span>
+                  )}
                 </button>
               );
             })}
