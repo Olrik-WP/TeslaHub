@@ -180,6 +180,14 @@ export interface ShowroomOverrides {
      *  user wrap exists on the server, the renderer falls back to
      *  `/api/vehicle/{carId}/showroom/wrap`. */
     paintTextureUrl?: string;
+    /** Texture rotation in 90° steps applied around the UV centre
+     *  (0.5, 0.5). One of 0/90/180/270 — degrees, counter-clockwise.
+     *  Lets the user re-align an uploaded PNG without re-exporting it
+     *  from Photoshop: Tesla's UV unwrap layout doesn't always match
+     *  the convention a PNG author would assume (top-down "U =
+     *  horizontal" mental model vs Tesla's U = longitudinal). When
+     *  unset, defaults to 0. */
+    rotationDeg?: 0 | 90 | 180 | 270;
   };
 }
 

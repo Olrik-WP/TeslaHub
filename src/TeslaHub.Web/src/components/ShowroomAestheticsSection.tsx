@@ -456,6 +456,20 @@ function WrapSection({
     onChange(rest);
   };
 
+  /** Force the wrap texture rotation to one of the four 90° steps.
+   *  Tesla's body UV unwrap puts U along the longitudinal axis of the
+   *  car (front→rear), but a PNG author working top-down naturally
+   *  aligns U with the horizontal axis of their image (lateral on the
+   *  car). The result is a 90°-off wrap on first apply — this control
+   *  lets the user correct it without having to re-export the PNG. */
+  const wrapRotation = (overrides.wraps?.rotationDeg ?? 0) as 0 | 90 | 180 | 270;
+  const handleRotate = (deg: 0 | 90 | 180 | 270) => {
+    onChange({
+      ...overrides,
+      wraps: { ...(overrides.wraps ?? {}), rotationDeg: deg },
+    });
+  };
+
   const handleRemoveUpload = async () => {
     setErrorMsg(null);
     if (!carId) return;
@@ -512,22 +526,48 @@ function WrapSection({
 
       {/* Preview thumbnail when a wrap is active */}
       {previewUrl && (
-        <div className="flex items-center gap-2 p-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded-md">
-          <img
-            src={previewUrl}
-            alt="Wrap"
-            className="w-14 h-14 rounded object-cover border border-[#2a2a2a]"
-            style={{ background: '#181818' }}
-          />
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] text-white truncate">
-              {wrapKind === 'template' ? 'Template Tesla' : 'PNG uploadé'}
-            </p>
-            <p className="text-[10px] text-[#6b7280] truncate">
-              {wrapKind === 'template'
-                ? previewUrl.split('/').pop()
-                : 'Désactive le picker couleur peinture.'}
-            </p>
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 p-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded-md">
+            <img
+              src={previewUrl}
+              alt="Wrap"
+              className="w-14 h-14 rounded object-cover border border-[#2a2a2a]"
+              style={{ background: '#181818' }}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] text-white truncate">
+                {wrapKind === 'template' ? 'Template Tesla' : 'PNG uploadé'}
+              </p>
+              <p className="text-[10px] text-[#6b7280] truncate">
+                {wrapKind === 'template'
+                  ? previewUrl.split('/').pop()
+                  : 'Désactive le picker couleur peinture.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Rotation picker — Tesla's body UV layout has U along the
+              car's longitudinal axis. A PNG designed top-down (U =
+              horizontal-on-screen) lands sideways without this. */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-[#6b7280] flex-shrink-0">Rotation</span>
+            <div className="flex gap-0.5 flex-1">
+              {([0, 90, 180, 270] as const).map((deg) => (
+                <button
+                  key={deg}
+                  type="button"
+                  onClick={() => handleRotate(deg)}
+                  className={
+                    'flex-1 text-[10px] py-1 rounded border transition-colors ' +
+                    (wrapRotation === deg
+                      ? 'border-[#e31937] bg-[#e31937]/10 text-white'
+                      : 'border-[#2a2a2a] text-[#9ca3af] hover:border-[#3a3a3a] hover:text-white')
+                  }
+                >
+                  {deg}°
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -600,11 +640,10 @@ function WrapSection({
           <p className="text-[10px] uppercase tracking-wider text-[#6b7280]">
             Wraps Tesla officiels ({templatesForModel.length})
           </p>
-          <p className="text-[10px] text-yellow-500/80 leading-snug">
-            ⚠ Layout UV du configurateur in-car Tesla. Le GLB extrait de
-            l'API n'a pas le même unwrap → la voiture peut apparaître
-            blanche/sans wrap. Pour un rendu fiable, dépose ton propre
-            PNG conçu pour ce GLB ci-dessus.
+          <p className="text-[10px] text-[#6b7280] leading-snug">
+            Wraps officiels Tesla extraits de l'APK Android. Si
+            l'orientation paraît tournée de 90°/180°, utilise le
+            sélecteur « Rotation » ci-dessus pour la corriger.
           </p>
           <div className="grid grid-cols-4 gap-1">
             {templatesForModel.map((tpl) => {

@@ -56,7 +56,17 @@ const ShowroomDebugContext = createContext<ShowroomDebugFlags>(DEFAULT_DEBUG_FLA
 // via `bodyPaintColor`. Resolved in the outer VehicleTopView3D from
 // the override blob + per-car upload existence flag, then consumed
 // by `PoppyseedModel` to load + apply the texture.
-const WrapUrlContext = createContext<string | null>(null);
+interface WrapContextValue {
+  url: string | null;
+  /** Rotation in 90° steps (counter-clockwise) applied around the UV
+   *  centre. Lets the user re-orient a PNG whose intended axis doesn't
+   *  match Tesla's body UV unwrap. */
+  rotationDeg: 0 | 90 | 180 | 270;
+}
+const WrapUrlContext = createContext<WrapContextValue>({
+  url: null,
+  rotationDeg: 0,
+});
 // Bright per-role colours; saturated enough to read clearly through
 // the HDR environment lighting even at low opacity.
 const GLASS_DEBUG_COLORS = {
@@ -1127,11 +1137,11 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
   // snapshotting the original `mat.color` keeps a single source of
   // truth (cfg.bodyPaintColor) — the Showroom paint picker already
   // writes there, so the swap is symmetric.
-  const wrapUrl = useContext(WrapUrlContext);
+  const { url: wrapUrl, rotationDeg: wrapRotationDeg } = useContext(WrapUrlContext);
   useEffect(() => {
     // eslint-disable-next-line no-console
     console.log(
-      `[Wrap] effect fired — wrapUrl=${wrapUrl ? wrapUrl.slice(0, 60) + (wrapUrl.length > 60 ? '…' : '') : 'null'}`,
+      `[Wrap] effect fired — rotation=${wrapRotationDeg}° wrapUrl=${wrapUrl ? wrapUrl.slice(0, 60) + (wrapUrl.length > 60 ? '…' : '') : 'null'}`,
     );
     const targets: THREE.MeshStandardMaterial[] = [];
     // Track the actual MESHES (not just materials) so we can author
@@ -1275,6 +1285,14 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       tex.flipY = true;
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = 8;
+      // User-controlled 90°-step rotation around the UV centre. Lets
+      // the user re-align a PNG whose intended axis doesn't match
+      // Tesla's body UV unwrap (their U axis is longitudinal —
+      // front→rear — but a PNG author typically thinks top-down where
+      // U is horizontal-on-screen / lateral-on-car). Counter-clockwise
+      // in radians, three.js convention.
+      tex.center.set(0.5, 0.5);
+      tex.rotation = (wrapRotationDeg * Math.PI) / 180;
       tex.needsUpdate = true;
       loadedTex = tex;
 
@@ -1312,7 +1330,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         loadedTex.dispose();
       }
     };
-  }, [cleanedScene, wrapUrl, cfg.bodyPaintColor]);
+  }, [cleanedScene, wrapUrl, wrapRotationDeg, cfg.bodyPaintColor]);
 
   return (
     <>
@@ -1595,21 +1613,25 @@ export default function VehicleTopView3D({ vehicle, localOverrides, showroomMode
   //      browser cache automatically.
   //   3. null — render solid paint via `cfg.bodyPaintColor`.
   const wrapOverride = extras.wraps?.paintTextureUrl;
-  const wrapUrl = useMemo<string | null>(() => {
-    if (wrapOverride) return wrapOverride;
+  const wrapRotation = extras.wraps?.rotationDeg ?? 0;
+  const wrapValue = useMemo<WrapContextValue>(() => {
+    if (wrapOverride) return { url: wrapOverride, rotationDeg: wrapRotation };
     if (wrapExists && vehicle.carId) {
-      return wrapPngUrl(vehicle.carId, updatedAt ?? undefined);
+      return {
+        url: wrapPngUrl(vehicle.carId, updatedAt ?? undefined),
+        rotationDeg: wrapRotation,
+      };
     }
-    return null;
-  }, [wrapOverride, wrapExists, vehicle.carId, updatedAt]);
+    return { url: null, rotationDeg: wrapRotation };
+  }, [wrapOverride, wrapRotation, wrapExists, vehicle.carId, updatedAt]);
   // eslint-disable-next-line no-console
   console.log(
-    `[Wrap] outer resolved — override=${wrapOverride ? wrapOverride.slice(0, 40) + '…' : 'none'} | wrapExists=${wrapExists} | wrapUrl=${wrapUrl ? wrapUrl.slice(0, 60) + '…' : 'null'}`,
+    `[Wrap] outer resolved — override=${wrapOverride ? wrapOverride.slice(0, 40) + '…' : 'none'} | wrapExists=${wrapExists} | rotation=${wrapRotation}° | wrapUrl=${wrapValue.url ? wrapValue.url.slice(0, 60) + '…' : 'null'}`,
   );
 
   return (
     <VehicleModelContext.Provider value={modelConfig}>
-      <WrapUrlContext.Provider value={wrapUrl}>
+      <WrapUrlContext.Provider value={wrapValue}>
         <ShowroomDebugContext.Provider value={debugMode ?? DEFAULT_DEBUG_FLAGS}>
           <VehicleTopView3DInner vehicle={vehicle} showroomMode={!!showroomMode} />
         </ShowroomDebugContext.Provider>
