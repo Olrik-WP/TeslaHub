@@ -57,10 +57,19 @@ public static class ShowroomEndpoints
         group.MapDelete("/{carId:int}/showroom", DeleteShowroomConfig);
 
         // Custom wrap PNG (separate URL so the GET-config endpoint
-        // stays cheap and the renderer can fetch the PNG on its own
-        // via a regular browser request — auth carried by the
-        // session cookie that's already on every request).
-        group.MapGet("/{carId:int}/showroom/wrap", GetShowroomWrap);
+        // stays cheap and the renderer can fetch the PNG on its own).
+        //
+        // The READ side is intentionally anonymous: three.js loads the
+        // texture via a plain `<img>` element which doesn't forward
+        // the JWT bearer token (it only sends cookies, but our auth
+        // pipeline expects the bearer). Switching to a fetch + blob
+        // round-trip would add complexity for no real benefit — the
+        // PNG is a per-car visual chrome, not sensitive data, and the
+        // carId is an internal identifier the caller has to know
+        // ahead of time. The WRITE / DELETE sides keep auth so only
+        // the owner can mutate the wrap.
+        group.MapGet("/{carId:int}/showroom/wrap", GetShowroomWrap)
+             .AllowAnonymous();
         group.MapPut("/{carId:int}/showroom/wrap", SaveShowroomWrap)
              .DisableAntiforgery();
         group.MapDelete("/{carId:int}/showroom/wrap", DeleteShowroomWrap);

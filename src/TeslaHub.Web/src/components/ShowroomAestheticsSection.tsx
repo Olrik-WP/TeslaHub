@@ -411,6 +411,8 @@ function WrapSection({
    *  texture and Tesla's official wraps will never align. */
   const handleTestPattern = () => {
     setErrorMsg(null);
+    // eslint-disable-next-line no-console
+    console.log('[Wrap] 🧪 Test pattern button clicked — generating checker dataURL');
     const size = 512;
     const cell = 64;
     const canvas = document.createElement('canvas');
@@ -438,6 +440,10 @@ function WrapSection({
     ctx.fillText('L', 60, size / 2);
     ctx.fillText('R', size - 60, size / 2);
     const dataUrl = canvas.toDataURL('image/png');
+    // eslint-disable-next-line no-console
+    console.log(
+      `[Wrap] 🧪 Calling onChange with paintTextureUrl=data:image/png;base64,…(${dataUrl.length} chars)`,
+    );
     onChange({
       ...overrides,
       wraps: { ...(overrides.wraps ?? {}), paintTextureUrl: dataUrl },

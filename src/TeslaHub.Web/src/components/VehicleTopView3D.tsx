@@ -1129,6 +1129,10 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
   // writes there, so the swap is symmetric.
   const wrapUrl = useContext(WrapUrlContext);
   useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[Wrap] effect fired — wrapUrl=${wrapUrl ? wrapUrl.slice(0, 60) + (wrapUrl.length > 60 ? '…' : '') : 'null'}`,
+    );
     const targets: THREE.MeshStandardMaterial[] = [];
     // Track the UV bounds of every body mesh that uses the Paint
     // material — invaluable when a Tesla template wrap looks empty
@@ -1169,7 +1173,16 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       }
     });
 
-    if (targets.length === 0) return;
+    if (targets.length === 0) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[Wrap] No `Paint` material found in the cleaned scene — ' +
+        'wrap cannot apply. Inspect the GLB material names with ' +
+        'audit-glb-materials.mjs and adjust the strict match in ' +
+        'VehicleTopView3D.tsx (currently filters on `matName === "Paint"`).',
+      );
+      return;
+    }
 
     if (wrapUrl && uvMeshCount > 0) {
       // eslint-disable-next-line no-console
@@ -1555,6 +1568,10 @@ export default function VehicleTopView3D({ vehicle, localOverrides, showroomMode
     }
     return null;
   }, [wrapOverride, wrapExists, vehicle.carId, updatedAt]);
+  // eslint-disable-next-line no-console
+  console.log(
+    `[Wrap] outer resolved — override=${wrapOverride ? wrapOverride.slice(0, 40) + '…' : 'none'} | wrapExists=${wrapExists} | wrapUrl=${wrapUrl ? wrapUrl.slice(0, 60) + '…' : 'null'}`,
+  );
 
   return (
     <VehicleModelContext.Provider value={modelConfig}>
