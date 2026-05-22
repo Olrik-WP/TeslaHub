@@ -456,20 +456,6 @@ function WrapSection({
     onChange(rest);
   };
 
-  /** Force the wrap texture rotation to one of the four 90° steps.
-   *  Tesla's body UV unwrap puts U along the longitudinal axis of the
-   *  car (front→rear), but a PNG author working top-down naturally
-   *  aligns U with the horizontal axis of their image (lateral on the
-   *  car). The result is a 90°-off wrap on first apply — this control
-   *  lets the user correct it without having to re-export the PNG. */
-  const wrapRotation = (overrides.wraps?.rotationDeg ?? 0) as 0 | 90 | 180 | 270;
-  const handleRotate = (deg: 0 | 90 | 180 | 270) => {
-    onChange({
-      ...overrides,
-      wraps: { ...(overrides.wraps ?? {}), rotationDeg: deg },
-    });
-  };
-
   const handleRemoveUpload = async () => {
     setErrorMsg(null);
     if (!carId) return;
@@ -545,30 +531,6 @@ function WrapSection({
               </p>
             </div>
           </div>
-
-          {/* Rotation picker — Tesla's body UV layout has U along the
-              car's longitudinal axis. A PNG designed top-down (U =
-              horizontal-on-screen) lands sideways without this. */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-[#6b7280] flex-shrink-0">Rotation</span>
-            <div className="flex gap-0.5 flex-1">
-              {([0, 90, 180, 270] as const).map((deg) => (
-                <button
-                  key={deg}
-                  type="button"
-                  onClick={() => handleRotate(deg)}
-                  className={
-                    'flex-1 text-[10px] py-1 rounded border transition-colors ' +
-                    (wrapRotation === deg
-                      ? 'border-[#e31937] bg-[#e31937]/10 text-white'
-                      : 'border-[#2a2a2a] text-[#9ca3af] hover:border-[#3a3a3a] hover:text-white')
-                  }
-                >
-                  {deg}°
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       )}
 
@@ -641,9 +603,8 @@ function WrapSection({
             Wraps Tesla officiels ({templatesForModel.length})
           </p>
           <p className="text-[10px] text-[#6b7280] leading-snug">
-            Wraps officiels Tesla extraits de l'APK Android. Si
-            l'orientation paraît tournée de 90°/180°, utilise le
-            sélecteur « Rotation » ci-dessus pour la corriger.
+            Wraps officiels Tesla (layout template model3-2024-base / modely-2025).
+            Utilise le PNG template ou un wrap conçu sur ce même gabarit.
           </p>
           <div className="grid grid-cols-4 gap-1">
             {templatesForModel.map((tpl) => {

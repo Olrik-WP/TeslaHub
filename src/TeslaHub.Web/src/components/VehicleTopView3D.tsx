@@ -67,6 +67,131 @@ const WrapUrlContext = createContext<WrapContextValue>({
   url: null,
   rotationDeg: 0,
 });
+
+// ---------------------------------------------------------------------------
+// Tesla in-car wrap pipeline (opaque_skybox.shader from the mobile APK).
+//
+// Wrap PNGs from teslamotors/custom-wraps are authored against a template
+// whose islands align with TEXCOORD_1 on body meshes (Godot `UV2`, three.js
+// `uv2` / `vUv2`). The stock `Paint` material samples solid colour on UV0;
+// wraps must sample `custom_albedo_texture` on UV2 and alpha-blend over the
+// base paint: mix(color.rgb, wrap.rgb, wrap.a).
+//
+// We inject that logic via MeshStandardMaterial.onBeforeCompile and force
+// USE_UV2 in the shader by attaching a zero-intensity dummy aoMap on channel
+// 1 (same trick the three.js docs recommend for second-UV custom effects).
+// ---------------------------------------------------------------------------
+
+type WrapMatHookState = {
+  priorOnBeforeCompile: THREE.MeshStandardMaterial['onBeforeCompile'];
+  priorCacheKey: (() => string) | undefined;
+  addedDummyAo: boolean;
+  priorAoMap: THREE.Texture | null;
+  priorAoIntensity: number;
+  priorAoChannel: number;
+};
+
+const WRAP_MAT_HOOK_KEY = '__teslahubWrapHook';
+
+let wrapUv2DummyAo: THREE.DataTexture | null = null;
+function getWrapUv2DummyAo(): THREE.DataTexture {
+  if (!wrapUv2DummyAo) {
+    wrapUv2DummyAo = new THREE.DataTexture(new Uint8Array([255, 255, 255]), 1, 1);
+    wrapUv2DummyAo.colorSpace = THREE.SRGBColorSpace;
+    wrapUv2DummyAo.needsUpdate = true;
+  }
+  return wrapUv2DummyAo;
+}
+
+function matWrapHook(mat: THREE.MeshStandardMaterial): WrapMatHookState {
+  const bag = mat as THREE.MeshStandardMaterial & { [WRAP_MAT_HOOK_KEY]?: WrapMatHookState };
+  if (!bag[WRAP_MAT_HOOK_KEY]) {
+    bag[WRAP_MAT_HOOK_KEY] = {
+      priorOnBeforeCompile: mat.onBeforeCompile,
+      priorCacheKey: mat.customProgramCacheKey,
+      addedDummyAo: false,
+      priorAoMap: mat.aoMap,
+      priorAoIntensity: mat.aoMapIntensity,
+      priorAoChannel: mat.aoMap?.channel ?? 0,
+    };
+  }
+  return bag[WRAP_MAT_HOOK_KEY]!;
+}
+
+function installTeslaWrapShader(mat: THREE.MeshStandardMaterial, wrapTex: THREE.Texture) {
+  const hook = matWrapHook(mat);
+
+  // Enable vUv2 in the built-in shader without visible AO contribution.
+  if (!mat.aoMap) {
+    mat.aoMap = getWrapUv2DummyAo();
+    mat.aoMap.channel = 1;
+    mat.aoMapIntensity = 0;
+    hook.addedDummyAo = true;
+  }
+
+  const priorCompile = hook.priorOnBeforeCompile;
+  mat.onBeforeCompile = (shader, renderer) => {
+    priorCompile?.(shader, renderer);
+    shader.uniforms.wrapMap = { value: wrapTex };
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `#include <common>
+uniform sampler2D wrapMap;`,
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <color_fragment>',
+      `#include <color_fragment>
+{
+  vec4 wrapSample = texture2D(wrapMap, vUv2);
+  diffuseColor.rgb = mix(diffuseColor.rgb, wrapSample.rgb, wrapSample.a);
+}`,
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <roughnessmap_fragment>',
+      `#include <roughnessmap_fragment>
+{
+  vec4 wrapRough = texture2D(wrapMap, vUv2);
+  roughnessFactor = mix(roughnessFactor, 0.9, wrapRough.a);
+}`,
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <metalnessmap_fragment>',
+      `#include <metalnessmap_fragment>
+{
+  vec4 wrapMetal = texture2D(wrapMap, vUv2);
+  metalnessFactor = mix(metalnessFactor, 0.0, wrapMetal.a);
+}`,
+    );
+  };
+  mat.customProgramCacheKey = () => `teslahub-wrap-${wrapTex.uuid}`;
+  mat.map = null;
+  mat.needsUpdate = true;
+}
+
+function clearTeslaWrapShader(mat: THREE.MeshStandardMaterial, paintHex: number) {
+  const bag = mat as THREE.MeshStandardMaterial & { [WRAP_MAT_HOOK_KEY]?: WrapMatHookState };
+  const hook = bag[WRAP_MAT_HOOK_KEY];
+  if (hook) {
+    mat.onBeforeCompile = hook.priorOnBeforeCompile ?? (() => {});
+    mat.customProgramCacheKey = hook.priorCacheKey ?? (() => '');
+    if (hook.addedDummyAo) {
+      mat.aoMap = hook.priorAoMap;
+      mat.aoMapIntensity = hook.priorAoIntensity;
+      if (mat.aoMap) mat.aoMap.channel = hook.priorAoChannel;
+    }
+    delete bag[WRAP_MAT_HOOK_KEY];
+  } else {
+    mat.onBeforeCompile = () => {};
+    mat.customProgramCacheKey = () => '';
+  }
+  if (mat.map) {
+    mat.map.dispose();
+    mat.map = null;
+  }
+  mat.color.setHex(paintHex);
+  mat.needsUpdate = true;
+}
+
 // Bright per-role colours; saturated enough to read clearly through
 // the HDR environment lighting even at low opacity.
 const GLASS_DEBUG_COLORS = {
@@ -1125,46 +1250,13 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
   //   as cable unlock when plugged in. See `VehicleCallouts` for the rebuilt
   //   Tesla Car Browser-style UI.
 
-  // ── Custom body wrap (PNG overlay) ────────────────────────────────
-  // Applies the active wrap URL (from WrapUrlContext) as the
-  // baseColorTexture of the `Paint` material — and ONLY `Paint`, not
-  // `PaintRough` (the latter covers low-sheen plastic-y body parts
-  // that look terrible wrapped; matches Tesla's own configurator).
-  //
-  // Restoration is deliberate: when the URL clears we re-color the
-  // material with `cfg.bodyPaintColor` so the GLB returns to its
-  // solid-paint look. Reusing `mat.color.setHex` rather than
-  // snapshotting the original `mat.color` keeps a single source of
-  // truth (cfg.bodyPaintColor) — the Showroom paint picker already
-  // writes there, so the swap is symmetric.
-  const { url: wrapUrl, rotationDeg: wrapRotationDeg } = useContext(WrapUrlContext);
+  // ── Custom body wrap (Tesla UV2 / PaintSkybox pipeline) ───────────
+  const { url: wrapUrl } = useContext(WrapUrlContext);
   useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log(
-      `[Wrap] effect fired — rotation=${wrapRotationDeg}° wrapUrl=${wrapUrl ? wrapUrl.slice(0, 60) + (wrapUrl.length > 60 ? '…' : '') : 'null'}`,
-    );
     const targets: THREE.MeshStandardMaterial[] = [];
-    // Track the actual MESHES (not just materials) so we can author
-    // planar UVs on the fly. Tesla's API-extracted GLBs expose the
-    // `Paint` material as a solid colour — the original glTF never
-    // shipped UVs for those meshes (no `TEXCOORD_0` attribute), so
-    // a plain `mat.map = tex` would sample pixel (0, 0) on every
-    // fragment and the body would render as a single colour pulled
-    // from the wrap's bottom-left corner (which is white in both
-    // Tesla's livery PNGs and our checker pattern). To make wraps
-    // actually visible we generate top-down planar UVs from each
-    // mesh's vertex positions, scaled across the COMBINED body
-    // bounding box so every panel shares the same UV space (i.e.
-    // the wrap stretches across the whole car, not panel-by-panel).
     const paintMeshes: THREE.Mesh[] = [];
-    // Track the UV bounds of every body mesh that uses the Paint
-    // material — invaluable when a Tesla template wrap looks empty
-    // on the car: the Tesla wraps pack livery islands into ~30 % of
-    // the texture, so if the body UVs span an unrelated region of
-    // [0, 1]² the wrap reads as plain white/transparent.
-    let uvUMin = Infinity, uvUMax = -Infinity;
-    let uvVMin = Infinity, uvVMax = -Infinity;
-    let uvMeshCount = 0;
+    let uv2MeshCount = 0;
+
     cleanedScene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -1172,165 +1264,73 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       let isPaintMesh = false;
       for (const m of mats) {
         const std = m as THREE.MeshStandardMaterial;
-        const matName = (std as { name?: string }).name ?? '';
-        // STRICT: exact match on `Paint` only. `PaintRough`, `Paint_Inner`
-        // and similar variants are skipped on purpose.
-        if (matName === 'Paint') {
+        if ((std as { name?: string }).name === 'Paint') {
           targets.push(std);
           isPaintMesh = true;
         }
       }
       if (isPaintMesh) {
         paintMeshes.push(mesh);
-        if (wrapUrl) {
-          const uvAttr = mesh.geometry?.attributes?.uv;
-          if (uvAttr && uvAttr.itemSize === 2) {
-            uvMeshCount++;
-            for (let i = 0; i < uvAttr.count; i++) {
-              const u = uvAttr.getX(i);
-              const v = uvAttr.getY(i);
-              if (u < uvUMin) uvUMin = u;
-              if (u > uvUMax) uvUMax = u;
-              if (v < uvVMin) uvVMin = v;
-              if (v > uvVMax) uvVMax = v;
-            }
-          }
-        }
+        const uv2 = mesh.geometry?.attributes?.uv2;
+        if (uv2?.itemSize === 2) uv2MeshCount++;
       }
     });
 
     if (targets.length === 0) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        '[Wrap] No `Paint` material found in the cleaned scene — ' +
-        'wrap cannot apply. Inspect the GLB material names with ' +
-        'audit-glb-materials.mjs and adjust the strict match in ' +
-        'VehicleTopView3D.tsx (currently filters on `matName === "Paint"`).',
-      );
+      console.warn('[Wrap] No `Paint` material found — wrap cannot apply.');
       return;
-    }
-
-    if (wrapUrl) {
-      // eslint-disable-next-line no-console
-      console.log(
-        `[Wrap] Body UV diagnostic: ${uvMeshCount}/${paintMeshes.length} Paint ` +
-        `mesh(es) carry a usable UV attribute. ` +
-        (uvMeshCount > 0
-          ? `Bounds: U ∈ [${uvUMin.toFixed(3)}, ${uvUMax.toFixed(3)}]  ` +
-            `V ∈ [${uvVMin.toFixed(3)}, ${uvVMax.toFixed(3)}].`
-          : 'NO UVs found on this GLB — wrap will sample a single pixel and ' +
-            'render flat. Re-run optimize-glb.ps1 with --keep-attributes true ' +
-            '(see optimize-glb.ps1 header for the rationale).'),
-      );
     }
 
     if (!wrapUrl) {
-      // No wrap → clear any previously-applied map and restore solid colour.
-      for (const mat of targets) {
-        if (mat.map) {
-          mat.map.dispose();
-          mat.map = null;
-        }
-        mat.color.setHex(cfg.bodyPaintColor);
-        mat.needsUpdate = true;
-      }
+      for (const mat of new Set(targets)) clearTeslaWrapShader(mat, cfg.bodyPaintColor);
       return;
     }
 
-    // Load the PNG through an Image + Canvas so we can FLATTEN any
-    // transparent regions onto a white background BEFORE handing the
-    // bytes to three.js. This matters because Tesla's official wrap
-    // PNGs are RGBA with `alpha = 0` on every non-livery pixel — when
-    // sampled by a `MeshStandardMaterial` whose `alphaMode = OPAQUE`,
-    // the alpha channel is ignored and the underlying RGB on those
-    // pixels is (0, 0, 0). The car would then render almost
-    // completely BLACK with only the livery islands showing colour.
-    // Pre-multiplying onto white sidesteps the issue entirely and
-    // makes the body read as solid white where the wrap is empty,
-    // matching Tesla's in-car configurator behaviour.
-    // eslint-disable-next-line no-console
-    console.log(`[Wrap] Starting image load (${targets.length} target Paint mat(s))…`);
+    if (uv2MeshCount === 0) {
+      console.warn(
+        '[Wrap] Paint meshes have no uv2 (TEXCOORD_1). Re-run optimize-glb.ps1 ' +
+        'with --keep-attributes true, then rename.ps1, and redeploy to Docker.',
+      );
+      return;
+    }
+
+    console.log(
+      `[Wrap] Loading wrap for ${targets.length} Paint mat(s), ` +
+      `${uv2MeshCount}/${paintMeshes.length} mesh(es) carry uv2.`,
+    );
+
     const img = new Image();
-    // Don't set crossOrigin for data URLs (same-origin by definition);
-    // setting it can occasionally confuse some browsers' caching layer.
     if (!wrapUrl.startsWith('data:')) img.crossOrigin = 'anonymous';
     let cancelled = false;
     let loadedTex: THREE.Texture | null = null;
-    img.onload = () => {
-      // eslint-disable-next-line no-console
-      console.log(
-        `[Wrap] ✅ Image loaded: ${img.naturalWidth}×${img.naturalHeight} ` +
-        `(cancelled=${cancelled}, targets=${targets.length})`,
-      );
-      if (cancelled) return;
-      const w = img.naturalWidth || img.width;
-      const h = img.naturalHeight || img.height;
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        // eslint-disable-next-line no-console
-        console.warn('[Wrap] 2D context unavailable, aborting wrap');
-        return;
-      }
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, w, h);
-      ctx.drawImage(img, 0, 0);
 
-      const tex = new THREE.CanvasTexture(canvas);
-      // PNG image convention is origin = top-left; three.js wants
-      // bottom-left for shaders → flipY = true (the default for
-      // CanvasTexture, set explicitly here for documentation).
+    img.onload = () => {
+      if (cancelled) return;
+      const tex = new THREE.Texture(img);
       tex.flipY = true;
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = 8;
-      // User-controlled 90°-step rotation around the UV centre. Lets
-      // the user re-align a PNG whose intended axis doesn't match
-      // Tesla's body UV unwrap (their U axis is longitudinal —
-      // front→rear — but a PNG author typically thinks top-down where
-      // U is horizontal-on-screen / lateral-on-car). Counter-clockwise
-      // in radians, three.js convention.
-      tex.center.set(0.5, 0.5);
-      tex.rotation = (wrapRotationDeg * Math.PI) / 180;
       tex.needsUpdate = true;
       loadedTex = tex;
 
-      let applied = 0;
-      for (const mat of targets) {
-        if (mat.map && mat.map !== tex) mat.map.dispose();
-        mat.map = tex;
-        // Neutral white tint so the PNG colours render unmodified.
-        mat.color.setHex(0xffffff);
-        mat.needsUpdate = true;
-        applied++;
+      const uniqueTargets = [...new Set(targets)];
+      for (const mat of uniqueTargets) {
+        mat.color.setHex(cfg.bodyPaintColor);
+        installTeslaWrapShader(mat, tex);
       }
-      // eslint-disable-next-line no-console
-      console.log(
-        `[Wrap] ✅ Texture applied to ${applied} Paint material(s) — ` +
-        `should be visible on next frame.`,
-      );
+      console.log('[Wrap] Applied on uv2 (Tesla PaintSkybox pipeline).');
     };
-    img.onerror = (err) => {
-      // eslint-disable-next-line no-console
-      console.warn(`[Wrap] ❌ Image load failed for ${wrapUrl.slice(0, 80)}:`, err);
-    };
+    img.onerror = () => console.warn(`[Wrap] Image load failed: ${wrapUrl.slice(0, 80)}`);
     img.src = wrapUrl;
 
     return () => {
       cancelled = true;
       if (loadedTex) {
-        for (const mat of targets) {
-          if (mat.map === loadedTex) {
-            mat.map = null;
-            mat.color.setHex(cfg.bodyPaintColor);
-            mat.needsUpdate = true;
-          }
-        }
+        for (const mat of new Set(targets)) clearTeslaWrapShader(mat, cfg.bodyPaintColor);
         loadedTex.dispose();
       }
     };
-  }, [cleanedScene, wrapUrl, wrapRotationDeg, cfg.bodyPaintColor]);
+  }, [cleanedScene, wrapUrl, cfg.bodyPaintColor]);
 
   return (
     <>
