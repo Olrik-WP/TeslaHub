@@ -168,18 +168,18 @@ export interface VehicleModelConfig {
      *  `bodyPaintColor`). E.g. M3 = /^paint(_|skybox|$)/i,
      *  Y = /^paint(_|rough|$)/i (covers `Paint` + `PaintRough`). */
     bodyPaint: RegExp;
-    /** Parent NODE names whose descendants are outer glass (windows,
-     *  windshields, panoramic roof) — used for transparency fixes. */
-    outerGlassNode: RegExp;
-    /** Material names that are outer glass — fallback when the node
-     *  test misses but the material is unambiguously glass. */
+    /** Material names that are OUTER tintable glass. MUST exclude
+     *  light-cover materials (Tesla's `Glass_Lights` on the M3 is NOT
+     *  windshield glass — it's the headlight cover; tinting it like
+     *  side windows turns the front lights into red bricks).
+     *
+     *  Recommended pattern per model:
+     *   - M3 : `/^glass(_tinted)?(_fade)?$/i`  (Glass + Glass_Tinted + Glass_Tinted_Fade)
+     *   - Y  : `/^glass(_windows)?(_fade)?$/i` (Glass + Glass_Windows + Glass_Windows_Fade)
+     *
+     *  In both cases, `Glass_Lights*` and `Glass_Interior*` are
+     *  intentionally NOT matched here. */
     outerGlassMaterial: RegExp;
-    /** Subset of outer glass nodes that should get the DARKER roof
-     *  tint (panoramic roofs are bronze/black, not light grey). M3
-     *  uses `Windows_Top`/`Sunroof`; Y exports the roof as a single
-     *  mesh named `Fade` (Tesla's quirk — that's also its naming in
-     *  the source Bayberry.tscn). */
-    roofGlassNode: RegExp;
     /** Material names that are the INSIDE (cabin-side) pane of an
      *  exterior glass surface. Tesla layers windshield/door windows
      *  with `Glass` (outer) + `Glass_Interior` (inner) where the inner
@@ -201,6 +201,57 @@ export interface VehicleModelConfig {
      *  treatment (correct for M3 Highland). */
     dimmedInnerGlassMaterial?: RegExp;
   };
+
+  // ───────────────────────────────────────────────────────────────────
+  // Glass zoning — per-zone mesh classification (door / pano / trunk)
+  // ───────────────────────────────────────────────────────────────────
+  /** Maps an OUTER-glass mesh to one of three calibration zones based
+   *  on its parent node chain. Each zone has its own opacity / tint
+   *  slider in the Showroom so the user can dial the panoramic roof,
+   *  the side windows, and the trunk hatch independently.
+   *
+   *  CRITICAL: any mesh that doesn't match ANY of these patterns is
+   *  considered "unzoned" and SKIPPED by the glass routing — this is
+   *  the firewall that stops sliders from leaking onto the headlight
+   *  covers (Tesla shares the `Glass_Lights` material on M3 and the
+   *  `Glass` material on Y between body glass and light covers, so
+   *  material-name matching alone is not sufficient).
+   *
+   *  Per-model recommendations:
+   *   - M3 doorWindow : /^window_(l|r)[fr]$/i        → 4 door windows
+   *   - M3 panoroof   : /^windows_top$/i             → ALL upper glass (pano + windshield + lunette + custodes)
+   *   - Y  doorWindow : /^window_(fl|fr|rl|rr)$/i    → 4 door windows
+   *   - Y  panoroof   : /^fade$/i                    → panoramic roof + windshield + rear hatch glass
+   *   - Y  trunkGlass : /^trunk_cover(_main)?$/i     → trunk hatch outer glass (separate slider)
+   *   - Y  sharedBody : /^static_(door_)?exterior$/i → windshield primitive in Static_Exterior (treated as pano) */
+  glassZoning: {
+    /** Parent-node regex for the 4 door windows. */
+    doorWindowNode: RegExp;
+    /** Parent-node regex for the panoramic roof + windshield mesh.
+     *  Mesh that bundles pano+windshield+lunette on a single Group. */
+    panoroofNode: RegExp;
+    /** Parent-node regex for the trunk hatch outer glass.
+     *  Y only — `Trunk_Cover_Main`. Leave undefined on models where
+     *  the lunette is part of the pano (M3 Windows_Top). */
+    trunkGlassNode?: RegExp;
+    /** Parent-node regex for shared exterior groups whose glass
+     *  primitives should be treated as PANO (typically the windshield
+     *  primitive that ships unmarked inside `Static_Exterior` on Y).
+     *  Undefined on M3 where every glass mesh has a dedicated parent. */
+    sharedBodyNode?: RegExp;
+  };
+
+  // ───────────────────────────────────────────────────────────────────
+  // Nodes whose meshes must STAY HIDDEN (never visible regardless of
+  // state). Different from `hiddenNodes` (which is for one-shot scene
+  // pruning at load) — `permanentlyHiddenNodes` are re-asserted every
+  // frame via the cleanedScene memo so that VehicleLightEffects /
+  // useGroundProjections / scene-reset logic can't accidentally turn
+  // them back on. Use for "ugly leftover" geometry like the M3 high-beam
+  // cluster on Y E41 (HighBeam_Left/Right, DRL_Left/Right) which sits
+  // on the bumper at the wrong Y and ruins the front render.
+  // ───────────────────────────────────────────────────────────────────
+  permanentlyHiddenNodes?: ReadonlyArray<string>;
   /** RGB hex applied to every material matching `materialPatterns.bodyPaint`. */
   bodyPaintColor: number;
 
@@ -236,8 +287,8 @@ export interface VehicleModelConfig {
   /** Tuning for the OUTER + INNER pane treatment that the viewer
    *  applies to every glass mesh. All values are multiplicative or
    *  absolute (opacity), defaults are conservative — increase
-   *  `outerEnvMultiplier` to see more sky reflection, decrease
-   *  `outerWindowTint` to darken windows further, etc.
+   *  `outerEnvMultiplier` to see more sky reflection, decrease the
+   *  per-zone `*Tint` to darken a given zone further, etc.
    *
    *  Glossary of the three pane families the viewer recognises:
    *   - **Outer**       : the cabin-side outer layer (windshield, door
@@ -253,27 +304,38 @@ export interface VehicleModelConfig {
    *                       here IS what reads as tinted glass; we keep a
    *                       softened reflection. */
   glassFinish: {
-    /** Multiplier applied to outer glass `envMapIntensity` — dampens
-     *  sky reflections so the tint is visible. Default 0.3. */
+    /** Multiplier applied to outer glass `envMapIntensity` (ALL zones) —
+     *  dampens sky reflections so the tint is visible. Default 0.3. */
     outerEnvMultiplier: number;
-    /** Forced opacity for the panoramic roof when the GLB ships it at
-     *  alpha < 0.4 (default 0.90 = nearly black). */
-    outerRoofOpacity: number;
-    /** Forced opacity for non-roof outer glass (default 0.55). */
-    outerWindowOpacity: number;
-    /** Scalar multiplied into the panoramic roof's diffuse colour —
-     *  darker than the side windows (default 0.15). */
-    outerRoofTint: number;
-    /** Scalar multiplied into side-window / windshield diffuse
-     *  (default 0.45). */
-    outerWindowTint: number;
-    /** Final opacity of the inner mixed pane (windshield inner). Very
-     *  low so the windshield reads as see-through. Default 0.08. */
+    /** Opacity of the 4 door windows. Default 0.55. */
+    doorWindowOpacity: number;
+    /** Tint scalar multiplied into the door windows' diffuse colour
+     *  (0 = black, 1 = GLB-native colour). Default 0.45. */
+    doorWindowTint: number;
+    /** Opacity of the panoramic roof (and the windshield/lunette glass
+     *  that ships fused with it on M3 `Windows_Top` and Y `Fade`).
+     *  Default 0.90. */
+    panoroofOpacity: number;
+    /** Tint scalar for the panoramic roof zone. Default 0.15. */
+    panoroofTint: number;
+    /** Opacity of the trunk hatch outer glass (Y `Trunk_Cover_Main`).
+     *  Ignored on models without a dedicated trunk glass node (M3
+     *  bundles its lunette into Windows_Top). Default 0.85. */
+    trunkGlassOpacity: number;
+    /** Tint scalar for the trunk hatch outer glass. Default 0.30. */
+    trunkGlassTint: number;
+    /** Final opacity of the inner mixed pane (windshield inner +
+     *  front door inner). Very low so the windshield reads as see-
+     *  through. Default 0.08. */
     innerMixedOpacity: number;
     /** Multiplier on inner mixed `envMapIntensity` — kills the mirror
      *  that would otherwise reflect the HDR sky through the windshield.
      *  Default 0.02. */
     innerMixedEnvMultiplier: number;
+    /** Opacity forced on inner-solo panes (Y rear-door privacy glass).
+     *  These have no outer layer so the inner pane carries the full
+     *  tint. Default 0.85 (privacy). */
+    innerSoloOpacity: number;
     /** Multiplier on inner solo `envMapIntensity` — keeps a soft
      *  reflection so the rear windows still read as glass. Default 0.6. */
     innerSoloEnvMultiplier: number;
@@ -289,10 +351,19 @@ export interface VehicleModelConfig {
    *  (RGB hex). All required so the runtime never has to defensive-
    *  check; the Showroom override layer can supply partials. */
   lightTuning: {
+    /** Rear brake-light cluster emissive boost. Set on every node in
+     *  `brakeLightNodes`. */
     brakeIntensity: number;
     brakeColor: number;
+    /** Reverse-light boost. Set on every node in `reverseLightNodes`. */
     reverseIntensity: number;
     reverseColor: number;
+    /** Front headlight boost. Set on every node in `headlightNodes`.
+     *  On models where the headlight geometry is hidden permanently
+     *  (Y E41: the DRL and HighBeam left/right meshes are visually
+     *  broken on the bumper), this is a no-op — the slider stays in
+     *  the UI but won't move anything until a proper headlight target
+     *  is wired up. */
     headlightIntensity: number;
     headlightColor: number;
   };
@@ -469,17 +540,32 @@ export const PoppyseedConfig: VehicleModelConfig = {
   ],
   floorNodes: ['Floor', 'Ground_Plane'],
 
-  // Tesla M3 Highland materials. `Paint_*` for body, `*_Skybox`/`Glass_Lights`
-  // for HDR-reflective glass. Body paint forced to Pearl White Multi-Coat.
+  // Tesla M3 Highland materials. `Paint_*` for body.
+  //
+  // GLASS — Material+zone audit (poppyseed.glb, 2026-05):
+  //   Outer materials   : Glass, Glass_Tinted, Glass_Tinted_Fade
+  //                       (NEVER Glass_Lights — that's the headlight
+  //                       cover material; tinting it = red bricks)
+  //   Inner materials   : Glass_Interior, Glass_Interior_Tinted_Fade
+  //   Door windows      : Window_L[FR] / Window_R[FR] (4 nodes) → zone DOOR
+  //   Pano + windshield : Windows_Top (single mesh, 6 prims of
+  //                       Glass_Tinted* + Glass_Interior_Tinted_Fade)
+  //                       → ZONE PANO (the M3 fuses windshield, roof,
+  //                       lunette, custodes AND pillars into one mesh;
+  //                       there is no way to slider them separately
+  //                       without primitive-level surgery, which is
+  //                       fragile across GLB re-exports — accept the
+  //                       compromise: one slider for the whole upper
+  //                       greenhouse).
+  //   Trunk glass       : N/A (bundled into Windows_Top)
   materialPatterns: {
     bodyPaint: /^paint(_|skybox|$)/i,
-    outerGlassNode:
-      /windows_top|window_l[fr]|window_r[fr]|front_screen|rear_screen|sunroof/i,
-    outerGlassMaterial: /glass.*skybox|glass_lights/i,
-    roofGlassNode: /windows_top|sunroof/i,
-    // M3 audit confirms `Glass_Interior` + `Glass_Interior_Tinted_Fade`
-    // both ship with rough=0.01 just like Bayberry — kill the mirror.
+    outerGlassMaterial: /^glass(_tinted)?(_fade)?$/i,
     innerGlassMaterial: /^glass_interior/i,
+  },
+  glassZoning: {
+    doorWindowNode: /^window_(l|r)[fr]$/i,
+    panoroofNode: /^windows_top$/i,
   },
   bodyPaintColor: 0xf2f2f0,
   calloutHeight: 0.45,
@@ -491,12 +577,17 @@ export const PoppyseedConfig: VehicleModelConfig = {
   },
   glassFinish: {
     outerEnvMultiplier: 0.3,
-    outerRoofOpacity: 0.9,
-    outerWindowOpacity: 0.55,
-    outerRoofTint: 0.15,
-    outerWindowTint: 0.45,
+    doorWindowOpacity: 0.55,
+    doorWindowTint: 0.45,
+    panoroofOpacity: 0.9,
+    panoroofTint: 0.15,
+    // M3 has no separate trunk glass — these are kept for the type
+    // (Showroom hides the slider when the model has no trunkGlassNode).
+    trunkGlassOpacity: 0.85,
+    trunkGlassTint: 0.30,
     innerMixedOpacity: 0.08,
     innerMixedEnvMultiplier: 0.02,
+    innerSoloOpacity: 0.85,
     innerSoloEnvMultiplier: 0.6,
   },
   lightTuning: {
@@ -619,20 +710,32 @@ export const BayberryConfig: VehicleModelConfig = {
     [-2.10, 0.88, 0],
   ],
 
-  // Bayberry has ONE merged brake mesh `Brake_Light` (no per-side split)
-  // plus the optional CHMSL-on variant. The CHMSL-off variant is the
-  // "rest state" mesh and stays visible by default — when we boost
-  // emissive on the "On" mesh it doesn't matter that Off is also on,
-  // because Off is unlit anyway.
-  brakeLightNodes: ['Brake_Light', 'Brake_Lights_CHMSL_On'],
-  // Two reverse variants (EU + US plate-area lamp) — we keep both lit
-  // when in R; the US one will simply be hidden if we ever add a
-  // region picker.
-  reverseLightNodes: ['Reverse', 'Reverse_US'],
-  // Y front lights split left/right + low-beam (DRL) / high-beam.
-  // Boost DRLs only — high beams stay dark unless we later add a
-  // dedicated headlightHighOn signal.
-  headlightNodes: ['DRL_Left', 'DRL_Right'],
+  // bayberry_e41.glb audit (2026-05) — the "On" meshes are SEPARATE
+  // from the "Off" meshes. Tesla swaps visibility via the Godot
+  // animation player. We boost emissive on the "On" meshes only;
+  // the matching "Off" meshes are demoted to `permanentlyHiddenNodes`
+  // below so they never paint a black blob behind the lit version.
+  //
+  //   Rear brake cluster :
+  //     Brake_Light                  → main brake cluster (single mesh)
+  //     Brake_Lights_CHMSL_On        → centre high-mount stop lamp
+  //     Back_Left_Turn_Signal_On     → rear turn signals (red glow)
+  //     Back_Right_Turn_Signal_On
+  //   Reverse :
+  //     Reverse                      → EU reverse lamp
+  //   Front headlights : NONE that we can safely boost.
+  //     DRL_Left / DRL_Right / HighBeam_Left / HighBeam_Right are
+  //     misplaced on the bumper in this export and are
+  //     PERMANENTLY HIDDEN — the slider stays in the UI but the
+  //     headlightNodes list is empty, so the boost is a no-op.
+  brakeLightNodes: [
+    'Brake_Light',
+    'Brake_Lights_CHMSL_On',
+    'Back_Left_Turn_Signal_On',
+    'Back_Right_Turn_Signal_On',
+  ],
+  reverseLightNodes: ['Reverse'],
+  headlightNodes: [],
   groundProjectionNodes: {
     headlights: 'HeadLightProjection',
     stoplights: 'BrakeLightProjection',
@@ -642,7 +745,7 @@ export const BayberryConfig: VehicleModelConfig = {
     // NOTE: `Fade` was originally suspected as a Showroom ghost-overlay
     // and added here — that was WRONG. `Fade` is the panoramic glass
     // ROOF (Tesla's odd choice of name in Bayberry.tscn). It's tinted
-    // via materialPatterns.roofGlassNode below; keep it visible.
+    // via glassZoning.panoroofNode below; keep it visible.
 
     // Right-hand-drive variant — French market is LHD. Cuts the second
     // steering wheel poking through the dashboard.
@@ -654,47 +757,62 @@ export const BayberryConfig: VehicleModelConfig = {
     'Plate_US',
     'Left_Turn_Signal_US',
     'Right_Turn_Signal_US',
-    'Reverse_US',  // also referenced in reverseLightNodes; staying hidden
-                   // means the emissive boost is a no-op for it
+    'Reverse_US',  // EU export — US lamp permanently dark
+  ],
+  // Nodes re-asserted as hidden on every cleaned-scene pass so they
+  // can NEVER be revived by accident (light boosts, scene re-clones,
+  // showroom toggles). See VehicleTopView3D's permanently-hidden pass.
+  permanentlyHiddenNodes: [
+    // Headlight cluster fragments that Tesla left misplaced on the
+    // E41 export — they sit on the bumper and look like floating
+    // pieces of glass / metal. The user asked to hide them flat.
+    'HighBeam_Left',
+    'HighBeam_Right',
+    'DRL_Left',
+    'DRL_Right',
+    // Rear brake / CHMSL "off" variants that pair with the "On"
+    // meshes (Tesla animates visibility — without the Godot anim
+    // player both are visible at once and the cluster looks doubled).
+    'Brake_Lights_CHMSL_Off',
+    'Light_Off',
   ],
   // Y exports the studio shadow as a single word `GroundPlane`.
   floorNodes: ['GroundPlane'],
 
+  // bayberry_e41.glb audit (2026-05):
+  //
+  //   Outer glass materials:
+  //     Glass              → trunk hatch outer (Trunk_Cover_Main) + windshield (Static_Exterior)
+  //     Glass_Windows      → 4 door windows
+  //     Glass_Windows_Fade → panoramic roof + lunette merged on Fade mesh
+  //   Inner glass materials:
+  //     Glass_Interior      → windshield inner + door inner + trunk inner
+  //     Glass_Interior_Fade → pano roof inner (heavily dampened)
+  //
+  //   Glass MESH zones:
+  //     Window_FL / FR / RL / RR  → 4 door windows (DOOR zone)
+  //     Fade                      → pano + windshield + lunette (PANO zone)
+  //     Trunk_Cover_Main          → trunk hatch outer glass (TRUNK zone)
+  //     Static_Exterior           → contains windshield outer prim (PANO zone fallback)
+  //
+  //   IMPORTANT: there is NO `Glass_Lights` material on Y. The light
+  //   covers are part of the `Light`/`Cover` opaque materials so
+  //   they are naturally outside the glass routing.
   materialPatterns: {
-    // `Paint` covers the glossy body; `PaintRough` covers the matte
-    // wheel-arch trim and underbody bits that Tesla wants tinted too.
     bodyPaint: /^paint(_|rough|$)/i,
-    // Window pivot naming flipped (FL instead of LF). `Fade` is the
-    // panoramic roof glass (Tesla's quirky name — see materialPatterns
-    // .roofGlassNode below). All glass surfaces share the same node-
-    // walk logic, so listing Fade here makes its descendants get the
-    // transparency/depth-sort fix applied like the door windows.
-    outerGlassNode: /^(window_(fl|fr|rl|rr)|fade)$/i,
-    // Bayberry uses FOUR distinct glass materials:
-    //   - `Glass`                → windshield + rear hatch glass
-    //   - `Glass_Windows`        → door windows
-    //   - `Glass_Windows_Fade`   → panoramic roof (Fade node)
-    //   - `Glass_Interior*`      → dashboard / cabin glass (DON'T tint)
-    // The negative lookahead catches the first three and skips the
-    // interior set, which would otherwise look pitch black through the
-    // tinted outer glass.
-    outerGlassMaterial: /^glass(?!_interior)/i,
-    // Roof gets the darker tint. Y's roof IS the `Fade` mesh (not the
-    // M3 `Windows_Top` / `Sunroof`). Both patterns kept for safety
-    // even though only Fade exists in Bayberry.
-    roofGlassNode: /^fade$/i,
-    // Bayberry layers windshield (in Static_Exterior) and door windows
-    // with both `Glass` (outer) AND `Glass_Interior` (inner) panes.
-    // `Glass_Interior` rough=0.01 → mirror that reflects the HDR sky
-    // straight through the very transparent outer Glass (alpha 0.16),
-    // making the windshield read as bright white. Detect and dampen.
+    outerGlassMaterial: /^glass(_windows)?(_fade)?$/i,
     innerGlassMaterial: /^glass_interior/i,
-    // Only the windshield's inner pane (`Glass_Interior_Fade`, used by
-    // the Fade mesh) gets the dimmed treatment. The door-window inner
-    // panes (`Glass_Interior` on Window_FL/FR/RL/RR + Static_Exterior)
-    // must stay opaque so Tesla's factory tint reads correctly and the
-    // rear privacy glass looks black, not grey.
+    // Pano roof inner pane (Glass_Interior_Fade, alpha 0.13) needs the
+    // dimmed treatment — otherwise the pano reads as opaque grey.
     dimmedInnerGlassMaterial: /^glass_interior_fade$/i,
+  },
+  glassZoning: {
+    doorWindowNode: /^window_(fl|fr|rl|rr)$/i,
+    panoroofNode: /^fade$/i,
+    trunkGlassNode: /^trunk_cover(_main)?$/i,
+    // Static_Exterior bundles the windshield outer primitive — route
+    // it to PANO so the windshield tint slider can reach it.
+    sharedBodyNode: /^static_(door_)?exterior$/i,
   },
   bodyPaintColor: 0xf2f2f0,  // Pearl White Multi-Coat (same as M3 default)
   calloutHeight: 0.50,        // +5 cm vs M3 — Y is taller, callouts need
@@ -729,19 +847,35 @@ export const BayberryConfig: VehicleModelConfig = {
   },
   glassFinish: {
     outerEnvMultiplier: 0.3,
-    outerRoofOpacity: 0.9,
-    outerWindowOpacity: 0.55,
-    outerRoofTint: 0.15,
-    outerWindowTint: 0.45,
+    // Y door windows ship Glass_Windows alpha=0.45 → mid translucent
+    doorWindowOpacity: 0.55,
+    doorWindowTint: 0.45,
+    // Pano roof + windshield + lunette fused on Fade mesh
+    panoroofOpacity: 0.9,
+    panoroofTint: 0.15,
+    // Trunk hatch outer glass (Trunk_Cover_Main) — slightly more
+    // translucent than the pano so the brake-light cluster shines
+    // through correctly.
+    trunkGlassOpacity: 0.75,
+    trunkGlassTint: 0.35,
     innerMixedOpacity: 0.08,
     innerMixedEnvMultiplier: 0.02,
+    // Y rear privacy glass — the only pane is Glass_Interior with
+    // outer (no mat). Keep darker than front so it reads "privacy".
+    innerSoloOpacity: 0.85,
     innerSoloEnvMultiplier: 0.6,
   },
   lightTuning: {
-    brakeIntensity: 2.5,
-    brakeColor: 0xff1a1a,
-    reverseIntensity: 1.8,
+    // Bayberry rear-cluster boost cranked up vs M3 — the Y's rear
+    // lights ship as `Light` (opaque black) so they need more emissive
+    // gain to read as actual lit lamps under the HDR environment.
+    brakeIntensity: 4.0,
+    brakeColor: 0xff0000,
+    reverseIntensity: 2.5,
     reverseColor: 0xfff8e8,
+    // Headlight boost is a no-op until a proper front-light target is
+    // wired (DRL_*/HighBeam_* are permanently hidden — see above).
+    // Slider stays in the UI for parity with the M3.
     headlightIntensity: 1.4,
     headlightColor: 0xfff5e8,
   },
@@ -751,7 +885,7 @@ export const BayberryConfig: VehicleModelConfig = {
   // explicit privacy-glass material to tint, the NOMAT handler has no
   // way to know it should be darker than the front-door windows. Listing
   // the parent group names here tells it to boost opacity.
-  privacyGlassNodes: [/^Window_R[LR]$/i],
+  privacyGlassNodes: [/^Window_R[LR]$/i, /^Back_(Left|Right)_[Ww]indow$/i],
 
   openings: OPENINGS_BAYBERRY,
   // No mirrorTracks for Bayberry — Tesla fused the rear-view mirror

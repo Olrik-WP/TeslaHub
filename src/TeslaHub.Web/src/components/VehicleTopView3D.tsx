@@ -110,6 +110,10 @@ function useModelConsts() {
       CABLE_GROUND_WORLD: new THREE.Vector3(...cfg.cableGroundAnchor),
       FLOOR_NODE_NAMES: new Set(cfg.floorNodes),
       HIDDEN_NODE_NAMES: new Set(cfg.hiddenNodes),
+      // Re-asserted on every cleanedScene pass so they can never be
+      // turned back on (useful for ugly leftover meshes like Y E41's
+      // bumper-mounted DRL_*/HighBeam_* clusters).
+      PERMANENTLY_HIDDEN_NODE_NAMES: new Set(cfg.permanentlyHiddenNodes ?? []),
       CONDITIONALLY_HIDDEN_NODE_NAMES: new Set([
         cfg.groundProjectionNodes.headlights,
         cfg.groundProjectionNodes.stoplights,
@@ -140,12 +144,14 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     MODEL_URL,
     WHEEL_URL,
     HIDDEN_NODE_NAMES,
+    PERMANENTLY_HIDDEN_NODE_NAMES,
     CONDITIONALLY_HIDDEN_NODE_NAMES,
     FLOOR_NODE_NAMES,
     WHEEL_ANCHORS,
     WHEEL_FALLBACK_POSITIONS,
   } = useModelConsts();
   const debug = useContext(ShowroomDebugContext);
+  const debugGlass = debug.glass;
   const { scene: rawScene } = useGLTF(MODEL_URL);
   const wheelGltf = useGLTF(wheelsAvailable ? WHEEL_URL : MODEL_URL);
   // ^ trick: useGLTF must be called unconditionally (hook rule). When the
@@ -245,13 +251,27 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
       return parts.join('/');
     };
 
+    type WithProjInit = { __teslahub_proj_init?: boolean };
+    const sceneInit = scene as THREE.Object3D & WithProjInit;
+    const hideProjectionsOnInit = !sceneInit.__teslahub_proj_init;
+
     scene.traverse((obj) => {
       if (HIDDEN_NODE_NAMES.has(obj.name)) {
         toRemove.push(obj);
-      } else if (CONDITIONALLY_HIDDEN_NODE_NAMES.has(obj.name)) {
-        // Keep in the graph but invisible — Light effects will toggle
-        // visibility on lock/shift events at runtime.
+      } else if (PERMANENTLY_HIDDEN_NODE_NAMES.has(obj.name)) {
+        // Re-asserted EVERY pass so they can never be revived. Used
+        // for the misplaced Y E41 DRL_*/HighBeam_* clusters which
+        // sit on the bumper and look like floating headlight chunks.
         obj.visible = false;
+      } else if (CONDITIONALLY_HIDDEN_NODE_NAMES.has(obj.name)) {
+        // Hide projection nodes ONCE at first attach. After that
+        // useGroundProjections owns their `.visible` flag (D/R +
+        // lock flash). Re-running this traverse on every cleanedScene
+        // memo tick (Showroom door buttons, slider drags…) was
+        // stomping visible back to false and killing the beams.
+        if (hideProjectionsOnInit) {
+          obj.visible = false;
+        }
       }
       for (const a of WHEEL_ANCHORS) {
         if (obj.name === a.name) anchors[a.name] = obj;
@@ -266,6 +286,10 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
         });
       }
     });
+
+    if (hideProjectionsOnInit) {
+      sceneInit.__teslahub_proj_init = true;
+    }
 
     // eslint-disable-next-line no-console
     console.log(
@@ -296,25 +320,34 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     // actual mesh inside has an auto-generated name. Same for the windows
     // and windshields wrapped in Window_LF, Window_RF, Front_Screen etc.
     //
-    // OUTER_GLASS_NODE matches the parent Groups in the model hierarchy.
-    // OUTER_GLASS_MAT matches Tesla's outer glass materials.
-    // INNER_GLASS_MAT matches the cabin-side pane that Tesla layers
-    // behind every windshield/door window — those have rough≈0.01 and
-    // act as perfect mirrors, ruining the outer tint by reflecting
-    // the HDR sky.
-    // All three come from `cfg.materialPatterns` because Tesla renamed
-    // nodes and materials between M3 (`Window_LF` / `*_Skybox`) and Y
-    // (`Window_FL` / `Glass_Windows`).
-    const OUTER_GLASS_NODE = cfg.materialPatterns.outerGlassNode;
+    // GLASS ZONING — every outer-glass mesh is classified into one of
+    // three calibration zones based on its parent-node chain:
+    //
+    //   - 'door'  → 4 door windows (Window_(L|R)[FR] on M3, Window_(FL|FR|RL|RR) on Y)
+    //   - 'pano'  → panoramic roof + windshield + lunette (Windows_Top on M3, Fade + Static_Exterior on Y)
+    //   - 'trunk' → trunk hatch outer glass (Y Trunk_Cover_Main only; M3 has none)
+    //
+    // Any mesh whose material matches OUTER_GLASS_MAT but whose parent
+    // chain matches NONE of the zone regexes is left untouched — this
+    // is the firewall that stops glass sliders from leaking onto the
+    // headlight covers (Tesla shares the `Glass`/`Glass_Lights` material
+    // across body glass AND lights on both models, so material-name
+    // matching alone would tint the headlights red).
     const OUTER_GLASS_MAT = cfg.materialPatterns.outerGlassMaterial;
     const INNER_GLASS_MAT = cfg.materialPatterns.innerGlassMaterial;
-    const isInsideOuterGlass = (start: THREE.Object3D): boolean => {
+    const zoning = cfg.glassZoning;
+    type GlassZone = 'door' | 'pano' | 'trunk' | null;
+    const classifyGlassZone = (start: THREE.Object3D): GlassZone => {
       let cur: THREE.Object3D | null = start;
       while (cur) {
-        if (OUTER_GLASS_NODE.test(cur.name)) return true;
+        const n = cur.name;
+        if (zoning.doorWindowNode.test(n)) return 'door';
+        if (zoning.panoroofNode.test(n)) return 'pano';
+        if (zoning.trunkGlassNode?.test(n)) return 'trunk';
+        if (zoning.sharedBodyNode?.test(n)) return 'pano';
         cur = cur.parent;
       }
-      return false;
+      return null;
     };
     const isOnFloor = (start: THREE.Object3D): boolean => {
       let cur: THREE.Object3D | null = start;
@@ -329,9 +362,9 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
 // dark bronze, side windows lightly tinted, custodes dark). We darken
 // the original colors via multiplyScalar — keeps existing reflectance
 // and HDR highlights, just lowers the diffuse intensity.
-// Outer glass tint scalars moved into `cfg.glassFinish.outerRoofTint`
-// and `cfg.glassFinish.outerWindowTint` so the Showroom can tune them
-// per car. Defaults preserved on PoppyseedConfig / BayberryConfig.
+// Outer glass tint scalars are now driven per zone via
+// `cfg.glassFinish.{doorWindowTint,panoroofTint,trunkGlassTint}` so
+// the Showroom can dial each zone independently.
 
 // Body paint color override + matcher — sourced from cfg so each model
 // can use its own naming convention. Hex defaults to Pearl White
@@ -408,8 +441,15 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         if (OUTER_GLASS_MAT.test(n)) hasOuterMat = true;
         if (INNER_GLASS_MAT.test(n)) hasInnerMat = true;
       }
+      // Only consider OUTER presence when the mesh actually lives in a
+      // glass zone — otherwise headlight covers (which carry a `Glass`
+      // or `Glass_Lights` material on both M3 and Y) would be flagged
+      // as "outer glass parents" and pull the windshield-tint slider
+      // onto the lights via the mixed/solo role classifier.
+      const zone = classifyGlassZone(m);
+      const inGlassZone = zone !== null;
       const existing = groupFlags.get(group) ?? { hasOuter: false, hasInner: false };
-      if (hasOuterMat || isInsideOuterGlass(m)) existing.hasOuter = true;
+      if (hasOuterMat && inGlassZone) existing.hasOuter = true;
       if (hasInnerMat) existing.hasInner = true;
       groupFlags.set(group, existing);
     });
@@ -431,16 +471,12 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     scene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
-      const ROOF_GLASS_NODE = cfg.materialPatterns.roofGlassNode;
-      const isRoof = (() => {
-        let cur: THREE.Object3D | null = mesh;
-        while (cur) {
-          if (ROOF_GLASS_NODE.test(cur.name)) return true;
-          cur = cur.parent;
-        }
-        return false;
-      })();
-      const isOuter = isRoof || isInsideOuterGlass(mesh);
+      // Classify which calibration zone this mesh belongs to. Null
+      // means "not body glass" — used as the firewall below.
+      const glassZone = classifyGlassZone(mesh);
+      const isInGlassZone = glassZone !== null;
+      const isRoof = glassZone === 'pano';
+      const isTrunk = glassZone === 'trunk';
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const m of materials) {
         const mat = m as THREE.Material & {
@@ -524,7 +560,11 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             (std.roughness ?? 0) >= 0.99
           );
         })();
-        if (isGltfDefaultMat) {
+        // Only treat the GLTF default material as glass when the mesh
+        // actually lives in a glass zone — otherwise we'd convert any
+        // mesh that ships without a material (e.g. a stray light cover
+        // primitive) into a translucent grey panel.
+        if (isGltfDefaultMat && isInGlassZone) {
           // Some Tesla models (Y Juniper) ship rear-door windows as
           // privacy glass — much darker than the front side windows.
           // The GLB only marks them by parent node name, so we look up
@@ -540,19 +580,24 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             }
             return false;
           })();
-          const debugColor = debug.glass
+          const debugColor = debugGlass
             ? (isPrivacyGlass ? GLASS_DEBUG_COLORS.nomatPrivacy : GLASS_DEBUG_COLORS.nomatGlass)
             : null;
+          // Use the configured per-zone opacity so the Showroom
+          // slider can drive the privacy-glass darkness too.
+          const fallbackOpacity = isPrivacyGlass
+            ? cfg.glassFinish.innerSoloOpacity
+            : cfg.glassFinish.doorWindowOpacity;
           const glass = new THREE.MeshStandardMaterial({
             name: isPrivacyGlass ? '__TeslaHub_NoMat_PrivacyGlass' : '__TeslaHub_NoMat_Glass',
             color: debugColor ? debugColor.color : (isPrivacyGlass ? 0x080808 : 0x111111),
             metalness: 0,
             roughness: isPrivacyGlass ? 0.55 : 0.45,
             transparent: true,
-            opacity: debugColor ? debugColor.opacity : (isPrivacyGlass ? 0.85 : 0.55),
+            opacity: debugColor ? debugColor.opacity : fallbackOpacity,
             depthWrite: false,
             side: THREE.DoubleSide,
-            envMapIntensity: 0.25,
+            envMapIntensity: 0.25 * cfg.glassFinish.outerEnvMultiplier,
           });
           if (Array.isArray(mesh.material)) {
             const idx = mesh.material.indexOf(mat as THREE.Material);
@@ -622,8 +667,14 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         // and the windshield reads as an opaque grey wall.
         const isDimmedInner =
           cfg.materialPatterns.dimmedInnerGlassMaterial?.test(matName) ?? false;
+        // CRITICAL firewall: a material is routed to the OUTER branch
+        // ONLY when (a) its name matches the outer-glass material
+        // pattern AND (b) its mesh lives inside a known glass zone.
+        // Without (b), Tesla's shared `Glass`/`Glass_Lights` material
+        // would route the headlight covers through the OUTER branch
+        // and the glass sliders would tint the headlights red.
         const matIsOuter =
-          !isDimmedInner && (isOuter || OUTER_GLASS_MAT.test(matName));
+          !isDimmedInner && isInGlassZone && OUTER_GLASS_MAT.test(matName);
         if (matIsOuter) {
           const std = mat as THREE.MeshStandardMaterial;
           const glassFin = cfg.glassFinish;
@@ -632,10 +683,10 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           // material itself BEFORE any other mutation in this branch
           // (the `glass_windows_fade` override below used to run
           // FIRST and pollute std.opacity, so the snap captured our
-          // bumped opacity as the "GLB baseline" — that's why
-          // sliding outerWindowOpacity past the first tick had no
-          // visible effect: isEffectivelyOpaque flipped sides based
-          // on already-mutated state).
+          // bumped opacity as the "GLB baseline" — that's why a
+          // zone-opacity slider would become inert after the first
+          // tick: isEffectivelyOpaque flipped sides based on already-
+          // mutated state).
           //
           // baseOpacity is captured here too so the
           // "is-this-mesh-actually-glass-or-an-opaque-panel?" check
@@ -681,6 +732,21 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           // always routed to the translucent path (see above).
           const isEffectivelyOpaque = !isGlassFade && outerBase.opacity >= 0.95;
 
+          // Per-zone opacity + tint pickers — the heart of the new
+          // glass routing. Each zone has its own slider in Showroom.
+          const zoneOpacity =
+            isRoof
+              ? glassFin.panoroofOpacity
+              : isTrunk
+                ? glassFin.trunkGlassOpacity
+                : glassFin.doorWindowOpacity;
+          const zoneTint =
+            isRoof
+              ? glassFin.panoroofTint
+              : isTrunk
+                ? glassFin.trunkGlassTint
+                : glassFin.doorWindowTint;
+
           if (isEffectivelyOpaque) {
             std.transparent = false;
             std.depthWrite = true;
@@ -695,20 +761,16 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             // Higher renderOrder draws later (= on top); panoramic
             // roof sits above other glass to avoid the windshield/roof
             // flicker at the pavilion seam.
-            mesh.renderOrder = isRoof ? 3 : 2;
+            mesh.renderOrder = isRoof ? 3 : isTrunk ? 2 : 2;
             // Tesla ships `Glass` material with alpha=0.16 — far too
-            // see-through to read as tinted automotive glass. Replace
-            // with the configured opacity so the Showroom slider
-            // actually moves the visible alpha (the previous gating
-            // `if (std.opacity < 0.4)` broke after the first tick
-            // because by then std.opacity already held our bumped
-            // value, so the slider became inert). The Fade material is
-            // also routed here even though its baseOpacity is 1, since
-            // we forced isGlassFade into the translucent branch.
+            // see-through to read as tinted automotive glass. Force
+            // the per-zone opacity (door / pano / trunk) so the
+            // Showroom slider actually moves the visible alpha. The
+            // Fade material is also routed here even though its
+            // baseOpacity is 1 (isGlassFade forces the translucent
+            // branch).
             if (isGlassFade || outerBase.opacity < 0.4) {
-              std.opacity = isRoof
-                ? glassFin.outerRoofOpacity
-                : glassFin.outerWindowOpacity;
+              std.opacity = zoneOpacity;
             }
           }
 
@@ -721,20 +783,16 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             if (c.r < 0.05 && c.g < 0.05 && c.b < 0.05) {
               // GLB ships near-black — re-tint to a configurable shade
               // so we don't render an opaque void.
-              const v = isRoof
-                ? glassFin.outerRoofTint * 0.5
-                : glassFin.outerWindowTint * 0.5;
+              const v = zoneTint * 0.5;
               c.setRGB(v, v, v);
             } else {
-              c.multiplyScalar(
-                isRoof ? glassFin.outerRoofTint : glassFin.outerWindowTint,
-              );
+              c.multiplyScalar(zoneTint);
             }
           }
           // Debug colorisation — runs LAST so it takes priority.
           // Doesn't touch the snapshot, so toggling debug off in the
           // next memo pass restores the calibrated look unchanged.
-          if (debug.glass && std.color) {
+          if (debugGlass && std.color) {
             std.color.setHex(GLASS_DEBUG_COLORS.outer.color);
             std.opacity = GLASS_DEBUG_COLORS.outer.opacity;
             std.transparent = true;
@@ -744,8 +802,9 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           if (isRoof) roofFixed++;
           else windowFixed++;
           if (glassDebug.length < 48) {
+            const zoneTag = isRoof ? 'PANO' : isTrunk ? 'TRUNK' : 'DOOR';
             glassDebug.push(
-              `${isRoof ? 'ROOF' : 'WIN'} ${mesh.name || '(unnamed)'} mat="${matName}" ` +
+              `${zoneTag} ${mesh.name || '(unnamed)'} mat="${matName}" ` +
                 `opacity=${outerBase.opacity.toFixed(2)}→${isEffectivelyOpaque ? 'OPAQUE' : (std.opacity ?? 1).toFixed(2)}`,
             );
           }
@@ -799,12 +858,13 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             // `Glass_Interior` (no outer Glass_Windows layer). Killing
             // the reflection here turns them into flat black panels —
             // the mirror IS what reads as "tinted glass". Keep a
-            // softened reflection and the factory opacity so they look
-            // like the heavily tinted rear windows that ship on the Y.
+            // softened reflection and force the configured opacity so
+            // the user can dial the privacy-glass darkness.
             cloned.roughness = Math.max(cloned.roughness ?? 0.5, 0.25);
             if ('envMapIntensity' in cloned) {
               cloned.envMapIntensity = (cloned.envMapIntensity ?? 1) * glassFin.innerSoloEnvMultiplier;
             }
+            cloned.opacity = glassFin.innerSoloOpacity;
             mesh.renderOrder = 2;
           }
 
@@ -813,7 +873,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           cloned.side = THREE.DoubleSide;
 
           // Debug colorisation — same priority as outer.
-          if (debug.glass && cloned.color) {
+          if (debugGlass && cloned.color) {
             const dbg = role === 'mixed' ? GLASS_DEBUG_COLORS.innerMixed : GLASS_DEBUG_COLORS.innerSolo;
             cloned.color.setHex(dbg.color);
             cloned.opacity = dbg.opacity;
@@ -950,7 +1010,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     // VIN changes the new GLB has a different `scene` reference too,
     // but cfg is added explicitly to make the multi-model coupling
     // visible to readers.
-  }, [scene, wheelGltf.scene, wheelsAvailable, cfg, debug]);
+  }, [scene, wheelGltf.scene, wheelsAvailable, cfg, debugGlass]);
 
   // Click handler intentionally OMITTED. The 3D viewer is read-only on Home:
   // - State reflects live MQTT/TeslaMate signals via <useVehicleVisualSync>

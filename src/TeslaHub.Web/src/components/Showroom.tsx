@@ -120,6 +120,12 @@ export default function Showroom({ carId }: Props) {
   useEffect(() => {
     setDebugGlass(false);
   }, [carId]);
+  // Stable reference — an inline `{ glass: debugGlass }` on every
+  // Showroom re-render (e.g. door open/close buttons) was changing
+  // `debug` in PoppyseedModel's cleanedScene deps, re-running the
+  // whole material traverse and resetting projection nodes to
+  // visible=false WITHOUT useGroundProjections re-firing → lights gone.
+  const debugMode = useMemo(() => ({ glass: debugGlass }), [debugGlass]);
 
   // Hydrate `editedOverrides` from the saved blob on first load and
   // whenever the user switches cars. We intentionally don't depend on

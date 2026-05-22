@@ -1,27 +1,32 @@
 /**
  * Showroom — window glass calibration panel.
  *
- * Tesla's exported GLBs layer glass meshes as `Glass` (outer) +
- * `Glass_Interior` (inner) on the windshield + front door windows,
- * while rear door windows on the Y ship as `Glass_Interior` only.
- * Each layer needs different opacity / reflection settings to read
- * as proper automotive glass under the HDR sky.
+ * Tesla's exported GLBs split body glass into three calibration zones,
+ * each with its own opacity / tint slider:
  *
- * This section exposes the 8 magic numbers that previously lived as
- * hard-coded constants in VehicleTopView3D. The ↑ "Mode debug" toggle
- * colour-codes every glass mesh by its role so the user knows which
- * slider affects which pane:
+ *   - **Door windows** (4 panes)           — Window_(L|R)[FR] on M3, Window_(FL|FR|RL|RR) on Y
+ *   - **Panoramic roof + windshield**      — Windows_Top on M3, Fade on Y
+ *   - **Trunk hatch outer glass** (Y only) — Trunk_Cover_Main
  *
- *   - **Outer**        → 🔴 red       (windshield, door windows, roof)
- *   - **Inner mixed**  → 🔵 blue      (cabin-side pane behind outer)
- *   - **Inner solo**   → 🟢 green     (Y rear windows, no outer layer)
- *   - **NOMAT glass**  → 🟠 orange    (Bayberry windshield primitive)
- *   - **NOMAT privacy**→ 🟣 violet    (Y rear doors privacy glass)
+ * Plus two inner-pane zones for the cabin-side layers Tesla layers
+ * behind every outer pane:
+ *
+ *   - **Inner mixed** — pane sitting BEHIND an outer one (windshield
+ *     + front-door inner). Dampened to a faint veil so we can see
+ *     through the windshield.
+ *   - **Inner solo** — pane that is the ONLY layer on the mesh
+ *     (Y rear-door privacy glass).
+ *
+ * The "Mode debug" toggle colour-codes every glass mesh by its zone /
+ * role so the user knows which slider affects which pane.
  *
  * Wiring:
  *   - Numeric sliders write into `overrides.glassFinish` (saved).
  *   - Debug toggle is EPHEMERAL — wired through a parent-owned
  *     `debugFlags` state and passed to `<VehicleTopView3D debugMode>`.
+ *   - Trunk-glass section is hidden on models without a
+ *     `glassZoning.trunkGlassNode` (M3 bundles its lunette into the
+ *     pano mesh, so a separate slider would be misleading).
  */
 import { useState } from 'react';
 import type { ShowroomOverrides } from './showroomOverrides';
@@ -81,11 +86,11 @@ function SubSection({
 // ────────────────────────────────────────────────────────────────────
 
 const DEBUG_LEGEND: Array<{ color: string; label: string; hint: string }> = [
-  { color: '#ff0000', label: 'Outer', hint: 'Pare-brise, vitres latérales, toit' },
-  { color: '#0066ff', label: 'Inner mixed', hint: 'Côté cabine derrière l\'outer (pare-brise inner)' },
-  { color: '#00ff66', label: 'Inner solo', hint: 'Vitres arrière Y (pas d\'outer derrière)' },
-  { color: '#ff8800', label: 'NOMAT glass', hint: 'Pare-brise Y sans matériau dans le GLB' },
-  { color: '#ff00ff', label: 'NOMAT privacy', hint: 'Vitres arrière Y privacy glass' },
+  { color: '#ff0000', label: 'Outer', hint: 'Door windows, panoramic roof, windshield, trunk' },
+  { color: '#0066ff', label: 'Inner mixed', hint: 'Cabin pane behind outer (windshield inner)' },
+  { color: '#00ff66', label: 'Inner solo', hint: 'Y rear privacy glass (no outer behind)' },
+  { color: '#ff8800', label: 'NOMAT glass', hint: 'Y windshield prim shipped without material' },
+  { color: '#ff00ff', label: 'NOMAT privacy', hint: 'Y rear-door privacy glass placeholder' },
 ];
 
 export function ShowroomGlassSection({
@@ -118,6 +123,7 @@ export function ShowroomGlassSection({
   };
   const def = defaults.glassFinish;
   const overridden = !!overrides.glassFinish && Object.keys(overrides.glassFinish).length > 0;
+  const hasTrunkGlass = !!defaults.glassZoning.trunkGlassNode;
 
   return (
     <section className="space-y-3">
@@ -141,8 +147,9 @@ export function ShowroomGlassSection({
         </button>
       </div>
       <p className="text-[10px] text-[#6b7280] -mt-2">
-        Opacité, teinte, reflets des vitres. Le mode debug colore chaque
-        pane pour identifier visuellement les sliders.
+        Chaque zone (portes, toit panoramique, lunette coffre) a ses
+        propres sliders. Le mode debug colore chaque pane pour
+        identifier visuellement les sliders.
       </p>
 
       {debugGlass && (
@@ -166,7 +173,7 @@ export function ShowroomGlassSection({
       )}
 
       <SubSection
-        title="Outer (vitres extérieures)"
+        title="Global"
         defaultOpen
         rightSlot={
           overridden ? (
@@ -194,51 +201,89 @@ export function ShowroomGlassSection({
           unit="x"
         />
         <p className="text-[10px] text-[#6b7280] -mt-1">
-          Reflet ciel HDR sur les vitres. 0 = mat, 2 = miroir.
+          Reflet ciel HDR sur TOUTES les vitres extérieures. 0 = mat,
+          2 = miroir. Affecte aussi le pane privacy.
         </p>
+      </SubSection>
+
+      <SubSection title="Portes (4 vitres latérales)" defaultOpen>
         <ShowroomSlider
-          label="WinOp"
-          value={gf.outerWindowOpacity ?? def.outerWindowOpacity}
-          onChange={(n) => setField('outerWindowOpacity', n)}
-          defaultValue={def.outerWindowOpacity}
+          label="Opac"
+          value={gf.doorWindowOpacity ?? def.doorWindowOpacity}
+          onChange={(n) => setField('doorWindowOpacity', n)}
+          defaultValue={def.doorWindowOpacity}
           min={0}
           max={1}
           step={0.01}
         />
         <ShowroomSlider
-          label="WinTint"
-          value={gf.outerWindowTint ?? def.outerWindowTint}
-          onChange={(n) => setField('outerWindowTint', n)}
-          defaultValue={def.outerWindowTint}
-          min={0}
-          max={1}
-          step={0.01}
-        />
-        <ShowroomSlider
-          label="RoofOp"
-          value={gf.outerRoofOpacity ?? def.outerRoofOpacity}
-          onChange={(n) => setField('outerRoofOpacity', n)}
-          defaultValue={def.outerRoofOpacity}
-          min={0}
-          max={1}
-          step={0.01}
-        />
-        <ShowroomSlider
-          label="RoofTint"
-          value={gf.outerRoofTint ?? def.outerRoofTint}
-          onChange={(n) => setField('outerRoofTint', n)}
-          defaultValue={def.outerRoofTint}
+          label="Tint"
+          value={gf.doorWindowTint ?? def.doorWindowTint}
+          onChange={(n) => setField('doorWindowTint', n)}
+          defaultValue={def.doorWindowTint}
           min={0}
           max={1}
           step={0.01}
         />
         <p className="text-[10px] text-[#6b7280] -mt-1">
-          Tint = scalaire multiplié dans la couleur (0 = noir, 1 = teinte
-          GLB native). Roof = toit panoramique uniquement.
+          Vitres des 4 portes uniquement. Tint = 0 noir, 1 = teinte
+          GLB native.
         </p>
       </SubSection>
 
-      <SubSection title="Inner mixed (pare-brise inner)">
+      <SubSection title="Toit panoramique + pare-brise" defaultOpen>
+        <ShowroomSlider
+          label="Opac"
+          value={gf.panoroofOpacity ?? def.panoroofOpacity}
+          onChange={(n) => setField('panoroofOpacity', n)}
+          defaultValue={def.panoroofOpacity}
+          min={0}
+          max={1}
+          step={0.01}
+        />
+        <ShowroomSlider
+          label="Tint"
+          value={gf.panoroofTint ?? def.panoroofTint}
+          onChange={(n) => setField('panoroofTint', n)}
+          defaultValue={def.panoroofTint}
+          min={0}
+          max={1}
+          step={0.01}
+        />
+        <p className="text-[10px] text-[#6b7280] -mt-1">
+          M3 : Windows_Top (toit + pare-brise + lunette + custodes
+          fusionnés). Y : Fade (toit + pare-brise + lunette).
+        </p>
+      </SubSection>
+
+      {hasTrunkGlass && (
+        <SubSection title="Lunette coffre">
+          <ShowroomSlider
+            label="Opac"
+            value={gf.trunkGlassOpacity ?? def.trunkGlassOpacity}
+            onChange={(n) => setField('trunkGlassOpacity', n)}
+            defaultValue={def.trunkGlassOpacity}
+            min={0}
+            max={1}
+            step={0.01}
+          />
+          <ShowroomSlider
+            label="Tint"
+            value={gf.trunkGlassTint ?? def.trunkGlassTint}
+            onChange={(n) => setField('trunkGlassTint', n)}
+            defaultValue={def.trunkGlassTint}
+            min={0}
+            max={1}
+            step={0.01}
+          />
+          <p className="text-[10px] text-[#6b7280] -mt-1">
+            Y uniquement (Trunk_Cover_Main). Sur M3 la lunette est
+            dans le toit panoramique.
+          </p>
+        </SubSection>
+      )}
+
+      <SubSection title="Inner mixed (pane derrière outer)">
         <ShowroomSlider
           label="Opac"
           value={gf.innerMixedOpacity ?? def.innerMixedOpacity}
@@ -259,12 +304,21 @@ export function ShowroomGlassSection({
           unit="x"
         />
         <p className="text-[10px] text-[#6b7280] -mt-1">
-          Pane intérieur derrière l'outer (typique pare-brise + portes
-          avant). Garder opacité très basse pour voir à travers.
+          Pane intérieur derrière l'outer (pare-brise + portes avant).
+          Garder opacité très basse pour voir à travers.
         </p>
       </SubSection>
 
-      <SubSection title="Inner solo (vitres arrière)">
+      <SubSection title="Inner solo (privacy arrière Y)">
+        <ShowroomSlider
+          label="Opac"
+          value={gf.innerSoloOpacity ?? def.innerSoloOpacity}
+          onChange={(n) => setField('innerSoloOpacity', n)}
+          defaultValue={def.innerSoloOpacity}
+          min={0}
+          max={1}
+          step={0.01}
+        />
         <ShowroomSlider
           label="EnvMul"
           value={gf.innerSoloEnvMultiplier ?? def.innerSoloEnvMultiplier}
@@ -276,8 +330,8 @@ export function ShowroomGlassSection({
           unit="x"
         />
         <p className="text-[10px] text-[#6b7280] -mt-1">
-          Pane unique (Y rear doors). Le reflet EST ce qui rend l'effet
-          "vitre teintée". Trop bas = panneau noir plat.
+          Pane unique (vitres arrière Y privacy). Le reflet EST ce qui
+          rend l'effet "vitre teintée" — trop bas = panneau noir plat.
         </p>
       </SubSection>
     </section>
