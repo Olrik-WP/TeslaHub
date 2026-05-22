@@ -255,6 +255,28 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     const sceneInit = scene as THREE.Object3D & WithProjInit;
     const hideProjectionsOnInit = !sceneInit.__teslahub_proj_init;
 
+    // TRIM VARIANT visibility filter — Tesla packs Standard +
+    // Performance pieces into the same GLB (M3: Bumper_F_Base vs
+    // Bumper_F_Perf, Seat_Top_LF vs Seat_Top_Perf_LF, …). Without
+    // filtering both overlap and z-fight. Build two lookups:
+    //   - trimAllNodes : every node referenced by ANY trim variant
+    //   - trimActiveNodes : the subset owned by the active trim
+    // Then every traversed node whose name is in `trimAllNodes` is
+    // visible iff it's in `trimActiveNodes`.
+    const trimVariants = cfg.trimVariants;
+    const trimAllNodes = new Set<string>();
+    const trimActiveNodes = new Set<string>();
+    if (trimVariants && trimVariants.length > 0) {
+      const activeId =
+        cfg.activeTrim ?? trimVariants[0].id;
+      for (const v of trimVariants) {
+        for (const n of v.ownedNodes) trimAllNodes.add(n);
+        if (v.id === activeId) {
+          for (const n of v.ownedNodes) trimActiveNodes.add(n);
+        }
+      }
+    }
+
     scene.traverse((obj) => {
       if (HIDDEN_NODE_NAMES.has(obj.name)) {
         toRemove.push(obj);
@@ -263,6 +285,11 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
         // for the misplaced Y E41 DRL_*/HighBeam_* clusters which
         // sit on the bumper and look like floating headlight chunks.
         obj.visible = false;
+      } else if (trimAllNodes.has(obj.name)) {
+        // Mesh participates in a trim swap — visible only when its
+        // owning trim is active. Re-asserted on every pass so a
+        // Showroom trim switch updates the silhouette live.
+        obj.visible = trimActiveNodes.has(obj.name);
       } else if (CONDITIONALLY_HIDDEN_NODE_NAMES.has(obj.name)) {
         // Hide projection nodes ONCE at first attach. After that
         // useGroundProjections owns their `.visible` flag (D/R +

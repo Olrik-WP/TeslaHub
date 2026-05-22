@@ -57,6 +57,24 @@ export interface WheelFallbackPosition {
   rotY?: number;
 }
 
+/**
+ * One trim variant — a named subset of mesh nodes that defines a
+ * single configurable trim (e.g. "Standard" vs "Performance" for the
+ * M3 Highland). At render time, all nodes that appear in ANY trim are
+ * set visible only when the ACTIVE trim's `ownedNodes` includes their
+ * name. See `VehicleModelConfig.trimVariants` for the contract.
+ */
+export interface TrimVariant {
+  /** Stable identifier (lowercase, no spaces) — used as the key by
+   *  `ShowroomOverrides.trim` and the Showroom UI radio buttons. */
+  id: string;
+  /** Display label in the Showroom UI. */
+  label: string;
+  /** Node names visible ONLY when this trim is active. Nodes not
+   *  listed in ANY trim variant remain visible at all times. */
+  ownedNodes: ReadonlyArray<string>;
+}
+
 export interface VehicleModelConfig {
   // ───────────────────────────────────────────────────────────────────
   // Identification
@@ -399,6 +417,31 @@ export interface VehicleModelConfig {
   };
 
   // ───────────────────────────────────────────────────────────────────
+  // Trim variants — swap visible meshes per trim (Standard / Performance)
+  // ───────────────────────────────────────────────────────────────────
+  /** Tesla packs multiple trim levels into ONE GLB by shipping
+   *  duplicate, overlapping meshes for the pieces that differ between
+   *  trims (e.g. M3 Highland has `Bumper_F_Base` AND `Bumper_F_Perf`
+   *  both at the same world position — the Tesla Godot scene shows
+   *  only the right one via an animation player toggling visibility).
+   *
+   *  Without trim filtering, both meshes are visible at once and you
+   *  see z-fighting + double silhouettes. List each variant with the
+   *  set of nodes it OWNS — at render time, every node that appears
+   *  in ANY trim is set to `visible = (active trim owns it)`.
+   *
+   *  Nodes that are NOT mentioned in any trim are always visible
+   *  (the shared body, doors, etc.).
+   *
+   *  Leave undefined on models without per-trim mesh duplicates
+   *  (Bayberry ships separate GLBs per trim instead, so no toggling
+   *  is needed). */
+  trimVariants?: ReadonlyArray<TrimVariant>;
+  /** Active trim id. Defaults to the first entry in `trimVariants`
+   *  when unset. Override via `ShowroomOverrides.trim`. */
+  activeTrim?: string;
+
+  // ───────────────────────────────────────────────────────────────────
   // Privacy-glass nodes — extra-tinted rear windows (Tesla factory)
   // ───────────────────────────────────────────────────────────────────
   /** Node names whose `(no mat)` outer-glass primitives must be tinted
@@ -537,6 +580,38 @@ export const PoppyseedConfig: VehicleModelConfig = {
     // Plate viewport: a Godot Viewport that bakes a text label onto a
     // quad. Without the live Godot runtime it renders as a black square.
     'Plate_Viewport',
+
+    // RHD variants — Tesla ships both LHD (default `Interior_Body`,
+    // `Dashboard`, `Steering_Wheel_Spatial`, `Doorcard_*`) AND the
+    // matching RHD overlay meshes inside the same GLB. Without
+    // hiding the RHD set, you see two steering wheels poking through
+    // the dashboard, two stalks, doubled doorcards, etc. We default
+    // to LHD (France/EU market). For an RHD-market deployment you'd
+    // hide the LHD pieces instead via Showroom override.
+    'Interior_Body_RHD',
+    'Dashboard_RHD',
+    'Screen_Front_RHD',
+    'Doorcard_LF_RHD',
+    'Doorcard_RF_RHD',
+    'Steering_Wheel_RHD_Spatial',
+    'Stalk_RHD',
+
+    // US-market plate variant — France uses EU plates (Plate_EU).
+    // Without this the rear shows two stacked plates clipping into
+    // each other.
+    'Plate_US',
+
+    // NV35 audio premium pack — Tesla adds small Grille tweeter
+    // meshes to the doorcards AND a `Model3_Text_NV35` badge variant
+    // when the upgraded audio is configured. The base GLB ships them
+    // always-visible, which causes a doubled tweeter grille on every
+    // front door and a stray "Model 3" badge on the trunk. Hide by
+    // default (regular audio). When we later expose an "Audio
+    // package" toggle in the Showroom, we'll move these into a
+    // trim/option variant instead of a hard hide.
+    'Doorcard_LF_Tweeter_NV35',
+    'Doorcard_RF_Tweeter_NV35',
+    'Model3_Text_NV35',
   ],
   floorNodes: ['Floor', 'Ground_Plane'],
 
@@ -598,6 +673,58 @@ export const PoppyseedConfig: VehicleModelConfig = {
     headlightIntensity: 1.4,
     headlightColor: 0xfff5e8,
   },
+  // M3 Highland ships several interior materials as mid-grey
+  // placeholders (Decor 0.51, InteriorSeats 0.37) that read as
+  // washed-out white under the HDR environment. Repaint to Tesla
+  // "Black Interior" charcoal so the cabin looks like the real car.
+  // User can re-customise from the Showroom (e.g. cream seats).
+  interiorOverrides: [
+    { key: 'InteriorSeats', matchName: /^InteriorSeats$/i, color: 0x1a1a1a, roughness: 0.75 },
+    { key: 'InteriorSeats2', matchName: /^InteriorSeats2$/i, color: 0x1a1a1a, roughness: 0.75 },
+    { key: 'Decor', matchName: /^Decor$/i, color: 0x1a1a1a, roughness: 0.7 },
+  ],
+  // Tesla packs Standard + Performance pieces into the same GLB,
+  // overlapping at the same world position. Without trim filtering
+  // both pieces render and z-fight (bumpers, seat backs, reverse
+  // lamp). Each trim owns the meshes it must show; the other trim's
+  // meshes are hidden.
+  trimVariants: [
+    {
+      id: 'standard',
+      label: 'Standard / Long Range',
+      ownedNodes: [
+        'Bumper_F_Base',
+        'Bumper_R_Base',
+        'Bumper_R_Base_Reflector',
+        'Reverse_Light',
+        'Seat_Top_LF',
+        'Seat_Top_RF',
+        'Seat_Top_LF_Color',
+        'Seat_Top_RF_Color',
+        'Seat_Bottom_LF_Color',
+        'Seat_Bottom_RF_Color',
+      ],
+    },
+    {
+      id: 'performance',
+      label: 'Performance',
+      ownedNodes: [
+        'Bumper_F_Perf',
+        'Bumper_R_Perf',
+        'Bumper_R_Perf_Reflector',
+        'Reverse_Light_Perf',
+        'Seat_Top_Perf_LF',
+        'Seat_Top_Perf_RF',
+        'Seat_Top_Perf_LF_Color',
+        'Seat_Top_Perf_RF_Color',
+        'Seat_Bottom_Perf_LF_Color',
+        'Seat_Bottom_Perf_RF_Color',
+      ],
+    },
+  ],
+  // Default visible trim — keep Standard so existing pages without
+  // an explicit override stay on the "regular" M3 silhouette.
+  activeTrim: 'standard',
   openings: OPENINGS_POPPYSEED,
   mirrorTracks: MIRROR_TRACKS_POPPYSEED,
 };

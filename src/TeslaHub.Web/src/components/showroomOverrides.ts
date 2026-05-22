@@ -112,6 +112,11 @@ export interface ShowroomOverrides {
    *  different trim) or when the user wants to render a "what-if"
    *  configuration. */
   modelKey?: VehicleModelKey;
+  /** Active trim id (matches one of `VehicleModelConfig.trimVariants[i].id`).
+   *  Drives mesh visibility for models that pack multiple trims into
+   *  one GLB (e.g. M3 Highland: 'standard' vs 'performance').
+   *  Undefined = use the model's `defaultTrim` / first entry. */
+  trim?: string;
 
   // Camera
   cameraPose?: Partial<VehicleModelConfig['cameraPose']>;
@@ -286,6 +291,19 @@ export function mergeShowroomConfig(
     glassFinish: overrides.glassFinish
       ? { ...defaults.glassFinish, ...overrides.glassFinish }
       : defaults.glassFinish,
+
+    // Active trim — user override wins, else fall back to the
+    // model's default. We also defensively snap to the first variant
+    // if the override id doesn't exist on this model (e.g. saving
+    // 'performance' then switching to a model that doesn't define
+    // that trim).
+    activeTrim: (() => {
+      const variants = defaults.trimVariants;
+      const fallback = defaults.activeTrim ?? variants?.[0]?.id;
+      if (!overrides.trim) return fallback;
+      const exists = variants?.some((t) => t.id === overrides.trim);
+      return exists ? overrides.trim : fallback;
+    })(),
   };
 }
 

@@ -154,6 +154,79 @@ function ColorRow({ label, value, onChange, defaultValue, isOverridden }: ColorR
 }
 
 // ────────────────────────────────────────────────────────────────────
+// TRIM — Standard vs Performance (M3 packs both into a single GLB)
+// ────────────────────────────────────────────────────────────────────
+
+function TrimSection({ overrides, onChange, defaults }: Props) {
+  const variants = defaults.trimVariants;
+  // Only show when the model actually has trim variants packed in
+  // the GLB. Y Bayberry ships separate GLBs per trim — no toggling.
+  if (!variants || variants.length < 2) return null;
+
+  const activeId = defaults.activeTrim ?? variants[0].id;
+  const setTrim = (next: string | undefined) => {
+    if (next === undefined || next === variants[0].id) {
+      // Treat the FIRST variant as the "no override" baseline so the
+      // saved blob stays minimal (don't persist a trim equal to the
+      // model default).
+      const { trim: _, ...rest } = overrides;
+      void _;
+      onChange(rest);
+    } else {
+      onChange({ ...overrides, trim: next });
+    }
+  };
+  const overridden = overrides.trim !== undefined && overrides.trim !== variants[0].id;
+
+  return (
+    <SubSection
+      title="Trim"
+      defaultOpen
+      rightSlot={
+        overridden ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setTrim(undefined);
+            }}
+            className="text-[10px] text-[#6b7280] hover:text-white"
+          >
+            ↺ Reset
+          </button>
+        ) : null
+      }
+    >
+      <p className="text-[10px] text-[#6b7280] -mt-1">
+        Tesla packe plusieurs trims dans le même GLB. Le trim actif
+        définit quels pare-chocs, sièges et accessoires sont visibles
+        (les autres sont masqués pour éviter le z-fighting).
+      </p>
+      <div className="grid grid-cols-2 gap-1.5">
+        {variants.map((v) => {
+          const active = v.id === activeId;
+          return (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => setTrim(v.id)}
+              className={
+                'h-9 px-2 text-[11px] rounded-md border transition-colors ' +
+                (active
+                  ? 'bg-[#e31937] border-[#e31937] text-white font-medium'
+                  : 'bg-[#0a0a0a] border-[#2a2a2a] text-[#d4d4d4] hover:border-[#3a3a3a]')
+              }
+            >
+              {v.label}
+            </button>
+          );
+        })}
+      </div>
+    </SubSection>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
 // PEINTURE — body paint colour with Tesla preset swatches
 // ────────────────────────────────────────────────────────────────────
 
@@ -255,8 +328,8 @@ function InteriorSection({ overrides, onChange, defaults }: Props) {
       }
     >
       <p className="text-[10px] text-[#6b7280] -mt-1">
-        Repeint les matériaux placeholders Tesla (Decor / cupholder /
-        Wing visibles à travers les vitres).
+        Repeint les matériaux placeholders Tesla — sièges, panneaux
+        de portes (Decor), inserts. Visibles à travers les vitres.
       </p>
       {slots.map((slot) => {
         const override = overrides.interiorColors?.[slot.key];
@@ -417,8 +490,10 @@ export function ShowroomAestheticsSection({ overrides, onChange, defaults }: Pro
         Esthétique
       </h3>
       <p className="text-[10px] text-[#6b7280] -mt-2">
-        Peinture, intérieur, finition des jantes. Sauvegardé par voiture.
+        Trim, peinture, intérieur, finition des jantes. Sauvegardé
+        par voiture.
       </p>
+      <TrimSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <PaintSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <InteriorSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <WheelsSection overrides={overrides} onChange={onChange} defaults={defaults} />
