@@ -754,18 +754,19 @@ export const PoppyseedConfig: VehicleModelConfig = {
             'Fascia_Cam_D50',
             // Interior — D50-specific aluminium-dark Center Console
             'Center_Console_D50',
-            // Seat shells (re-asserted visible — see CRITICAL note above)
+            // Seats — REUSE the Long Range silhouette + fabric.
+            // The D50-specific `Seat_Bottom_D50_*` cushion primitives
+            // never light up in the renderer (likely a Tesla shape-key
+            // morph rather than a visibility flip), so we fall back to
+            // the same shell + cushion overlay set as `longRange`.
             'Seat_Bottom_LF',
             'Seat_Bottom_RF',
             'Seat_Top_LF',
             'Seat_Top_RF',
-            // Top colour overlay (D50 reuses LR fabric on the back-rest)
             'Seat_Top_LF_Color',
             'Seat_Top_RF_Color',
-            // D50-specific bottom cushion (mesh#79/#80, single
-            // `Plastic_Black_Seats` primitive — sits over the shell)
-            'Seat_Bottom_D50_LF',
-            'Seat_Bottom_D50_RF',
+            'Seat_Bottom_LF_Color',
+            'Seat_Bottom_RF_Color',
           ],
         },
         {

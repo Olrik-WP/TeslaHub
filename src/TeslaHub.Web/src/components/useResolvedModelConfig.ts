@@ -189,26 +189,20 @@ export function useUploadShowroomWrap(carId: number | null | undefined) {
   return useMutation({
     mutationFn: async (file: File) => {
       if (!carId) throw new Error('No carId — cannot upload wrap');
-      // Hand-roll the request: `api` helper always wraps the body in
-      // JSON which would double-encode the PNG bytes. Plain fetch +
-      // credentials:'include' carries the auth cookie, same surface
-      // as the JSON endpoints.
+      // Reuse the `api` helper so the bearer token + 401-refresh
+      // pipeline runs the same as every other authenticated call.
+      // The Content-Type override + ArrayBuffer body bypass the
+      // default JSON serialisation; the response is still JSON so
+      // api()'s `res.json()` works as-is.
       const buffer = await file.arrayBuffer();
-      const res = await fetch(`/api/vehicle/${carId}/showroom/wrap`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'Content-Type': 'image/png' },
-        body: buffer,
-      });
-      if (!res.ok) {
-        const detail = await res.text().catch(() => '');
-        throw new Error(`Upload wrap failed: ${res.status} ${detail}`);
-      }
-      return (await res.json()) as {
-        success: boolean;
-        bytes: number;
-        updatedAt: string;
-      };
+      return api<{ success: boolean; bytes: number; updatedAt: string }>(
+        `/vehicle/${carId}/showroom/wrap`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/png' },
+          body: buffer,
+        },
+      );
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: showroomQueryKey(carId) });
