@@ -1130,20 +1130,58 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
   const wrapUrl = useContext(WrapUrlContext);
   useEffect(() => {
     const targets: THREE.MeshStandardMaterial[] = [];
+    // Track the UV bounds of every body mesh that uses the Paint
+    // material — invaluable when a Tesla template wrap looks empty
+    // on the car: the Tesla wraps pack livery islands into ~30 % of
+    // the texture, so if the body UVs span an unrelated region of
+    // [0, 1]² the wrap reads as plain white/transparent.
+    let uvUMin = Infinity, uvUMax = -Infinity;
+    let uvVMin = Infinity, uvVMax = -Infinity;
+    let uvMeshCount = 0;
     cleanedScene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      let isPaintMesh = false;
       for (const m of mats) {
         const std = m as THREE.MeshStandardMaterial;
         const matName = (std as { name?: string }).name ?? '';
         // STRICT: exact match on `Paint` only. `PaintRough`, `Paint_Inner`
         // and similar variants are skipped on purpose.
-        if (matName === 'Paint') targets.push(std);
+        if (matName === 'Paint') {
+          targets.push(std);
+          isPaintMesh = true;
+        }
+      }
+      if (isPaintMesh && wrapUrl) {
+        const uvAttr = mesh.geometry?.attributes?.uv;
+        if (uvAttr && uvAttr.itemSize === 2) {
+          uvMeshCount++;
+          for (let i = 0; i < uvAttr.count; i++) {
+            const u = uvAttr.getX(i);
+            const v = uvAttr.getY(i);
+            if (u < uvUMin) uvUMin = u;
+            if (u > uvUMax) uvUMax = u;
+            if (v < uvVMin) uvVMin = v;
+            if (v > uvVMax) uvVMax = v;
+          }
+        }
       }
     });
 
     if (targets.length === 0) return;
+
+    if (wrapUrl && uvMeshCount > 0) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[Wrap] Body UV bounds across ${uvMeshCount} Paint mesh(es): ` +
+        `U ∈ [${uvUMin.toFixed(3)}, ${uvUMax.toFixed(3)}]  ` +
+        `V ∈ [${uvVMin.toFixed(3)}, ${uvVMax.toFixed(3)}]. ` +
+        `If this range collapses near a single point or sits outside ` +
+        `[0,1]², Tesla's gallery wraps will not align — design a PNG ` +
+        `that fills exactly this UV region instead.`,
+      );
+    }
 
     if (!wrapUrl) {
       // No wrap → clear any previously-applied map and restore solid colour.

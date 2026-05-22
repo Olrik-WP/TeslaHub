@@ -402,6 +402,48 @@ function WrapSection({
     });
   };
 
+  /** Inject a synthesised checker pattern as the wrap — gives the user
+   *  an immediate visual of WHERE the body UVs actually fall on the
+   *  texture. If the body reads as a clean checker, the UV pipeline is
+   *  fine and any wrap PNG with correctly-placed islands (i.e. the
+   *  user's own PNG, designed for THIS GLB) will work. If the body
+   *  reads as a flat colour, the UVs collapse to a tiny region of the
+   *  texture and Tesla's official wraps will never align. */
+  const handleTestPattern = () => {
+    setErrorMsg(null);
+    const size = 512;
+    const cell = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    for (let y = 0; y < size; y += cell) {
+      for (let x = 0; x < size; x += cell) {
+        const i = (x / cell) + (y / cell);
+        // Alternating between magenta, cyan, yellow, white — gives a
+        // recognisable pattern AND makes UV-direction obvious.
+        const colors = ['#ff3366', '#33ddff', '#ffee33', '#ffffff'];
+        ctx.fillStyle = colors[i % colors.length];
+        ctx.fillRect(x, y, cell, cell);
+      }
+    }
+    // Add some text + arrows to spot orientation (mirror / rotation).
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 96px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('TOP', size / 2, 60);
+    ctx.fillText('BOT', size / 2, size - 60);
+    ctx.fillText('L', 60, size / 2);
+    ctx.fillText('R', size - 60, size / 2);
+    const dataUrl = canvas.toDataURL('image/png');
+    onChange({
+      ...overrides,
+      wraps: { ...(overrides.wraps ?? {}), paintTextureUrl: dataUrl },
+    });
+  };
+
   const handleRemoveTemplate = () => {
     const { wraps: _, ...rest } = overrides;
     void _;
@@ -531,6 +573,18 @@ function WrapSection({
         <p className="text-[10px] text-red-400 px-1">⚠ {errorMsg}</p>
       )}
 
+      {/* Quick diagnostic — applies a coloured checker pattern as the
+          wrap. Lets the user SEE the body UV layout instantly: a clean
+          checker = UV pipeline fine, a flat colour = UVs collapse to a
+          single point (Tesla wraps will never align). */}
+      <button
+        type="button"
+        onClick={handleTestPattern}
+        className="w-full text-[10px] py-1.5 rounded border border-[#2a2a2a] text-[#9ca3af] hover:border-[#3a3a3a] hover:text-white transition-colors"
+      >
+        🧪 Tester avec un damier (vérifier les UVs du body)
+      </button>
+
       {/* Tesla official wraps — one-click presets. 20 livery examples
           shipped with the repo, picked from the `m3/` or `my/` folder
           based on the active model so the thumbnail matches the
@@ -539,6 +593,12 @@ function WrapSection({
         <div className="space-y-1">
           <p className="text-[10px] uppercase tracking-wider text-[#6b7280]">
             Wraps Tesla officiels ({templatesForModel.length})
+          </p>
+          <p className="text-[10px] text-yellow-500/80 leading-snug">
+            ⚠ Layout UV du configurateur in-car Tesla. Le GLB extrait de
+            l'API n'a pas le même unwrap → la voiture peut apparaître
+            blanche/sans wrap. Pour un rendu fiable, dépose ton propre
+            PNG conçu pour ce GLB ci-dessus.
           </p>
           <div className="grid grid-cols-4 gap-1">
             {templatesForModel.map((tpl) => {
