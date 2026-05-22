@@ -1294,7 +1294,11 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     img.onload = () => {
       if (cancelled) return;
       const tex = new THREE.Texture(img);
-      tex.flipY = true;
+      // glTF convention: textures expect Y=0 at the top of the image (flipY=false).
+      // The Tesla wrap PNG templates (custom-wraps + Skins) follow that convention
+      // since the UV1 layout in the GLB was authored against the same orientation.
+      // Forcing flipY=true was inverting front/rear on the body (hood↔trunk swap).
+      tex.flipY = false;
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.anisotropy = 8;
       tex.needsUpdate = true;
