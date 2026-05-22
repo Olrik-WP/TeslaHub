@@ -58,21 +58,39 @@ export interface WheelFallbackPosition {
 }
 
 /**
- * One trim variant — a named subset of mesh nodes that defines a
- * single configurable trim (e.g. "Standard" vs "Performance" for the
- * M3 Highland). At render time, all nodes that appear in ANY trim are
- * set visible only when the ACTIVE trim's `ownedNodes` includes their
- * name. See `VehicleModelConfig.trimVariants` for the contract.
+ * One option inside a variant axis (e.g. 'lhd' inside the
+ * `driveLayout` axis, or 'standard' inside `trim`).
  */
-export interface TrimVariant {
-  /** Stable identifier (lowercase, no spaces) — used as the key by
-   *  `ShowroomOverrides.trim` and the Showroom UI radio buttons. */
+export interface VariantOption {
+  /** Stable identifier (lowercase, no spaces). */
   id: string;
   /** Display label in the Showroom UI. */
   label: string;
-  /** Node names visible ONLY when this trim is active. Nodes not
-   *  listed in ANY trim variant remain visible at all times. */
+  /** Node names visible ONLY when THIS option is active. Nodes not
+   *  listed in ANY variant option remain visible at all times. */
   ownedNodes: ReadonlyArray<string>;
+}
+
+/**
+ * One independent configuration dimension of the model (e.g. trim,
+ * drive layout, market region, audio package). Each axis is
+ * orthogonal — picking 'rhd' on the drive axis doesn't affect the
+ * 'performance' choice on the trim axis. The Showroom UI renders
+ * one button group per axis.
+ */
+export interface VariantAxis {
+  /** Stable identifier (e.g. 'trim', 'driveLayout', 'market'). */
+  id: string;
+  /** Display label in the Showroom UI (e.g. 'Trim', 'Conduite'). */
+  label: string;
+  /** Option id selected when no Showroom override is present.
+   *  Persisted blobs only store DEVIATIONS from this default, so
+   *  switching the default later still applies cleanly to existing
+   *  saved cars. */
+  defaultOption: string;
+  /** All options for this axis. Order matters — first one is shown
+   *  on the left in the UI. */
+  options: ReadonlyArray<VariantOption>;
 }
 
 export interface VehicleModelConfig {
@@ -417,29 +435,29 @@ export interface VehicleModelConfig {
   };
 
   // ───────────────────────────────────────────────────────────────────
-  // Trim variants — swap visible meshes per trim (Standard / Performance)
+  // Variant axes — multi-dimensional mesh visibility configurator
   // ───────────────────────────────────────────────────────────────────
-  /** Tesla packs multiple trim levels into ONE GLB by shipping
-   *  duplicate, overlapping meshes for the pieces that differ between
-   *  trims (e.g. M3 Highland has `Bumper_F_Base` AND `Bumper_F_Perf`
-   *  both at the same world position — the Tesla Godot scene shows
-   *  only the right one via an animation player toggling visibility).
+  /** Tesla packs all combinations of trim / drive layout (LHD / RHD) /
+   *  market region (EU / US) / audio package into ONE GLB by shipping
+   *  duplicate overlapping meshes for every variant. Without filtering
+   *  you get two steering wheels, double bumpers, US plate + EU plate
+   *  stacked, etc.
    *
-   *  Without trim filtering, both meshes are visible at once and you
-   *  see z-fighting + double silhouettes. List each variant with the
-   *  set of nodes it OWNS — at render time, every node that appears
-   *  in ANY trim is set to `visible = (active trim owns it)`.
+   *  Each axis lists independent options; the user picks one option
+   *  per axis in the Showroom and the runtime hides every "non-active"
+   *  mesh across all axes. Storage is `{ axisId -> optionId }` so a
+   *  saved car carries e.g. `{ trim: 'performance', driveLayout: 'rhd' }`.
    *
-   *  Nodes that are NOT mentioned in any trim are always visible
+   *  Nodes that are NOT mentioned in any axis remain always visible
    *  (the shared body, doors, etc.).
    *
-   *  Leave undefined on models without per-trim mesh duplicates
-   *  (Bayberry ships separate GLBs per trim instead, so no toggling
-   *  is needed). */
-  trimVariants?: ReadonlyArray<TrimVariant>;
-  /** Active trim id. Defaults to the first entry in `trimVariants`
-   *  when unset. Override via `ShowroomOverrides.trim`. */
-  activeTrim?: string;
+   *  Leave undefined on models with no multi-variant packing (very
+   *  rare — most Tesla GLBs have at least the LHD/RHD pair). */
+  variantAxes?: ReadonlyArray<VariantAxis>;
+  /** Currently-active option per axis, merged from the Showroom
+   *  override on top of each axis's `defaultOption`. Map shape:
+   *  `{ trim: 'standard', driveLayout: 'lhd', market: 'eu' }`. */
+  activeVariants?: Record<string, string>;
 
   // ───────────────────────────────────────────────────────────────────
   // Privacy-glass nodes — extra-tinted rear windows (Tesla factory)
@@ -580,38 +598,8 @@ export const PoppyseedConfig: VehicleModelConfig = {
     // Plate viewport: a Godot Viewport that bakes a text label onto a
     // quad. Without the live Godot runtime it renders as a black square.
     'Plate_Viewport',
-
-    // RHD variants — Tesla ships both LHD (default `Interior_Body`,
-    // `Dashboard`, `Steering_Wheel_Spatial`, `Doorcard_*`) AND the
-    // matching RHD overlay meshes inside the same GLB. Without
-    // hiding the RHD set, you see two steering wheels poking through
-    // the dashboard, two stalks, doubled doorcards, etc. We default
-    // to LHD (France/EU market). For an RHD-market deployment you'd
-    // hide the LHD pieces instead via Showroom override.
-    'Interior_Body_RHD',
-    'Dashboard_RHD',
-    'Screen_Front_RHD',
-    'Doorcard_LF_RHD',
-    'Doorcard_RF_RHD',
-    'Steering_Wheel_RHD_Spatial',
-    'Stalk_RHD',
-
-    // US-market plate variant — France uses EU plates (Plate_EU).
-    // Without this the rear shows two stacked plates clipping into
-    // each other.
-    'Plate_US',
-
-    // NV35 audio premium pack — Tesla adds small Grille tweeter
-    // meshes to the doorcards AND a `Model3_Text_NV35` badge variant
-    // when the upgraded audio is configured. The base GLB ships them
-    // always-visible, which causes a doubled tweeter grille on every
-    // front door and a stray "Model 3" badge on the trunk. Hide by
-    // default (regular audio). When we later expose an "Audio
-    // package" toggle in the Showroom, we'll move these into a
-    // trim/option variant instead of a hard hide.
-    'Doorcard_LF_Tweeter_NV35',
-    'Doorcard_RF_Tweeter_NV35',
-    'Model3_Text_NV35',
+    // NOTE: RHD / US / NV35 nodes are managed by `variantAxes` below
+    // so the user can switch them per-car via the Showroom.
   ],
   floorNodes: ['Floor', 'Ground_Plane'],
 
@@ -683,48 +671,112 @@ export const PoppyseedConfig: VehicleModelConfig = {
     { key: 'InteriorSeats2', matchName: /^InteriorSeats2$/i, color: 0x1a1a1a, roughness: 0.75 },
     { key: 'Decor', matchName: /^Decor$/i, color: 0x1a1a1a, roughness: 0.7 },
   ],
-  // Tesla packs Standard + Performance pieces into the same GLB,
-  // overlapping at the same world position. Without trim filtering
-  // both pieces render and z-fight (bumpers, seat backs, reverse
-  // lamp). Each trim owns the meshes it must show; the other trim's
-  // meshes are hidden.
-  trimVariants: [
+  // Tesla packs every trim / drive layout / market region / audio
+  // package into ONE GLB by shipping duplicate overlapping meshes for
+  // every variant. Without filtering you'd see two steering wheels
+  // poking through the dashboard, doubled bumpers z-fighting, EU + US
+  // plates stacked, etc. Each axis below is independent and is
+  // controlled per-car from the Showroom.
+  variantAxes: [
     {
-      id: 'standard',
-      label: 'Standard / Long Range',
-      ownedNodes: [
-        'Bumper_F_Base',
-        'Bumper_R_Base',
-        'Bumper_R_Base_Reflector',
-        'Reverse_Light',
-        'Seat_Top_LF',
-        'Seat_Top_RF',
-        'Seat_Top_LF_Color',
-        'Seat_Top_RF_Color',
-        'Seat_Bottom_LF_Color',
-        'Seat_Bottom_RF_Color',
+      id: 'trim',
+      label: 'Trim',
+      defaultOption: 'standard',
+      options: [
+        {
+          id: 'standard',
+          label: 'Standard / Long Range',
+          ownedNodes: [
+            'Bumper_F_Base',
+            'Bumper_R_Base',
+            'Bumper_R_Base_Reflector',
+            'Reverse_Light',
+            'Seat_Top_LF',
+            'Seat_Top_RF',
+            'Seat_Top_LF_Color',
+            'Seat_Top_RF_Color',
+            'Seat_Bottom_LF_Color',
+            'Seat_Bottom_RF_Color',
+          ],
+        },
+        {
+          id: 'performance',
+          label: 'Performance',
+          ownedNodes: [
+            'Bumper_F_Perf',
+            'Bumper_R_Perf',
+            'Bumper_R_Perf_Reflector',
+            'Reverse_Light_Perf',
+            'Seat_Top_Perf_LF',
+            'Seat_Top_Perf_RF',
+            'Seat_Top_Perf_LF_Color',
+            'Seat_Top_Perf_RF_Color',
+            'Seat_Bottom_Perf_LF_Color',
+            'Seat_Bottom_Perf_RF_Color',
+          ],
+        },
       ],
     },
     {
-      id: 'performance',
-      label: 'Performance',
-      ownedNodes: [
-        'Bumper_F_Perf',
-        'Bumper_R_Perf',
-        'Bumper_R_Perf_Reflector',
-        'Reverse_Light_Perf',
-        'Seat_Top_Perf_LF',
-        'Seat_Top_Perf_RF',
-        'Seat_Top_Perf_LF_Color',
-        'Seat_Top_Perf_RF_Color',
-        'Seat_Bottom_Perf_LF_Color',
-        'Seat_Bottom_Perf_RF_Color',
+      id: 'driveLayout',
+      label: 'Conduite',
+      defaultOption: 'lhd',
+      options: [
+        {
+          id: 'lhd',
+          label: 'Gauche (LHD)',
+          ownedNodes: [
+            'Interior_Body',
+            'Dashboard',
+            'Screen_Front',
+            'Doorcard_LF',
+            'Doorcard_RF',
+            'Steering_Wheel_Spatial',
+            'Stalk',
+          ],
+        },
+        {
+          id: 'rhd',
+          label: 'Droite (RHD)',
+          ownedNodes: [
+            'Interior_Body_RHD',
+            'Dashboard_RHD',
+            'Screen_Front_RHD',
+            'Doorcard_LF_RHD',
+            'Doorcard_RF_RHD',
+            'Steering_Wheel_RHD_Spatial',
+            'Stalk_RHD',
+          ],
+        },
+      ],
+    },
+    {
+      id: 'market',
+      label: 'Marché',
+      defaultOption: 'eu',
+      options: [
+        { id: 'eu', label: 'Europe', ownedNodes: ['Plate_EU'] },
+        { id: 'us', label: 'États-Unis', ownedNodes: ['Plate_US'] },
+      ],
+    },
+    {
+      id: 'audio',
+      label: 'Audio',
+      defaultOption: 'standard',
+      options: [
+        { id: 'standard', label: 'Standard', ownedNodes: [] },
+        {
+          id: 'nv35',
+          label: 'Premium NV35',
+          ownedNodes: [
+            'Doorcard_LF_Tweeter_NV35',
+            'Doorcard_RF_Tweeter_NV35',
+            'Model3_Text_NV35',
+          ],
+        },
       ],
     },
   ],
-  // Default visible trim — keep Standard so existing pages without
-  // an explicit override stay on the "regular" M3 silhouette.
-  activeTrim: 'standard',
   openings: OPENINGS_POPPYSEED,
   mirrorTracks: MIRROR_TRACKS_POPPYSEED,
 };
@@ -873,18 +925,8 @@ export const BayberryConfig: VehicleModelConfig = {
     // and added here — that was WRONG. `Fade` is the panoramic glass
     // ROOF (Tesla's odd choice of name in Bayberry.tscn). It's tinted
     // via glassZoning.panoroofNode below; keep it visible.
-
-    // Right-hand-drive variant — French market is LHD. Cuts the second
-    // steering wheel poking through the dashboard.
-    'RHD',
-    'Doorcard_LF_RHD',
-    'Doorcard_RF_RHD',
-
-    // US-spec variants — keep EU plates + EU turn signals (amber).
-    'Plate_US',
-    'Left_Turn_Signal_US',
-    'Right_Turn_Signal_US',
-    'Reverse_US',  // EU export — US lamp permanently dark
+    // NOTE: RHD / US nodes are managed by `variantAxes` below so the
+    // user can switch them per-car via the Showroom.
   ],
   // Nodes re-asserted as hidden on every cleaned-scene pass so they
   // can NEVER be revived by accident (light boosts, scene re-clones,
@@ -1013,6 +1055,57 @@ export const BayberryConfig: VehicleModelConfig = {
   // way to know it should be darker than the front-door windows. Listing
   // the parent group names here tells it to boost opacity.
   privacyGlassNodes: [/^Window_R[LR]$/i, /^Back_(Left|Right)_[Ww]indow$/i],
+
+  // Bayberry ships its trim variants as SEPARATE GLBs (E41 / E80) so
+  // there's no `trim` axis here — picking a different trim swaps the
+  // file. What stays packed in every Bayberry GLB are the LHD/RHD and
+  // EU/US duplicates.
+  variantAxes: [
+    {
+      id: 'driveLayout',
+      label: 'Conduite',
+      defaultOption: 'lhd',
+      options: [
+        {
+          id: 'lhd',
+          label: 'Gauche (LHD)',
+          ownedNodes: ['LHD', 'Doorcard_LF_LHD', 'Doorcard_RF_LHD'],
+        },
+        {
+          id: 'rhd',
+          label: 'Droite (RHD)',
+          ownedNodes: ['RHD', 'Doorcard_LF_RHD', 'Doorcard_RF_RHD'],
+        },
+      ],
+    },
+    {
+      id: 'market',
+      label: 'Marché',
+      defaultOption: 'eu',
+      options: [
+        {
+          id: 'eu',
+          label: 'Europe',
+          ownedNodes: [
+            'Plate_EU',
+            'Left_Turn_Signal_EU',
+            'Right_Turn_Signal_EU',
+            'Reverse',
+          ],
+        },
+        {
+          id: 'us',
+          label: 'États-Unis',
+          ownedNodes: [
+            'Plate_US',
+            'Left_Turn_Signal_US',
+            'Right_Turn_Signal_US',
+            'Reverse_US',
+          ],
+        },
+      ],
+    },
+  ],
 
   openings: OPENINGS_BAYBERRY,
   // No mirrorTracks for Bayberry — Tesla fused the rear-view mirror

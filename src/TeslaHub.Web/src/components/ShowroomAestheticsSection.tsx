@@ -154,41 +154,53 @@ function ColorRow({ label, value, onChange, defaultValue, isOverridden }: ColorR
 }
 
 // ────────────────────────────────────────────────────────────────────
-// TRIM — Standard vs Performance (M3 packs both into a single GLB)
+// VARIANTS — generic multi-axis configurator
+//   Tesla packs every trim / drive layout / market region / audio
+//   package into one GLB by shipping duplicate overlapping meshes.
+//   Each axis declared on the model renders as an independent button
+//   group; the user picks one option per axis. Storage:
+//   `overrides.variants = { axisId -> optionId }`. We omit any axis
+//   whose chosen option matches the axis default so the saved blob
+//   stays minimal (it survives axis-default changes shipped later).
 // ────────────────────────────────────────────────────────────────────
 
-function TrimSection({ overrides, onChange, defaults }: Props) {
-  const variants = defaults.trimVariants;
-  // Only show when the model actually has trim variants packed in
-  // the GLB. Y Bayberry ships separate GLBs per trim — no toggling.
-  if (!variants || variants.length < 2) return null;
+function VariantAxesSection({ overrides, onChange, defaults }: Props) {
+  const axes = defaults.variantAxes;
+  if (!axes || axes.length === 0) return null;
 
-  const activeId = defaults.activeTrim ?? variants[0].id;
-  const setTrim = (next: string | undefined) => {
-    if (next === undefined || next === variants[0].id) {
-      // Treat the FIRST variant as the "no override" baseline so the
-      // saved blob stays minimal (don't persist a trim equal to the
-      // model default).
-      const { trim: _, ...rest } = overrides;
-      void _;
-      onChange(rest);
+  const setAxisOption = (axisId: string, optionId: string, defaultOption: string) => {
+    const next = { ...(overrides.variants ?? {}) };
+    if (optionId === defaultOption) {
+      delete next[axisId];
     } else {
-      onChange({ ...overrides, trim: next });
+      next[axisId] = optionId;
     }
+    onChange({
+      ...overrides,
+      variants: Object.keys(next).length > 0 ? next : undefined,
+    });
   };
-  const overridden = overrides.trim !== undefined && overrides.trim !== variants[0].id;
+
+  const resetAll = () => {
+    const { variants: _, ...rest } = overrides;
+    void _;
+    onChange(rest);
+  };
+
+  const anyOverridden =
+    !!overrides.variants && Object.keys(overrides.variants).length > 0;
 
   return (
     <SubSection
-      title="Trim"
+      title="Configuration"
       defaultOpen
       rightSlot={
-        overridden ? (
+        anyOverridden ? (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setTrim(undefined);
+              resetAll();
             }}
             className="text-[10px] text-[#6b7280] hover:text-white"
           >
@@ -198,30 +210,49 @@ function TrimSection({ overrides, onChange, defaults }: Props) {
       }
     >
       <p className="text-[10px] text-[#6b7280] -mt-1">
-        Tesla packe plusieurs trims dans le même GLB. Le trim actif
-        définit quels pare-chocs, sièges et accessoires sont visibles
-        (les autres sont masqués pour éviter le z-fighting).
+        Tesla packe trim, conduite (LHD/RHD), marché (EU/US) et options
+        dans le même GLB. Chaque choix masque les pièces dupliquées de
+        l'autre variante pour éviter le z-fighting (double volant,
+        deux plaques, etc.).
       </p>
-      <div className="grid grid-cols-2 gap-1.5">
-        {variants.map((v) => {
-          const active = v.id === activeId;
-          return (
-            <button
-              key={v.id}
-              type="button"
-              onClick={() => setTrim(v.id)}
-              className={
-                'h-9 px-2 text-[11px] rounded-md border transition-colors ' +
-                (active
-                  ? 'bg-[#e31937] border-[#e31937] text-white font-medium'
-                  : 'bg-[#0a0a0a] border-[#2a2a2a] text-[#d4d4d4] hover:border-[#3a3a3a]')
-              }
+      {axes.map((axis) => {
+        const activeId =
+          overrides.variants?.[axis.id] ?? axis.defaultOption;
+        return (
+          <div key={axis.id} className="space-y-1">
+            <p className="text-[10px] uppercase tracking-wider text-[#9ca3af] font-mono">
+              {axis.label}
+            </p>
+            <div
+              className="grid gap-1.5"
+              style={{
+                gridTemplateColumns: `repeat(${Math.min(axis.options.length, 3)}, minmax(0, 1fr))`,
+              }}
             >
-              {v.label}
-            </button>
-          );
-        })}
-      </div>
+              {axis.options.map((opt) => {
+                const active = opt.id === activeId;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() =>
+                      setAxisOption(axis.id, opt.id, axis.defaultOption)
+                    }
+                    className={
+                      'h-9 px-2 text-[11px] rounded-md border transition-colors ' +
+                      (active
+                        ? 'bg-[#e31937] border-[#e31937] text-white font-medium'
+                        : 'bg-[#0a0a0a] border-[#2a2a2a] text-[#d4d4d4] hover:border-[#3a3a3a]')
+                    }
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </SubSection>
   );
 }
@@ -490,10 +521,10 @@ export function ShowroomAestheticsSection({ overrides, onChange, defaults }: Pro
         Esthétique
       </h3>
       <p className="text-[10px] text-[#6b7280] -mt-2">
-        Trim, peinture, intérieur, finition des jantes. Sauvegardé
-        par voiture.
+        Configuration (trim, conduite, marché, audio), peinture,
+        intérieur, finition des jantes. Sauvegardé par voiture.
       </p>
-      <TrimSection overrides={overrides} onChange={onChange} defaults={defaults} />
+      <VariantAxesSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <PaintSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <InteriorSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <WheelsSection overrides={overrides} onChange={onChange} defaults={defaults} />

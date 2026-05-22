@@ -112,11 +112,16 @@ export interface ShowroomOverrides {
    *  different trim) or when the user wants to render a "what-if"
    *  configuration. */
   modelKey?: VehicleModelKey;
-  /** Active trim id (matches one of `VehicleModelConfig.trimVariants[i].id`).
-   *  Drives mesh visibility for models that pack multiple trims into
-   *  one GLB (e.g. M3 Highland: 'standard' vs 'performance').
-   *  Undefined = use the model's `defaultTrim` / first entry. */
-  trim?: string;
+  /** Per-axis option selection — drives mesh visibility for models
+   *  that pack multiple variants (trim, drive layout, market region,
+   *  audio package…) into one GLB.
+   *
+   *  Map shape: `{ axisId -> optionId }`. Only axes the user actually
+   *  changed need to be present; any axis missing from the map (or
+   *  pointing to an unknown option id) falls back to the model's
+   *  `defaultOption` for that axis. Example:
+   *  `{ trim: 'performance', driveLayout: 'rhd' }`. */
+  variants?: Record<string, string>;
 
   // Camera
   cameraPose?: Partial<VehicleModelConfig['cameraPose']>;
@@ -292,17 +297,22 @@ export function mergeShowroomConfig(
       ? { ...defaults.glassFinish, ...overrides.glassFinish }
       : defaults.glassFinish,
 
-    // Active trim — user override wins, else fall back to the
-    // model's default. We also defensively snap to the first variant
-    // if the override id doesn't exist on this model (e.g. saving
-    // 'performance' then switching to a model that doesn't define
-    // that trim).
-    activeTrim: (() => {
-      const variants = defaults.trimVariants;
-      const fallback = defaults.activeTrim ?? variants?.[0]?.id;
-      if (!overrides.trim) return fallback;
-      const exists = variants?.some((t) => t.id === overrides.trim);
-      return exists ? overrides.trim : fallback;
+    // Variant axes — for each axis declared on the model, pick the
+    // user's override option if it exists, otherwise the axis's
+    // `defaultOption`. Unknown axis ids or unknown option ids are
+    // ignored so a stale save against a refactored model never breaks
+    // the viewer.
+    activeVariants: (() => {
+      const axes = defaults.variantAxes;
+      if (!axes || axes.length === 0) return undefined;
+      const out: Record<string, string> = {};
+      for (const axis of axes) {
+        const userChoice = overrides.variants?.[axis.id];
+        const valid =
+          userChoice && axis.options.some((o) => o.id === userChoice);
+        out[axis.id] = valid ? userChoice : axis.defaultOption;
+      }
+      return out;
     })(),
   };
 }
