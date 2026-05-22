@@ -176,9 +176,12 @@ export interface ShowroomOverrides {
     /** Override the wrap source URL. When set, takes precedence over
      *  the user-uploaded wrap. Used by the Showroom "Templates Tesla"
      *  preset grid to preview one of the bundled wraps under
-     *  `/public/wraps/` without uploading it first. When unset AND a
-     *  user wrap exists on the server, the renderer falls back to
-     *  `/api/vehicle/{carId}/showroom/wrap`. */
+     *  `/public/wraps/` without uploading it first. Can also point
+     *  at a specific library upload via
+     *  `/api/vehicle/{carId}/showroom/wraps/{wrapId}` — see
+     *  `wrapPngUrlById`. When unset AND uploads exist on the server,
+     *  the renderer falls back to the most-recent upload via the
+     *  legacy `/wrap` endpoint. */
     paintTextureUrl?: string;
     /** Texture rotation in 90° steps applied around the UV centre
      *  (0.5, 0.5). One of 0/90/180/270 — degrees, counter-clockwise.
@@ -188,6 +191,31 @@ export interface ShowroomOverrides {
      *  horizontal" mental model vs Tesla's U = longitudinal). When
      *  unset, defaults to 0. */
     rotationDeg?: 0 | 90 | 180 | 270;
+    /** Per-car wrap finish — drives the shader uniforms that control
+     *  how brilliant / matte / metallic the wrap renders on the body.
+     *  Every field is OPTIONAL; missing fields fall back to the
+     *  shader defaults baked in `VehicleTopView3D.tsx` (DEFAULT_WRAP_*).
+     *  Tweaked live from the Showroom — every value change mutates the
+     *  active shader uniform directly without recompiling. */
+    finish?: {
+      /** PNG colour multiplier — compensates for the fact that Tesla's
+       *  reference shader divides the wrap by 10 then re-injects HDR
+       *  skybox brightness (which we don't have in three.js). 0.3 by
+       *  default; raise toward 1.0 to brighten a wrap that reads too
+       *  dark, lower toward 0.1 to dim a wrap that looks blown-out. */
+      brightness?: number;
+      /** PBR roughness on wrapped areas. 0 = mirror, 1 = chalk.
+       *  Default 0.25 (glossy car-paint clearcoat). */
+      roughness?: number;
+      /** PBR metalness on wrapped areas. 0 = dielectric (vinyl-like),
+       *  1 = pure metal. Default 0.5 — keeps a real metallic-flake
+       *  specular highlight without losing the wrap's colour. */
+      metalness?: number;
+      /** Environment-map reflection strength on the Paint material
+       *  while the wrap is active. Default 1.6 — we boost above 1.0
+       *  to compensate for the missing Tesla HDR skybox term. */
+      envMapIntensity?: number;
+    };
   };
 }
 

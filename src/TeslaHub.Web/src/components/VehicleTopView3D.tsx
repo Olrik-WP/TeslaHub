@@ -62,6 +62,10 @@ interface WrapContextValue {
    *  centre. Lets the user re-orient a PNG whose intended axis doesn't
    *  match Tesla's body UV unwrap. */
   rotationDeg: 0 | 90 | 180 | 270;
+  /** Live-tunable finish (brightness / roughness / metalness /
+   *  envMapIntensity). Defaults are baked into the shader; any field
+   *  passed here overrides the corresponding default uniform value. */
+  finish?: WrapFinishOverride;
 }
 const WrapUrlContext = createContext<WrapContextValue>({
   url: null,
@@ -94,6 +98,44 @@ const WrapUrlContext = createContext<WrapContextValue>({
 //   meshes so three.js samples the same corner pixel (same result).
 // ---------------------------------------------------------------------------
 
+/**
+ * Tunable wrap finish — sent to the shader as uniforms so the user
+ * can dial it in live from the Showroom (Esthétique → Wrap →
+ * Finition) without triggering a shader recompile.
+ *
+ * Defaults are tuned for a brilliant car-paint look in three.js:
+ *  - brightness 0.3 : Tesla's reference shader uses `/10.0 = 0.1`
+ *      because they reinject HDR skybox brightness via an explicit
+ *      EMISSION term we don't have in MeshStandardMaterial. 0.3
+ *      compensates so the wrap reads as the color the user authored
+ *      instead of looking 90 % darker on screen.
+ *  - roughness  0.25 : modern car paint clear-coat is glossy (0.05–0.25).
+ *      0.45 (the old default) looked like a satin matte vinyl.
+ *  - metalness  0.5  : Tesla paint defaults to metalness 0.7. The wrap
+ *      lerps DOWN to add some matte plastic flavour, but the old 0.2
+ *      killed every specular highlight. 0.5 keeps a clear flake.
+ *  - envMapIntensity 1.6 : we don't have Tesla's HDR skybox in scope so
+ *      we modestly amplify the environment reflection on wrapped Paint
+ *      meshes to recover some of the lost specular punch.
+ */
+export interface WrapFinishOverride {
+  brightness?: number;
+  roughness?: number;
+  metalness?: number;
+  envMapIntensity?: number;
+}
+
+const DEFAULT_WRAP_BRIGHTNESS = 0.3;
+const DEFAULT_WRAP_ROUGHNESS_TARGET = 0.25;
+const DEFAULT_WRAP_METALNESS_TARGET = 0.5;
+const DEFAULT_WRAP_ENVMAP_INTENSITY = 1.6;
+
+type WrapShaderUniforms = {
+  wrapBrightness: { value: number };
+  wrapRoughnessTarget: { value: number };
+  wrapMetalnessTarget: { value: number };
+};
+
 type WrapMatHookState = {
   priorOnBeforeCompile: THREE.MeshStandardMaterial['onBeforeCompile'];
   priorCacheKey: (() => string) | undefined;
@@ -101,15 +143,20 @@ type WrapMatHookState = {
   priorMapChannel: number;
   priorRoughness: number;
   priorMetalness: number;
+  priorEnvMapIntensity: number;
+  /** Refs to the live uniforms — kept so a finish change updates the
+   *  shader without forcing a recompile / cacheKey bust. */
+  wrapUniforms?: WrapShaderUniforms;
 };
 
 const WRAP_MAT_HOOK_KEY = '__teslahubWrapHook';
 const WRAP_UV1_PATCHED_KEY = '__teslahubWrapUv1Patched';
 
 // Faithful port of opaque_skybox.shader's body — adapted to three.js
-// MeshStandardMaterial's chunk system. Note: Tesla's `/ 10.0` divisor is
-// passed as a uniform (`wrapBrightness`) so we can tweak it without
-// recompiling, and so the cacheKey can stay stable per material.
+// MeshStandardMaterial's chunk system. The three tunable knobs
+// (brightness / roughness target / metalness target) are passed as
+// uniforms so Showroom sliders can mutate them live without burning a
+// new shader program.
 const MAP_FRAGMENT_REPLACE = `#ifdef USE_MAP
 	vec4 wrapSample = texture2D( map, vMapUv );
 	#ifdef DECODE_VIDEO_TEXTURE
@@ -118,23 +165,13 @@ const MAP_FRAGMENT_REPLACE = `#ifdef USE_MAP
 	diffuseColor.rgb = mix( diffuseColor.rgb, wrapSample.rgb * wrapBrightness, wrapSample.a );
 #endif`;
 
-// Tesla pushes roughness all the way to 0.9 + metallic to 0 in opaque_skybox,
-// but they ALSO add an `EMISSION += skytxt * v_up` term that re-injects
-// skybox brightness into the matte wrap so it doesn't look dead. three.js
-// MeshStandardMaterial already gives us PBR environment lighting via the
-// scene env map, but the headroom is smaller than Tesla's HDR pipeline.
-// We compromise by mixing roughness only to 0.55 (satin paint, not chalk)
-// and metallic to 0.15 (keeps a slight metallic-flake highlight).
-const WRAP_ROUGHNESS_TARGET = 0.45;
-const WRAP_METALNESS_TARGET = 0.2;
-
 const ROUGHNESS_FRAGMENT_REPLACE = `float roughnessFactor = roughness;
 #ifdef USE_ROUGHNESSMAP
 	vec4 texelRoughness = texture2D( roughnessMap, vRoughnessMapUv );
 	roughnessFactor *= texelRoughness.g;
 #endif
 #ifdef USE_MAP
-	roughnessFactor = mix( roughnessFactor, ${WRAP_ROUGHNESS_TARGET.toFixed(2)}, texture2D( map, vMapUv ).a );
+	roughnessFactor = mix( roughnessFactor, wrapRoughnessTarget, texture2D( map, vMapUv ).a );
 #endif`;
 
 const METALNESS_FRAGMENT_REPLACE = `float metalnessFactor = metalness;
@@ -143,7 +180,7 @@ const METALNESS_FRAGMENT_REPLACE = `float metalnessFactor = metalness;
 	metalnessFactor *= texelMetalness.b;
 #endif
 #ifdef USE_MAP
-	metalnessFactor = mix( metalnessFactor, ${WRAP_METALNESS_TARGET.toFixed(2)}, texture2D( map, vMapUv ).a );
+	metalnessFactor = mix( metalnessFactor, wrapMetalnessTarget, texture2D( map, vMapUv ).a );
 #endif`;
 
 function meshHasWrapUv(geometry: THREE.BufferGeometry | undefined): boolean {
@@ -184,6 +221,7 @@ function matWrapHook(mat: THREE.MeshStandardMaterial): WrapMatHookState {
       priorMapChannel: mat.map?.channel ?? 0,
       priorRoughness: mat.roughness,
       priorMetalness: mat.metalness,
+      priorEnvMapIntensity: mat.envMapIntensity,
     };
   }
   return bag[WRAP_MAT_HOOK_KEY]!;
@@ -192,6 +230,7 @@ function matWrapHook(mat: THREE.MeshStandardMaterial): WrapMatHookState {
 function installTeslaWrapShader(
   mat: THREE.MeshStandardMaterial,
   wrapTex: THREE.Texture,
+  finish?: WrapFinishOverride,
 ) {
   const hook = matWrapHook(mat);
 
@@ -202,17 +241,30 @@ function installTeslaWrapShader(
   // render with the right finish.
   mat.roughness = 0.1;
   mat.metalness = 0.7;
+  mat.envMapIntensity = finish?.envMapIntensity ?? DEFAULT_WRAP_ENVMAP_INTENSITY;
+
+  // Build the uniform objects ONCE per install and keep refs on the
+  // hook so subsequent finish changes can mutate `.value` directly
+  // without busting the cacheKey / triggering a recompile.
+  const uniforms: WrapShaderUniforms = {
+    wrapBrightness: { value: finish?.brightness ?? DEFAULT_WRAP_BRIGHTNESS },
+    wrapRoughnessTarget: { value: finish?.roughness ?? DEFAULT_WRAP_ROUGHNESS_TARGET },
+    wrapMetalnessTarget: { value: finish?.metalness ?? DEFAULT_WRAP_METALNESS_TARGET },
+  };
+  hook.wrapUniforms = uniforms;
 
   const priorCompile = hook.priorOnBeforeCompile;
   mat.onBeforeCompile = (shader, renderer) => {
     priorCompile?.(shader, renderer);
-    // Tesla's `/ 10.0` HDR compensation. Exposed as a uniform so we
-    // can A/B-test alternate values without changing the cache key.
-    shader.uniforms.wrapBrightness = { value: 1.0 / 10.0 };
+    shader.uniforms.wrapBrightness = uniforms.wrapBrightness;
+    shader.uniforms.wrapRoughnessTarget = uniforms.wrapRoughnessTarget;
+    shader.uniforms.wrapMetalnessTarget = uniforms.wrapMetalnessTarget;
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <common>',
       `#include <common>
-uniform float wrapBrightness;`,
+uniform float wrapBrightness;
+uniform float wrapRoughnessTarget;
+uniform float wrapMetalnessTarget;`,
     );
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <map_fragment>',
@@ -231,6 +283,28 @@ uniform float wrapBrightness;`,
   mat.needsUpdate = true;
 }
 
+/**
+ * Live-tweak the wrap finish on an already-wrapped material. Cheap:
+ * mutates the existing uniform values directly so the renderer picks
+ * the new look on the next frame without recompiling the shader.
+ * No-op if `installTeslaWrapShader` hasn't run on this material yet.
+ */
+function updateWrapFinish(
+  mat: THREE.MeshStandardMaterial,
+  finish: WrapFinishOverride | undefined,
+) {
+  const bag = mat as THREE.MeshStandardMaterial & { [WRAP_MAT_HOOK_KEY]?: WrapMatHookState };
+  const hook = bag[WRAP_MAT_HOOK_KEY];
+  if (!hook?.wrapUniforms) return;
+  hook.wrapUniforms.wrapBrightness.value =
+    finish?.brightness ?? DEFAULT_WRAP_BRIGHTNESS;
+  hook.wrapUniforms.wrapRoughnessTarget.value =
+    finish?.roughness ?? DEFAULT_WRAP_ROUGHNESS_TARGET;
+  hook.wrapUniforms.wrapMetalnessTarget.value =
+    finish?.metalness ?? DEFAULT_WRAP_METALNESS_TARGET;
+  mat.envMapIntensity = finish?.envMapIntensity ?? DEFAULT_WRAP_ENVMAP_INTENSITY;
+}
+
 function clearTeslaWrapShader(mat: THREE.MeshStandardMaterial, paintHex: number) {
   const bag = mat as THREE.MeshStandardMaterial & { [WRAP_MAT_HOOK_KEY]?: WrapMatHookState };
   const hook = bag[WRAP_MAT_HOOK_KEY];
@@ -241,6 +315,7 @@ function clearTeslaWrapShader(mat: THREE.MeshStandardMaterial, paintHex: number)
     if (mat.map) mat.map.channel = hook.priorMapChannel;
     mat.roughness = hook.priorRoughness;
     mat.metalness = hook.priorMetalness;
+    mat.envMapIntensity = hook.priorEnvMapIntensity;
     delete bag[WRAP_MAT_HOOK_KEY];
   } else {
     mat.onBeforeCompile = () => {};
@@ -1310,7 +1385,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
   //   Tesla Car Browser-style UI.
 
   // ── Custom body wrap (Tesla PaintSkybox / opaque_skybox.shader) ───
-  const { url: wrapUrl } = useContext(WrapUrlContext);
+  const { url: wrapUrl, finish: wrapFinish } = useContext(WrapUrlContext);
   useEffect(() => {
     const targets: THREE.MeshStandardMaterial[] = [];
     const paintMeshes: THREE.Mesh[] = [];
@@ -1388,11 +1463,13 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       const uniqueTargets = [...new Set(targets)];
       for (const mat of uniqueTargets) {
         mat.color.setHex(cfg.bodyPaintColor);
-        installTeslaWrapShader(mat, tex);
+        installTeslaWrapShader(mat, tex, wrapFinish);
       }
       console.log(
         `[Wrap] Applied opaque_skybox.shader port on ${uniqueTargets.length} ` +
-        `unique Paint material(s) (channel=1, brightness=0.1, rough→0.9, metal→0).`,
+        `unique Paint material(s) (channel=1, brightness=${(wrapFinish?.brightness ?? DEFAULT_WRAP_BRIGHTNESS).toFixed(2)}, ` +
+        `rough→${(wrapFinish?.roughness ?? DEFAULT_WRAP_ROUGHNESS_TARGET).toFixed(2)}, ` +
+        `metal→${(wrapFinish?.metalness ?? DEFAULT_WRAP_METALNESS_TARGET).toFixed(2)}).`,
       );
     };
     img.onerror = () => console.warn(`[Wrap] Image load failed: ${wrapUrl.slice(0, 80)}`);
@@ -1405,7 +1482,47 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         loadedTex.dispose();
       }
     };
+    // wrapFinish is intentionally OUT of the deps array: changing a
+    // slider would otherwise re-fetch the PNG and re-allocate the
+    // texture (slow + flicker). The separate effect below mutates the
+    // shader uniforms in place when wrapFinish changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cleanedScene, wrapUrl, cfg.bodyPaintColor]);
+
+  // Live-sync the wrap finish uniforms. Mutates the existing uniforms
+  // on every Paint material — cheap (no texture reload, no shader
+  // recompile) so the user can drag the sliders and see the result on
+  // the next frame.
+  const wrapBrightness = wrapFinish?.brightness;
+  const wrapRoughness = wrapFinish?.roughness;
+  const wrapMetalness = wrapFinish?.metalness;
+  const wrapEnvMapIntensity = wrapFinish?.envMapIntensity;
+  useEffect(() => {
+    if (!wrapUrl) return;
+    cleanedScene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) {
+        const std = m as THREE.MeshStandardMaterial;
+        if ((std as { name?: string }).name === 'Paint') {
+          updateWrapFinish(std, {
+            brightness: wrapBrightness,
+            roughness: wrapRoughness,
+            metalness: wrapMetalness,
+            envMapIntensity: wrapEnvMapIntensity,
+          });
+        }
+      }
+    });
+  }, [
+    cleanedScene,
+    wrapUrl,
+    wrapBrightness,
+    wrapRoughness,
+    wrapMetalness,
+    wrapEnvMapIntensity,
+  ]);
 
   return (
     <>
@@ -1689,16 +1806,46 @@ export default function VehicleTopView3D({ vehicle, localOverrides, showroomMode
   //   3. null — render solid paint via `cfg.bodyPaintColor`.
   const wrapOverride = extras.wraps?.paintTextureUrl;
   const wrapRotation = extras.wraps?.rotationDeg ?? 0;
+  const wrapFinish = extras.wraps?.finish;
+  // Destructure to scalar deps so useMemo doesn't rebuild when the
+  // user re-saves an unrelated override (e.g. wheel offsets).
+  const wrapBrightness = wrapFinish?.brightness;
+  const wrapRoughness = wrapFinish?.roughness;
+  const wrapMetalness = wrapFinish?.metalness;
+  const wrapEnvMapIntensity = wrapFinish?.envMapIntensity;
   const wrapValue = useMemo<WrapContextValue>(() => {
-    if (wrapOverride) return { url: wrapOverride, rotationDeg: wrapRotation };
+    const finish: WrapFinishOverride | undefined =
+      wrapBrightness !== undefined ||
+      wrapRoughness !== undefined ||
+      wrapMetalness !== undefined ||
+      wrapEnvMapIntensity !== undefined
+        ? {
+            brightness: wrapBrightness,
+            roughness: wrapRoughness,
+            metalness: wrapMetalness,
+            envMapIntensity: wrapEnvMapIntensity,
+          }
+        : undefined;
+    if (wrapOverride) return { url: wrapOverride, rotationDeg: wrapRotation, finish };
     if (wrapExists && vehicle.carId) {
       return {
         url: wrapPngUrl(vehicle.carId, updatedAt ?? undefined),
         rotationDeg: wrapRotation,
+        finish,
       };
     }
-    return { url: null, rotationDeg: wrapRotation };
-  }, [wrapOverride, wrapRotation, wrapExists, vehicle.carId, updatedAt]);
+    return { url: null, rotationDeg: wrapRotation, finish };
+  }, [
+    wrapOverride,
+    wrapRotation,
+    wrapExists,
+    vehicle.carId,
+    updatedAt,
+    wrapBrightness,
+    wrapRoughness,
+    wrapMetalness,
+    wrapEnvMapIntensity,
+  ]);
   // eslint-disable-next-line no-console
   console.log(
     `[Wrap] outer resolved — override=${wrapOverride ? wrapOverride.slice(0, 40) + '…' : 'none'} | wrapExists=${wrapExists} | rotation=${wrapRotation}° | wrapUrl=${wrapValue.url ? wrapValue.url.slice(0, 60) + '…' : 'null'}`,

@@ -512,6 +512,32 @@ function WrapSection({
     onChange(rest);
   };
 
+  /**
+   * Patch one field of `wraps.finish`. Passing `undefined` removes
+   * the field (back to the shader default); passing a number stores
+   * the override. If the resulting finish has no keys left, drop the
+   * whole `finish` sub-object so the saved blob stays minimal.
+   */
+  const patchFinish = <K extends keyof NonNullable<NonNullable<ShowroomOverrides['wraps']>['finish']>>(
+    key: K,
+    value: number | undefined,
+  ) => {
+    const prevWraps = overrides.wraps ?? {};
+    const prevFinish = prevWraps.finish ?? {};
+    const nextFinish = { ...prevFinish };
+    if (value === undefined) {
+      delete nextFinish[key];
+    } else {
+      nextFinish[key] = value;
+    }
+    const finishHasKeys = Object.keys(nextFinish).length > 0;
+    const nextWraps = { ...prevWraps, finish: finishHasKeys ? nextFinish : undefined };
+    if (!finishHasKeys) delete nextWraps.finish;
+    onChange({ ...overrides, wraps: nextWraps });
+  };
+
+  const finish = overrides.wraps?.finish;
+
   const activeModelKey = (defaults.key as 'poppyseed' | 'bayberry') ?? 'poppyseed';
   // Tesla ships per-model UV mapping for each wrap — the same livery
   // PNG looks different on M3 vs Y because the underlying UV layouts
@@ -664,6 +690,77 @@ function WrapSection({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Wrap finish — live shader-uniform sliders. Only meaningful
+          when a wrap is active; we keep the section visible at all
+          times so the user can pre-tune values before applying a
+          wrap (cheap, no shader recompile on adjust). */}
+      {hasWrap && (
+        <div className="space-y-2 p-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded-md">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] uppercase tracking-wider text-[#9ca3af] font-medium">
+              Finition du wrap
+            </p>
+            {finish && Object.keys(finish).length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = { ...(overrides.wraps ?? {}) };
+                  delete next.finish;
+                  onChange({ ...overrides, wraps: next });
+                }}
+                title="Revenir aux valeurs par défaut"
+                className="text-[10px] text-[#6b7280] hover:text-white"
+              >
+                ↺ Reset
+              </button>
+            )}
+          </div>
+          <p className="text-[10px] text-[#6b7280] leading-snug -mt-1">
+            Mat / sombre ? Monte la brillance et la métallisation,
+            baisse la rugosité. Tesla utilise un terme HDR qu'on
+            n'a pas en three.js — ces curseurs compensent.
+          </p>
+          <ShowroomSlider
+            label="Brillance"
+            value={finish?.brightness ?? 0.3}
+            onChange={(v) => patchFinish('brightness', v)}
+            defaultValue={0.3}
+            min={0.05}
+            max={1}
+            step={0.01}
+            unit="x"
+          />
+          <ShowroomSlider
+            label="Rugosité"
+            value={finish?.roughness ?? 0.25}
+            onChange={(v) => patchFinish('roughness', v)}
+            defaultValue={0.25}
+            min={0}
+            max={1}
+            step={0.01}
+          />
+          <ShowroomSlider
+            label="Métallisation"
+            value={finish?.metalness ?? 0.5}
+            onChange={(v) => patchFinish('metalness', v)}
+            defaultValue={0.5}
+            min={0}
+            max={1}
+            step={0.01}
+          />
+          <ShowroomSlider
+            label="Reflets HDR"
+            value={finish?.envMapIntensity ?? 1.6}
+            onChange={(v) => patchFinish('envMapIntensity', v)}
+            defaultValue={1.6}
+            min={0}
+            max={4}
+            step={0.05}
+            unit="x"
+          />
         </div>
       )}
 
