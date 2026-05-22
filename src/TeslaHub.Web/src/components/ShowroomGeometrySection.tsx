@@ -18,6 +18,7 @@
 import { useState } from 'react';
 import type { ShowroomOverrides, WheelCorner } from './showroomOverrides';
 import type { VehicleModelConfig } from './vehicleModelConfig';
+import type { ShowroomVisualState } from './showroomVisualState';
 import {
   ShowroomSlider,
   ShowroomVec3Slider,
@@ -32,9 +33,22 @@ interface Props {
    *  when an override field is undefined, and as the target of the
    *  "reset to default" buttons. */
   defaults: VehicleModelConfig;
+  /** Ephemeral visual state (sentry toggle, doors, charging…) —
+   *  only needed by sub-sections that expose a quick toggle to
+   *  preview live calibration (e.g. the Sentry cameras section
+   *  flashing red orbs while you drag the XYZ sliders). */
+  visualState?: ShowroomVisualState;
+  /** Setter for the ephemeral visual state. */
+  onVisualChange?: (next: ShowroomVisualState) => void;
 }
 
-export function ShowroomGeometrySection({ overrides, onChange, defaults }: Props) {
+export function ShowroomGeometrySection({
+  overrides,
+  onChange,
+  defaults,
+  visualState,
+  onVisualChange,
+}: Props) {
   return (
     <section className="space-y-3">
       <h3 className="text-xs uppercase tracking-wider text-[#9ca3af] font-medium">
@@ -47,7 +61,13 @@ export function ShowroomGeometrySection({ overrides, onChange, defaults }: Props
       <WheelsSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <ChargePortSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <CableSection overrides={overrides} onChange={onChange} defaults={defaults} />
-      <SentryCamerasSection overrides={overrides} onChange={onChange} defaults={defaults} />
+      <SentryCamerasSection
+        overrides={overrides}
+        onChange={onChange}
+        defaults={defaults}
+        visualState={visualState}
+        onVisualChange={onVisualChange}
+      />
       <CameraSection overrides={overrides} onChange={onChange} defaults={defaults} />
     </section>
   );
@@ -415,11 +435,27 @@ const SENTRY_CAMERA_LABELS: ReadonlyArray<string> = [
   'Hayon (au-dessus plaque)',
 ];
 
-function SentryCamerasSection({ overrides, onChange, defaults }: Props) {
+function SentryCamerasSection({
+  overrides,
+  onChange,
+  defaults,
+  visualState,
+  onVisualChange,
+}: Props) {
   const defaultsCams = defaults.sentryCameraPositions as ReadonlyArray<
     [number, number, number]
   >;
   if (!defaultsCams || defaultsCams.length === 0) return null;
+
+  // Quick toggle for the Sentinelle pulse — usually buried under
+  // Visuels, but you can't calibrate camera positions without seeing
+  // the red orbs, so we mirror the toggle right next to the sliders.
+  const sentryOn = !!visualState?.sentryMode;
+  const canToggleSentry = !!visualState && !!onVisualChange;
+  const toggleSentry = () => {
+    if (!visualState || !onVisualChange) return;
+    onVisualChange({ ...visualState, sentryMode: !visualState.sentryMode });
+  };
 
   const overrideCams = overrides.sentryCameraPositions;
   // Reconstruct the active list slot-by-slot — overrideCams may have
@@ -471,24 +507,44 @@ function SentryCamerasSection({ overrides, onChange, defaults }: Props) {
     <SubSection
       title={`Caméras Sentry (${defaultsCams.length})`}
       rightSlot={
-        overridden ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              resetAll();
-            }}
-            className="text-[10px] text-[#6b7280] hover:text-white"
-          >
-            ↺ Reset
-          </button>
-        ) : null
+        <div className="flex items-center gap-2">
+          {canToggleSentry && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleSentry();
+              }}
+              title={sentryOn ? 'Masquer les points rouges' : 'Afficher les points rouges'}
+              className={
+                'text-[10px] px-2 py-0.5 rounded border transition-colors ' +
+                (sentryOn
+                  ? 'border-red-500/60 bg-red-500/15 text-red-300 hover:bg-red-500/25'
+                  : 'border-[#2a2a2a] text-[#9ca3af] hover:border-red-500/40 hover:text-red-300')
+              }
+            >
+              {sentryOn ? '● Sentinelle ON' : '○ Sentinelle OFF'}
+            </button>
+          )}
+          {overridden ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                resetAll();
+              }}
+              className="text-[10px] text-[#6b7280] hover:text-white"
+            >
+              ↺ Reset
+            </button>
+          ) : null}
+        </div>
       }
     >
       <p className="text-[10px] text-[#6b7280] -mt-1">
         Les points rouges pulsants qui apparaissent quand la Sentinelle
-        est activée. Active le toggle « Sentinelle » dans la section
-        Visuels pour les voir pendant le calage.
+        est activée. Utilise le bouton ci-dessus pour les afficher
+        pendant le calage.
       </p>
       {defaultsCams.map((def, idx) => {
         const isOverridden = !eq(current[idx], def);

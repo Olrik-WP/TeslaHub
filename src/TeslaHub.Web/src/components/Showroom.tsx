@@ -430,6 +430,8 @@ export default function Showroom({ carId }: Props) {
             overrides={editedOverrides}
             onChange={setEditedOverrides}
             defaults={defaults}
+            visualState={visualState}
+            onVisualChange={setVisualState}
           />
 
           <div className="h-px bg-[#1a1a1a]" />

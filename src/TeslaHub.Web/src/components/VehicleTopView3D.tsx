@@ -1158,39 +1158,61 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       return;
     }
 
-    const loader = new THREE.TextureLoader();
-    loader.setCrossOrigin('anonymous');
+    // Load the PNG through an Image + Canvas so we can FLATTEN any
+    // transparent regions onto a white background BEFORE handing the
+    // bytes to three.js. This matters because Tesla's official wrap
+    // PNGs are RGBA with `alpha = 0` on every non-livery pixel — when
+    // sampled by a `MeshStandardMaterial` whose `alphaMode = OPAQUE`,
+    // the alpha channel is ignored and the underlying RGB on those
+    // pixels is (0, 0, 0). The car would then render almost
+    // completely BLACK with only the livery islands showing colour.
+    // Pre-multiplying onto white sidesteps the issue entirely and
+    // makes the body read as solid white where the wrap is empty,
+    // matching Tesla's in-car configurator behaviour.
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
     let cancelled = false;
     let loadedTex: THREE.Texture | null = null;
-    loader.load(
-      wrapUrl,
-      (tex) => {
-        if (cancelled) {
-          tex.dispose();
-          return;
-        }
-        loadedTex = tex;
-        // glTF authoring convention: textures live in linear UV with
-        // origin at top-left, sRGB for baseColor. Tesla's templates
-        // follow the same convention so we match it here.
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.flipY = false;
-        for (const mat of targets) {
-          // Dispose any previously-loaded wrap on the same material
-          // to avoid leaking GPU memory between successive uploads.
-          if (mat.map && mat.map !== tex) mat.map.dispose();
-          mat.map = tex;
-          // Neutral white tint so the PNG colours render unmodified.
-          mat.color.setHex(0xffffff);
-          mat.needsUpdate = true;
-        }
-      },
-      undefined,
-      (err) => {
+    img.onload = () => {
+      if (cancelled) return;
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
         // eslint-disable-next-line no-console
-        console.warn(`[Wrap] failed to load ${wrapUrl}:`, err);
-      },
-    );
+        console.warn('[Wrap] 2D context unavailable, aborting wrap');
+        return;
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      // PNG image convention is origin = top-left; three.js wants
+      // bottom-left for shaders → flipY = true (the default for
+      // CanvasTexture, set explicitly here for documentation).
+      tex.flipY = true;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
+      tex.needsUpdate = true;
+      loadedTex = tex;
+
+      for (const mat of targets) {
+        if (mat.map && mat.map !== tex) mat.map.dispose();
+        mat.map = tex;
+        // Neutral white tint so the PNG colours render unmodified.
+        mat.color.setHex(0xffffff);
+        mat.needsUpdate = true;
+      }
+    };
+    img.onerror = (err) => {
+      // eslint-disable-next-line no-console
+      console.warn(`[Wrap] failed to load ${wrapUrl}:`, err);
+    };
+    img.src = wrapUrl;
 
     return () => {
       cancelled = true;
