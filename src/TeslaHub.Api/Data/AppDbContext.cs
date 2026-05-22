@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<ChargingCostOverride> ChargingCostOverrides => Set<ChargingCostOverride>();
     public DbSet<CarImage> CarImages => Set<CarImage>();
     public DbSet<CarShowroomConfig> CarShowroomConfigs => Set<CarShowroomConfig>();
+    public DbSet<CarShowroomWrap> CarShowroomWraps => Set<CarShowroomWrap>();
     public DbSet<TeslaAccount> TeslaAccounts => Set<TeslaAccount>();
     public DbSet<TeslaVehicle> TeslaVehicles => Set<TeslaVehicle>();
     public DbSet<TeslaKeyPair> TeslaKeyPairs => Set<TeslaKeyPair>();
@@ -45,6 +46,11 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<CarShowroomConfig>()
             .HasIndex(c => c.CarId)
             .IsUnique();
+
+        // Multiple uploaded wraps per car: index on CarId is NOT unique.
+        // Sorted lookups (newest first) are the only access pattern.
+        modelBuilder.Entity<CarShowroomWrap>()
+            .HasIndex(w => new { w.CarId, w.UploadedAt });
 
         modelBuilder.Entity<TeslaAccount>()
             .HasIndex(t => t.TeslaUserId)

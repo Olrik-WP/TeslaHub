@@ -56,23 +56,44 @@ public static class ShowroomEndpoints
         group.MapPut("/{carId:int}/showroom", SaveShowroomConfig);
         group.MapDelete("/{carId:int}/showroom", DeleteShowroomConfig);
 
-        // Custom wrap PNG (separate URL so the GET-config endpoint
-        // stays cheap and the renderer can fetch the PNG on its own).
+        // ─── Custom wraps ────────────────────────────────────────
         //
-        // The READ side is intentionally anonymous: three.js loads the
-        // texture via a plain `<img>` element which doesn't forward
-        // the JWT bearer token (it only sends cookies, but our auth
-        // pipeline expects the bearer). Switching to a fetch + blob
-        // round-trip would add complexity for no real benefit — the
-        // PNG is a per-car visual chrome, not sensitive data, and the
-        // carId is an internal identifier the caller has to know
-        // ahead of time. The WRITE / DELETE sides keep auth so only
-        // the owner can mutate the wrap.
-        group.MapGet("/{carId:int}/showroom/wrap", GetShowroomWrap)
+        // The READ sides are intentionally anonymous: three.js loads
+        // the texture via a plain `<img>` element which doesn't
+        // forward the JWT bearer token (it only sends cookies, but
+        // our auth pipeline expects the bearer). Switching to a
+        // fetch + blob round-trip would add complexity for no real
+        // benefit — the PNG is a per-car visual chrome, not
+        // sensitive data. The WRITE / DELETE sides keep auth so
+        // only the owner can mutate the wrap library.
+        //
+        // Multi-wraps endpoints (preferred):
+        //   GET  /wraps          → list all uploads (no blobs)
+        //   POST /wraps?name=…   → add a new upload (returns id)
+        //   GET  /wraps/{wrapId} → stream the PNG (anonymous)
+        //   DELETE /wraps/{wrapId} → delete one upload
+        //   DELETE /wraps          → delete ALL uploads for the car
+        //
+        // Legacy single-wrap endpoints (kept for backwards-compat
+        // with older bundles still in browser cache — they now
+        // alias the most-recent upload):
+        //   GET  /wrap           → stream the most-recent PNG
+        //   PUT  /wrap           → upload a new wrap (named "Uploaded wrap")
+        //   DELETE /wrap         → delete ALL uploads
+        group.MapGet("/{carId:int}/showroom/wraps", ListShowroomWraps)
              .AllowAnonymous();
-        group.MapPut("/{carId:int}/showroom/wrap", SaveShowroomWrap)
+        group.MapPost("/{carId:int}/showroom/wraps", AddShowroomWrap)
              .DisableAntiforgery();
-        group.MapDelete("/{carId:int}/showroom/wrap", DeleteShowroomWrap);
+        group.MapGet("/{carId:int}/showroom/wraps/{wrapId:int}", GetShowroomWrapById)
+             .AllowAnonymous();
+        group.MapDelete("/{carId:int}/showroom/wraps/{wrapId:int}", DeleteShowroomWrapById);
+        group.MapDelete("/{carId:int}/showroom/wraps", DeleteAllShowroomWraps);
+
+        group.MapGet("/{carId:int}/showroom/wrap", GetShowroomWrapLegacy)
+             .AllowAnonymous();
+        group.MapPut("/{carId:int}/showroom/wrap", SaveShowroomWrapLegacy)
+             .DisableAntiforgery();
+        group.MapDelete("/{carId:int}/showroom/wrap", DeleteAllShowroomWraps);
     }
 
     private static async Task<IResult> GetShowroomConfig(int carId, AppDbContext db)
@@ -87,9 +108,26 @@ public static class ShowroomEndpoints
             {
                 c.ConfigJson,
                 c.UpdatedAt,
-                WrapBytes = c.WrapPng == null ? 0 : c.WrapPng.Length,
             })
             .FirstOrDefaultAsync();
+
+        // Fetch the wrap LIBRARY in the same round-trip so the
+        // Showroom gallery can render every previously-uploaded
+        // wrap on first paint (no extra fetch). We deliberately do
+        // not load the PNG bytes here — the renderer fetches each
+        // PNG on demand from /wraps/{wrapId}.
+        var wraps = await db.CarShowroomWraps
+            .AsNoTracking()
+            .Where(w => w.CarId == carId)
+            .OrderByDescending(w => w.UploadedAt)
+            .Select(w => new ShowroomWrapDto
+            {
+                Id = w.Id,
+                Name = w.Name,
+                SizeBytes = w.SizeBytes,
+                UploadedAt = w.UploadedAt,
+            })
+            .ToListAsync();
 
         // No row = no override = caller falls back to the repo defaults.
         // We return an empty object rather than 404 so the frontend's
@@ -101,7 +139,8 @@ public static class ShowroomEndpoints
                 CarId = carId,
                 Config = new Dictionary<string, object>(),
                 UpdatedAt = null,
-                WrapExists = false,
+                WrapExists = wraps.Count > 0,
+                Wraps = wraps,
             });
         }
 
@@ -127,7 +166,8 @@ public static class ShowroomEndpoints
             CarId = carId,
             Config = parsed,
             UpdatedAt = row.UpdatedAt,
-            WrapExists = row.WrapBytes > 0,
+            WrapExists = wraps.Count > 0,
+            Wraps = wraps,
         });
     }
 
@@ -207,37 +247,40 @@ public static class ShowroomEndpoints
         return Results.Ok(new { success = true });
     }
 
-    // ─── Custom wrap PNG ──────────────────────────────────────────
+    // ─── Custom wraps (multi-upload library) ─────────────────────
 
     /// <summary>
-    /// Stream the per-car body wrap PNG. 404 when no wrap is set so
-    /// the frontend's `<img>` fallback / texture-loading error handler
-    /// kicks in cleanly. Cache headers are intentionally short — the
-    /// user can upload a new wrap any time and expect the viewer to
-    /// pick it up on the next page load.
+    /// List every uploaded wrap PNG for a car (metadata only — the
+    /// PNG bytes are streamed from <see cref="GetShowroomWrapById"/>
+    /// on demand). Sorted by most recent first so the gallery's
+    /// "newest" tile is the one that just got dropped in.
     /// </summary>
-    private static async Task<IResult> GetShowroomWrap(int carId, AppDbContext db)
+    private static async Task<IResult> ListShowroomWraps(int carId, AppDbContext db)
     {
-        var png = await db.CarShowroomConfigs
+        var wraps = await db.CarShowroomWraps
             .AsNoTracking()
-            .Where(c => c.CarId == carId)
-            .Select(c => c.WrapPng)
-            .FirstOrDefaultAsync();
-
-        if (png == null || png.Length == 0)
-            return Results.NotFound();
-
-        return Results.File(png, "image/png");
+            .Where(w => w.CarId == carId)
+            .OrderByDescending(w => w.UploadedAt)
+            .Select(w => new ShowroomWrapDto
+            {
+                Id = w.Id,
+                Name = w.Name,
+                SizeBytes = w.SizeBytes,
+                UploadedAt = w.UploadedAt,
+            })
+            .ToListAsync();
+        return Results.Ok(wraps);
     }
 
     /// <summary>
-    /// Upload / replace the per-car body wrap PNG. Accepts the raw
-    /// image bytes in the request body (`Content-Type: image/png`).
-    /// We validate the PNG magic header so we don't store random
-    /// garbage that would later fail to decode in three.js.
+    /// Add a new wrap PNG to the car's library. Accepts the raw
+    /// image bytes in the body (`Content-Type: image/png`). The
+    /// `name` query parameter is the user-displayable label (we
+    /// sanitise / cap it server-side). Returns the freshly created
+    /// row so the client can pin it as the active wrap.
     /// </summary>
-    private static async Task<IResult> SaveShowroomWrap(
-        int carId, HttpRequest request, AppDbContext db)
+    private static async Task<IResult> AddShowroomWrap(
+        int carId, HttpRequest request, AppDbContext db, string? name)
     {
         using var ms = new MemoryStream();
         await request.Body.CopyToAsync(ms);
@@ -263,50 +306,149 @@ public static class ShowroomEndpoints
             return Results.BadRequest(new { error = "File is not a valid PNG" });
         }
 
-        var row = await db.CarShowroomConfigs.FirstOrDefaultAsync(c => c.CarId == carId);
-        if (row == null)
+        var safeName = SanitizeWrapName(name);
+        var now = DateTime.UtcNow;
+        var entity = new CarShowroomWrap
         {
-            // Create a config row alongside the wrap — the row's
-            // ConfigJson stays "{}" if the user hasn't touched any
-            // slider yet, which is the documented "no override" shape.
-            db.CarShowroomConfigs.Add(new CarShowroomConfig
-            {
-                CarId = carId,
-                ConfigJson = "{}",
-                WrapPng = raw,
-                UpdatedAt = DateTime.UtcNow,
-            });
-        }
-        else
-        {
-            row.WrapPng = raw;
-            row.UpdatedAt = DateTime.UtcNow;
-        }
-
+            CarId = carId,
+            Name = safeName,
+            PngBytes = raw,
+            SizeBytes = raw.Length,
+            UploadedAt = now,
+        };
+        db.CarShowroomWraps.Add(entity);
         await db.SaveChangesAsync();
-        return Results.Ok(new
+
+        return Results.Ok(new ShowroomWrapDto
         {
-            success = true,
-            bytes = raw.Length,
-            updatedAt = DateTime.UtcNow,
+            Id = entity.Id,
+            Name = entity.Name,
+            SizeBytes = entity.SizeBytes,
+            UploadedAt = entity.UploadedAt,
         });
     }
 
     /// <summary>
-    /// Remove the wrap PNG for a car (reset to plain paint). We DO
-    /// keep the rest of the showroom config — only the wrap column
-    /// is nulled out.
+    /// Stream a single wrap PNG by its database id. The id is
+    /// embedded in the renderer URL so cache busting works
+    /// naturally (a deleted wrap returns 404 and the client falls
+    /// back to plain paint).
     /// </summary>
-    private static async Task<IResult> DeleteShowroomWrap(int carId, AppDbContext db)
+    private static async Task<IResult> GetShowroomWrapById(
+        int carId, int wrapId, AppDbContext db)
     {
-        var row = await db.CarShowroomConfigs.FirstOrDefaultAsync(c => c.CarId == carId);
-        if (row != null && row.WrapPng != null)
+        var png = await db.CarShowroomWraps
+            .AsNoTracking()
+            .Where(w => w.CarId == carId && w.Id == wrapId)
+            .Select(w => w.PngBytes)
+            .FirstOrDefaultAsync();
+
+        if (png == null || png.Length == 0)
+            return Results.NotFound();
+
+        return Results.File(png, "image/png");
+    }
+
+    /// <summary>
+    /// Delete a single wrap from the library. The Showroom config
+    /// row stays untouched (the user may still have non-wrap
+    /// tweaks saved).
+    /// </summary>
+    private static async Task<IResult> DeleteShowroomWrapById(
+        int carId, int wrapId, AppDbContext db)
+    {
+        var row = await db.CarShowroomWraps
+            .FirstOrDefaultAsync(w => w.CarId == carId && w.Id == wrapId);
+        if (row != null)
         {
-            row.WrapPng = null;
-            row.UpdatedAt = DateTime.UtcNow;
+            db.CarShowroomWraps.Remove(row);
             await db.SaveChangesAsync();
         }
         return Results.Ok(new { success = true });
+    }
+
+    /// <summary>
+    /// Drop the WHOLE wrap library for a car. The Showroom config
+    /// row stays around (only the bound wraps are removed).
+    /// Returns 200 even when the library was already empty so the
+    /// frontend's "reset" button is idempotent.
+    /// </summary>
+    private static async Task<IResult> DeleteAllShowroomWraps(int carId, AppDbContext db)
+    {
+        var rows = await db.CarShowroomWraps
+            .Where(w => w.CarId == carId)
+            .ToListAsync();
+        if (rows.Count > 0)
+        {
+            db.CarShowroomWraps.RemoveRange(rows);
+            await db.SaveChangesAsync();
+        }
+        return Results.Ok(new { success = true });
+    }
+
+    // ─── Legacy single-wrap endpoints (backwards-compat) ─────────
+    //
+    // Old frontend bundles still in browser cache (or third-party
+    // clients) call /wrap (no plural). We alias those to the new
+    // library so they keep working until everyone has refreshed.
+
+    /// <summary>
+    /// Legacy GET — streams the MOST RECENT uploaded wrap so old
+    /// bundles still see something when they hit /wrap with no id.
+    /// </summary>
+    private static async Task<IResult> GetShowroomWrapLegacy(int carId, AppDbContext db)
+    {
+        var png = await db.CarShowroomWraps
+            .AsNoTracking()
+            .Where(w => w.CarId == carId)
+            .OrderByDescending(w => w.UploadedAt)
+            .Select(w => w.PngBytes)
+            .FirstOrDefaultAsync();
+
+        if (png == null || png.Length == 0)
+            return Results.NotFound();
+
+        return Results.File(png, "image/png");
+    }
+
+    /// <summary>
+    /// Legacy PUT — adds the upload to the new library under a
+    /// default name. Old bundles will then re-render with their
+    /// upload still visible.
+    /// </summary>
+    private static async Task<IResult> SaveShowroomWrapLegacy(
+        int carId, HttpRequest request, AppDbContext db)
+    {
+        return await AddShowroomWrap(carId, request, db, name: "Uploaded wrap");
+    }
+
+    /// <summary>
+    /// Strip path separators and exotic characters from the user-
+    /// supplied wrap name, fall back to "wrap", and cap at 80 chars
+    /// so the column constraint is never violated.
+    /// </summary>
+    private static string SanitizeWrapName(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return "wrap";
+
+        var trimmed = raw.Trim();
+        var sb = new System.Text.StringBuilder(trimmed.Length);
+        foreach (var ch in trimmed)
+        {
+            if (char.IsLetterOrDigit(ch)
+                || ch == ' ' || ch == '-' || ch == '_' || ch == '.'
+                || ch == '(' || ch == ')')
+            {
+                sb.Append(ch);
+            }
+        }
+
+        var cleaned = sb.ToString().Trim();
+        if (string.IsNullOrEmpty(cleaned))
+            return "wrap";
+
+        return cleaned.Length <= 80 ? cleaned : cleaned[..80];
     }
 }
 
@@ -322,9 +464,27 @@ public record ShowroomConfigDto
     public Dictionary<string, object> Config { get; init; } = new();
     public DateTime? UpdatedAt { get; init; }
     /// <summary>
-    /// True when a custom body wrap PNG has been uploaded for this
-    /// car. The PNG itself is served on a separate endpoint
-    /// (`/vehicle/{carId}/showroom/wrap`) to keep this response small.
+    /// True as soon as <see cref="Wraps"/> has at least one entry.
+    /// Kept around for older bundles still in browser cache that
+    /// only inspect this boolean before showing the upload widget.
     /// </summary>
     public bool WrapExists { get; init; }
+    /// <summary>
+    /// Library of every wrap PNG the user has uploaded for this car,
+    /// most-recent first. The bytes are NOT included here — the
+    /// renderer fetches each PNG from /wraps/{id} on demand.
+    /// </summary>
+    public IReadOnlyList<ShowroomWrapDto> Wraps { get; init; } =
+        Array.Empty<ShowroomWrapDto>();
+}
+
+/// <summary>
+/// One entry in a car's wrap library — metadata only.
+/// </summary>
+public record ShowroomWrapDto
+{
+    public int Id { get; init; }
+    public string Name { get; init; } = "wrap";
+    public int SizeBytes { get; init; }
+    public DateTime UploadedAt { get; init; }
 }

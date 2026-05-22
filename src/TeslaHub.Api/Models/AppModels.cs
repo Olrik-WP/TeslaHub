@@ -279,16 +279,59 @@ public class CarShowroomConfig
     public string ConfigJson { get; set; } = "{}";
 
     /// <summary>
-    /// Optional custom body wrap as a raw PNG byte array. Stored in the
-    /// SAME row as the rest of the showroom config (instead of in the
-    /// jsonb blob) so the GET-config endpoint stays small/fast — the
-    /// PNG is served on its own URL via the dedicated wrap endpoints.
-    /// Limited at the API layer to ~1 MB (Tesla's own configurator limit
-    /// for /Wraps PNGs on the in-car USB workflow).
+    /// DEPRECATED — legacy single-wrap column kept for backwards
+    /// compatibility while old clients are migrating. New writes go
+    /// into the dedicated <see cref="CarShowroomWrap"/> table (see
+    /// migration AddCarShowroomWraps). Reads still fall back to this
+    /// column when no row exists in the new table, but the next
+    /// write empties it out for good. Will be dropped in a follow-up
+    /// migration once every cached client has refreshed.
     /// </summary>
     public byte[]? WrapPng { get; set; }
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// One uploaded wrap PNG per row — the user can stack as many wraps
+/// as they want per vehicle and switch between them from the
+/// Showroom gallery without losing the previous ones (Tesla's
+/// in-car workflow only ever holds ONE wrap on USB, but the
+/// in-app store lets us be more generous).
+///
+/// Layout:
+///   - `CarId` is the same TeslaMate-side car identifier used
+///     everywhere else in TeslaHub. Multiple wraps per car: there is
+///     an index on CarId (NOT unique).
+///   - `Name` is the user-displayable label derived from the upload
+///     file name (e.g. `MyGreenWrap.png` → `MyGreenWrap`). We sanitise
+///     it server-side so DB rows always have a printable, short label.
+///   - `PngBytes` is the raw PNG byte array, validated to start with
+///     the PNG magic header. Same 1 MB hard cap as the legacy column.
+///   - `SizeBytes` mirrors `PngBytes.Length` so the LIST endpoint can
+///     report sizes without loading the BLOBs.
+///   - `UploadedAt` lets the gallery sort by most-recent-first.
+/// </summary>
+public class CarShowroomWrap
+{
+    [Key]
+    public int Id { get; set; }
+
+    public int CarId { get; set; }
+
+    [MaxLength(80)]
+    public string Name { get; set; } = "wrap";
+
+    /// <summary>Raw PNG bytes (validated at the API layer).</summary>
+    public byte[] PngBytes { get; set; } = Array.Empty<byte>();
+
+    /// <summary>
+    /// Mirror of <see cref="PngBytes"/>.Length so list queries can
+    /// avoid touching the BLOB column.
+    /// </summary>
+    public int SizeBytes { get; set; }
+
+    public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
 }
 
 // ─── DTOs ──────────────────────────────────────────────────────

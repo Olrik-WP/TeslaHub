@@ -125,8 +125,8 @@ const MAP_FRAGMENT_REPLACE = `#ifdef USE_MAP
 // scene env map, but the headroom is smaller than Tesla's HDR pipeline.
 // We compromise by mixing roughness only to 0.55 (satin paint, not chalk)
 // and metallic to 0.15 (keeps a slight metallic-flake highlight).
-const WRAP_ROUGHNESS_TARGET = 0.55;
-const WRAP_METALNESS_TARGET = 0.15;
+const WRAP_ROUGHNESS_TARGET = 0.45;
+const WRAP_METALNESS_TARGET = 0.2;
 
 const ROUGHNESS_FRAGMENT_REPLACE = `float roughnessFactor = roughness;
 #ifdef USE_ROUGHNESSMAP
