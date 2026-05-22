@@ -579,6 +579,23 @@ function WrapSection({
         mates). Format Tesla : 1024×1024 max, 1 MB max.
       </p>
 
+      {/* Couleur visible là où le PNG est transparent (alpha = 0) —
+          intérieurs de portes, montants, zones sans UV wrap. */}
+      {hasWrap && (
+        <div className="space-y-2 p-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded-md">
+          <p className="text-[10px] uppercase tracking-wider text-[#9ca3af] font-medium">
+            Couleur de fond du wrap
+          </p>
+          <BodyPaintPicker
+            overrides={overrides}
+            onChange={onChange}
+            defaults={defaults}
+            label="Peinture sous le wrap"
+            hint="Le wrap ne couvre que les zones opaques du PNG. Partout ailleurs (bord intérieur des portes, montants…) c'est cette couleur qui s'affiche — idéal pour harmoniser avec l'intérieur."
+          />
+        </div>
+      )}
+
       {/* Drag & drop upload zone — every drop ADDS to the library
           and the new entry becomes the active wrap automatically. */}
       {carId ? (
@@ -836,7 +853,16 @@ function WrapSection({
 // PEINTURE — body paint colour with Tesla preset swatches
 // ────────────────────────────────────────────────────────────────────
 
-function PaintSection({ overrides, onChange, defaults }: Props) {
+/** Shared colour picker + Tesla palette. Used for full-body paint
+ *  (no wrap) and for the wrap "background" colour (zones where the
+ *  PNG alpha is transparent — door jambs, pillars, etc.). */
+function BodyPaintPicker({
+  overrides,
+  onChange,
+  defaults,
+  label = 'Carrosserie',
+  hint,
+}: Props & { label?: string; hint?: string }) {
   const current = overrides.bodyPaintColor ?? defaults.bodyPaintColor;
   const setColor = (next: number | undefined) => {
     if (next === undefined) {
@@ -849,9 +875,12 @@ function PaintSection({ overrides, onChange, defaults }: Props) {
   };
 
   return (
-    <SubSection title="Peinture" defaultOpen>
+    <>
+      {hint && (
+        <p className="text-[10px] text-[#6b7280] leading-snug -mt-1">{hint}</p>
+      )}
       <ColorRow
-        label="Carrosserie"
+        label={label}
         value={current}
         onChange={setColor}
         defaultValue={defaults.bodyPaintColor}
@@ -882,6 +911,14 @@ function PaintSection({ overrides, onChange, defaults }: Props) {
           })}
         </div>
       </div>
+    </>
+  );
+}
+
+function PaintSection({ overrides, onChange, defaults }: Props) {
+  return (
+    <SubSection title="Peinture" defaultOpen>
+      <BodyPaintPicker overrides={overrides} onChange={onChange} defaults={defaults} />
     </SubSection>
   );
 }
@@ -1104,11 +1141,8 @@ export function ShowroomAestheticsSection({
   carId,
   wraps,
 }: AestheticsProps) {
-  // Wrap and solid paint are mutually exclusive. When a wrap is active
-  // (template OR uploaded), hide the paint colour picker — its picker
-  // would be visually meaningless (the wrap overrides the colour).
-  // "Active" here means either an explicit paintTextureUrl OR an
-  // implicit fallback to the most-recent upload.
+  // Sans wrap : section Peinture complète. Avec wrap : la couleur de
+  // fond est dans WrapSection (zones transparentes du PNG).
   const wrapActive =
     !!overrides.wraps?.paintTextureUrl || (!!carId && wraps.length > 0);
 

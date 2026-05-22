@@ -1482,11 +1482,27 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         loadedTex.dispose();
       }
     };
-    // wrapFinish is intentionally OUT of the deps array: changing a
-    // slider would otherwise re-fetch the PNG and re-allocate the
-    // texture (slow + flicker). The separate effect below mutates the
-    // shader uniforms in place when wrapFinish changes.
+    // wrapFinish + bodyPaintColor are intentionally OUT of the deps
+    // array: changing a slider or the background paint would otherwise
+    // re-fetch the PNG and re-allocate the texture (slow + flicker).
+    // Separate effects below mutate uniforms / mat.color in place.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cleanedScene, wrapUrl]);
+
+  // Live-sync background paint under the wrap (transparent PNG areas).
+  useEffect(() => {
+    if (!wrapUrl) return;
+    cleanedScene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) {
+        const std = m as THREE.MeshStandardMaterial;
+        if ((std as { name?: string }).name === 'Paint') {
+          std.color.setHex(cfg.bodyPaintColor);
+        }
+      }
+    });
   }, [cleanedScene, wrapUrl, cfg.bodyPaintColor]);
 
   // Live-sync the wrap finish uniforms. Mutates the existing uniforms
