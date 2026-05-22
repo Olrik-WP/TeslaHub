@@ -10,8 +10,16 @@ Tesla officiels** gallery.
 ```
 public/wraps/
 ├── m3/   ← 20 PNGs cloned from custom-wraps/model3-2024-base/example
-└── my/   ← 20 PNGs cloned from custom-wraps/modely-2025-premium/example
+└── my/   ← 20 PNGs cloned from custom-wraps/modely-2025-base/example
 ```
+
+**IMPORTANT — match the GLB exactly :** Tesla ships a DIFFERENT UV1
+layout for every trim of the Y (`modely-2025-base`,
+`modely-2025-performance`, `modely-2025-premium`, `modely-l`). Our
+bundled `BayberryE41.glb` is the **Y Juniper base 2025** export, so the
+UV1 islands match `modely-2025-base` ONLY. Pulling examples from
+`modely-2025-premium` (or any other trim) produces a wrap that decals
+on the wrong panels — the bonnet ends up on the doors, etc.
 
 Each PNG carries the SAME file name across the two folders (e.g.
 `Acid_Drip.png`), but Tesla maps body UVs differently per model so
@@ -33,8 +41,8 @@ When `teslamotors/custom-wraps` ships new examples, sync them:
 # clone or pull custom-wraps somewhere, then:
 $src = 'D:\GIT-Local\custom-wraps'
 $dst = 'src\TeslaHub.Web\public\wraps'
-Copy-Item "$src\model3-2024-base\example\*.png"       "$dst\m3\" -Force
-Copy-Item "$src\modely-2025-premium\example\*.png"    "$dst\my\" -Force
+Copy-Item "$src\model3-2024-base\example\*.png"  "$dst\m3\" -Force
+Copy-Item "$src\modely-2025-base\example\*.png"  "$dst\my\" -Force
 ```
 
 If file names change, mirror the new list in `TESLA_WRAP_FILES`

@@ -118,13 +118,23 @@ const MAP_FRAGMENT_REPLACE = `#ifdef USE_MAP
 	diffuseColor.rgb = mix( diffuseColor.rgb, wrapSample.rgb * wrapBrightness, wrapSample.a );
 #endif`;
 
+// Tesla pushes roughness all the way to 0.9 + metallic to 0 in opaque_skybox,
+// but they ALSO add an `EMISSION += skytxt * v_up` term that re-injects
+// skybox brightness into the matte wrap so it doesn't look dead. three.js
+// MeshStandardMaterial already gives us PBR environment lighting via the
+// scene env map, but the headroom is smaller than Tesla's HDR pipeline.
+// We compromise by mixing roughness only to 0.55 (satin paint, not chalk)
+// and metallic to 0.15 (keeps a slight metallic-flake highlight).
+const WRAP_ROUGHNESS_TARGET = 0.55;
+const WRAP_METALNESS_TARGET = 0.15;
+
 const ROUGHNESS_FRAGMENT_REPLACE = `float roughnessFactor = roughness;
 #ifdef USE_ROUGHNESSMAP
 	vec4 texelRoughness = texture2D( roughnessMap, vRoughnessMapUv );
 	roughnessFactor *= texelRoughness.g;
 #endif
 #ifdef USE_MAP
-	roughnessFactor = mix( roughnessFactor, 0.9, texture2D( map, vMapUv ).a );
+	roughnessFactor = mix( roughnessFactor, ${WRAP_ROUGHNESS_TARGET.toFixed(2)}, texture2D( map, vMapUv ).a );
 #endif`;
 
 const METALNESS_FRAGMENT_REPLACE = `float metalnessFactor = metalness;
@@ -133,7 +143,7 @@ const METALNESS_FRAGMENT_REPLACE = `float metalnessFactor = metalness;
 	metalnessFactor *= texelMetalness.b;
 #endif
 #ifdef USE_MAP
-	metalnessFactor = mix( metalnessFactor, 0.0, texture2D( map, vMapUv ).a );
+	metalnessFactor = mix( metalnessFactor, ${WRAP_METALNESS_TARGET.toFixed(2)}, texture2D( map, vMapUv ).a );
 #endif`;
 
 function meshHasWrapUv(geometry: THREE.BufferGeometry | undefined): boolean {
