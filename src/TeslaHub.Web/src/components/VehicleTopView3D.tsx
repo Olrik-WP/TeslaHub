@@ -73,34 +73,38 @@ const WrapUrlContext = createContext<WrapContextValue>({
 //
 // Wrap PNGs from teslamotors/custom-wraps are authored against a template
 // whose islands align with TEXCOORD_1 on body meshes (Godot `UV2`, three.js
-// `uv2` / `vUv2`). The stock `Paint` material samples solid colour on UV0;
-// wraps must sample `custom_albedo_texture` on UV2 and alpha-blend over the
-// base paint: mix(color.rgb, wrap.rgb, wrap.a).
+// r184 attribute `uv1`, map channel 1). The stock `Paint` material is solid
+// colour on UV0; wraps sample on TEXCOORD_1 and alpha-blend over base paint:
+// mix(color.rgb, wrap.rgb, wrap.a).
 //
-// We inject that logic via MeshStandardMaterial.onBeforeCompile and force
-// USE_UV2 in the shader by attaching a zero-intensity dummy aoMap on channel
-// 1 (same trick the three.js docs recommend for second-UV custom effects).
+// three.js r184 routes each map through its own varying (`vMapUv`) derived
+// from `mat.map.channel` — there is no global `vUv2` anymore.
 // ---------------------------------------------------------------------------
 
 type WrapMatHookState = {
   priorOnBeforeCompile: THREE.MeshStandardMaterial['onBeforeCompile'];
   priorCacheKey: (() => string) | undefined;
-  addedDummyAo: boolean;
-  priorAoMap: THREE.Texture | null;
-  priorAoIntensity: number;
-  priorAoChannel: number;
+  priorMap: THREE.Texture | null;
+  priorMapChannel: number;
 };
 
 const WRAP_MAT_HOOK_KEY = '__teslahubWrapHook';
 
-let wrapUv2DummyAo: THREE.DataTexture | null = null;
-function getWrapUv2DummyAo(): THREE.DataTexture {
-  if (!wrapUv2DummyAo) {
-    wrapUv2DummyAo = new THREE.DataTexture(new Uint8Array([255, 255, 255]), 1, 1);
-    wrapUv2DummyAo.colorSpace = THREE.SRGBColorSpace;
-    wrapUv2DummyAo.needsUpdate = true;
-  }
-  return wrapUv2DummyAo;
+const MAP_FRAGMENT_REPLACE = `#ifdef USE_MAP
+	vec4 wrapSample = texture2D( map, vMapUv );
+	#ifdef DECODE_VIDEO_TEXTURE
+		wrapSample = sRGBTransferEOTF( wrapSample );
+	#endif
+	diffuseColor.rgb = mix( diffuseColor.rgb, wrapSample.rgb, wrapSample.a );
+#endif`;
+
+function meshWrapUvChannel(geometry: THREE.BufferGeometry | undefined): 0 | 1 | -1 {
+  if (!geometry) return -1;
+  const attrs = geometry.attributes;
+  // GLTFLoader maps TEXCOORD_1 → `uv1` in three r184; older builds used `uv2`.
+  if ((attrs.uv1 ?? attrs.uv2)?.itemSize === 2) return 1;
+  if (attrs.uv?.itemSize === 2) return 0;
+  return -1;
 }
 
 function matWrapHook(mat: THREE.MeshStandardMaterial): WrapMatHookState {
@@ -109,62 +113,32 @@ function matWrapHook(mat: THREE.MeshStandardMaterial): WrapMatHookState {
     bag[WRAP_MAT_HOOK_KEY] = {
       priorOnBeforeCompile: mat.onBeforeCompile,
       priorCacheKey: mat.customProgramCacheKey,
-      addedDummyAo: false,
-      priorAoMap: mat.aoMap,
-      priorAoIntensity: mat.aoMapIntensity,
-      priorAoChannel: mat.aoMap?.channel ?? 0,
+      priorMap: mat.map,
+      priorMapChannel: mat.map?.channel ?? 0,
     };
   }
   return bag[WRAP_MAT_HOOK_KEY]!;
 }
 
-function installTeslaWrapShader(mat: THREE.MeshStandardMaterial, wrapTex: THREE.Texture) {
+function installTeslaWrapShader(
+  mat: THREE.MeshStandardMaterial,
+  wrapTex: THREE.Texture,
+  channel: 0 | 1,
+) {
   const hook = matWrapHook(mat);
 
-  // Enable vUv2 in the built-in shader without visible AO contribution.
-  if (!mat.aoMap) {
-    mat.aoMap = getWrapUv2DummyAo();
-    mat.aoMap.channel = 1;
-    mat.aoMapIntensity = 0;
-    hook.addedDummyAo = true;
-  }
+  mat.map = wrapTex;
+  mat.map.channel = channel;
 
   const priorCompile = hook.priorOnBeforeCompile;
   mat.onBeforeCompile = (shader, renderer) => {
     priorCompile?.(shader, renderer);
-    shader.uniforms.wrapMap = { value: wrapTex };
     shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <common>',
-      `#include <common>
-uniform sampler2D wrapMap;`,
-    );
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <color_fragment>',
-      `#include <color_fragment>
-{
-  vec4 wrapSample = texture2D(wrapMap, vUv2);
-  diffuseColor.rgb = mix(diffuseColor.rgb, wrapSample.rgb, wrapSample.a);
-}`,
-    );
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <roughnessmap_fragment>',
-      `#include <roughnessmap_fragment>
-{
-  vec4 wrapRough = texture2D(wrapMap, vUv2);
-  roughnessFactor = mix(roughnessFactor, 0.9, wrapRough.a);
-}`,
-    );
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <metalnessmap_fragment>',
-      `#include <metalnessmap_fragment>
-{
-  vec4 wrapMetal = texture2D(wrapMap, vUv2);
-  metalnessFactor = mix(metalnessFactor, 0.0, wrapMetal.a);
-}`,
+      '#include <map_fragment>',
+      MAP_FRAGMENT_REPLACE,
     );
   };
-  mat.customProgramCacheKey = () => `teslahub-wrap-${wrapTex.uuid}`;
-  mat.map = null;
+  mat.customProgramCacheKey = () => `teslahub-wrap-${wrapTex.uuid}-ch${channel}`;
   mat.needsUpdate = true;
 }
 
@@ -174,18 +148,12 @@ function clearTeslaWrapShader(mat: THREE.MeshStandardMaterial, paintHex: number)
   if (hook) {
     mat.onBeforeCompile = hook.priorOnBeforeCompile ?? (() => {});
     mat.customProgramCacheKey = hook.priorCacheKey ?? (() => '');
-    if (hook.addedDummyAo) {
-      mat.aoMap = hook.priorAoMap;
-      mat.aoMapIntensity = hook.priorAoIntensity;
-      if (mat.aoMap) mat.aoMap.channel = hook.priorAoChannel;
-    }
+    mat.map = hook.priorMap;
+    if (mat.map) mat.map.channel = hook.priorMapChannel;
     delete bag[WRAP_MAT_HOOK_KEY];
   } else {
     mat.onBeforeCompile = () => {};
     mat.customProgramCacheKey = () => '';
-  }
-  if (mat.map) {
-    mat.map.dispose();
     mat.map = null;
   }
   mat.color.setHex(paintHex);
@@ -1250,12 +1218,13 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
   //   as cable unlock when plugged in. See `VehicleCallouts` for the rebuilt
   //   Tesla Car Browser-style UI.
 
-  // ── Custom body wrap (Tesla UV2 / PaintSkybox pipeline) ───────────
+  // ── Custom body wrap (Tesla PaintSkybox / opaque_skybox.shader) ───
   const { url: wrapUrl } = useContext(WrapUrlContext);
   useEffect(() => {
     const targets: THREE.MeshStandardMaterial[] = [];
     const paintMeshes: THREE.Mesh[] = [];
-    let uv2MeshCount = 0;
+    let uv1MeshCount = 0;
+    let uv0OnlyMeshCount = 0;
 
     cleanedScene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
@@ -1271,8 +1240,9 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       }
       if (isPaintMesh) {
         paintMeshes.push(mesh);
-        const uv2 = mesh.geometry?.attributes?.uv2;
-        if (uv2?.itemSize === 2) uv2MeshCount++;
+        const ch = meshWrapUvChannel(mesh.geometry);
+        if (ch === 1) uv1MeshCount++;
+        else if (ch === 0) uv0OnlyMeshCount++;
       }
     });
 
@@ -1286,17 +1256,34 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       return;
     }
 
-    if (uv2MeshCount === 0) {
+    // Pick the UV channel for the WHOLE body — must be uniform across all
+    // Paint mats so the shader cacheKey stays stable. Prefer TEXCOORD_1
+    // (Tesla wrap layout); fall back to TEXCOORD_0 if the GLB is older
+    // and the second UV set was stripped by gltf-transform/prune.
+    let wrapChannel: 0 | 1 = 0;
+    if (uv1MeshCount === paintMeshes.length && uv1MeshCount > 0) {
+      wrapChannel = 1;
+    } else if (uv1MeshCount > 0) {
+      wrapChannel = 1;
       console.warn(
-        '[Wrap] Paint meshes have no uv2 (TEXCOORD_1). Re-run optimize-glb.ps1 ' +
-        'with --keep-attributes true, then rename.ps1, and redeploy to Docker.',
+        `[Wrap] Mixed UV channels (uv1 on ${uv1MeshCount}, uv0-only on ${uv0OnlyMeshCount}). ` +
+        `Forcing TEXCOORD_1; uv0-only meshes will be untextured.`,
       );
+    } else if (uv0OnlyMeshCount > 0) {
+      console.warn(
+        '[Wrap] No TEXCOORD_1 on Paint meshes — falling back to TEXCOORD_0. ' +
+        'Result will be mis-oriented (wrap PNG is authored for UV1). Rebuild the GLB ' +
+        'with optimize-glb.ps1 --keep-attributes true to restore the Tesla layout.',
+      );
+    } else {
+      console.warn('[Wrap] Paint meshes have no UV attributes at all. Cannot apply wrap.');
       return;
     }
 
     console.log(
-      `[Wrap] Loading wrap for ${targets.length} Paint mat(s), ` +
-      `${uv2MeshCount}/${paintMeshes.length} mesh(es) carry uv2.`,
+      `[Wrap] Loading wrap → ${targets.length} Paint mat(s), ` +
+      `${paintMeshes.length} mesh(es), channel=${wrapChannel} ` +
+      `(${wrapChannel === 1 ? 'TEXCOORD_1 / Tesla layout' : 'TEXCOORD_0 / fallback'}).`,
     );
 
     const img = new Image();
@@ -1316,9 +1303,12 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       const uniqueTargets = [...new Set(targets)];
       for (const mat of uniqueTargets) {
         mat.color.setHex(cfg.bodyPaintColor);
-        installTeslaWrapShader(mat, tex);
+        installTeslaWrapShader(mat, tex, wrapChannel);
       }
-      console.log('[Wrap] Applied on uv2 (Tesla PaintSkybox pipeline).');
+      console.log(
+        `[Wrap] Applied on map.channel=${wrapChannel} ` +
+        `(${uniqueTargets.length} unique Paint material(s)).`,
+      );
     };
     img.onerror = () => console.warn(`[Wrap] Image load failed: ${wrapUrl.slice(0, 80)}`);
     img.src = wrapUrl;
