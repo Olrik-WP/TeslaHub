@@ -666,10 +666,22 @@ export const PoppyseedConfig: VehicleModelConfig = {
   // washed-out white under the HDR environment. Repaint to Tesla
   // "Black Interior" charcoal so the cabin looks like the real car.
   // User can re-customise from the Showroom (e.g. cream seats).
+  //
+  // `Zero_Black` is a Tesla placeholder material that the LHD
+  // Dashboard mesh applies to the air-vent louver geometry. In
+  // game Tesla swaps it for a baked vent texture at runtime; in our
+  // GLB it survives as a pure flat-black material and reads as ugly
+  // BLACK STAINS on the dashboard vent. We override it to a soft
+  // dark-grey so the louvers blend with the surrounding plastic
+  // without losing the vent silhouette. The RHD Dashboard mesh
+  // doesn't have this issue (different baked layout), but we can't
+  // swap because that would put a RHD dashboard with a LHD steering
+  // wheel — the user explicitly asked for a recolor, not a swap.
   interiorOverrides: [
     { key: 'InteriorSeats', matchName: /^InteriorSeats$/i, color: 0x1a1a1a, roughness: 0.75 },
     { key: 'InteriorSeats2', matchName: /^InteriorSeats2$/i, color: 0x1a1a1a, roughness: 0.75 },
     { key: 'Decor', matchName: /^Decor$/i, color: 0x1a1a1a, roughness: 0.7 },
+    { key: 'Zero_Black', matchName: /^Zero_Black$/i, color: 0x2a2a2a, roughness: 0.85 },
   ],
   // Tesla packs every trim / drive layout / market region / audio
   // package into ONE GLB by shipping duplicate overlapping meshes for
@@ -681,36 +693,79 @@ export const PoppyseedConfig: VehicleModelConfig = {
     {
       id: 'trim',
       label: 'Trim',
-      defaultOption: 'standard',
+      // Default = Long Range (the "middle" trim that ships with the
+      // standard non-D50 bumpers, console and Reverse_Light). Users
+      // pick Propulsion (D50 — Highland 2026) or Performance per car.
+      defaultOption: 'longRange',
       options: [
         {
-          id: 'standard',
-          label: 'Standard / Long Range',
+          id: 'longRange',
+          label: 'Long Range (RWD / AWD)',
           ownedNodes: [
+            // Exterior
             'Bumper_F_Base',
             'Bumper_R_Base',
             'Bumper_R_Base_Reflector',
             'Reverse_Light',
+            // Interior — classic Center Console (no D50 alu accents)
+            'Center_Console',
+            // Seats — physical mesh + colour overlay
             'Seat_Top_LF',
             'Seat_Top_RF',
             'Seat_Top_LF_Color',
             'Seat_Top_RF_Color',
+            'Seat_Bottom_LF',
+            'Seat_Bottom_RF',
             'Seat_Bottom_LF_Color',
             'Seat_Bottom_RF_Color',
+          ],
+        },
+        {
+          id: 'propulsion',
+          label: 'Propulsion (D50 / Highland 2026)',
+          ownedNodes: [
+            // Exterior — D50 reuses the Base bumpers & reverse lamp
+            // (no Performance reflector / no Perf splitter)
+            'Bumper_F_Base',
+            'Bumper_R_Base',
+            'Bumper_R_Base_Reflector',
+            'Reverse_Light',
+            // Front fascia camera — exclusive to D50 (front parking
+            // sensors brought back on Highland 2026 Propulsion).
+            'Fascia_Cam_D50',
+            // Interior — D50-specific aluminium-dark Center Console
+            'Center_Console_D50',
+            // Seats — D50 has its OWN seat bottom mesh (lighter
+            // bucket, no _Color overlay). Top stays shared with LR.
+            'Seat_Top_LF',
+            'Seat_Top_RF',
+            'Seat_Top_LF_Color',
+            'Seat_Top_RF_Color',
+            'Seat_Bottom_D50_LF',
+            'Seat_Bottom_D50_RF',
           ],
         },
         {
           id: 'performance',
           label: 'Performance',
           ownedNodes: [
+            // Exterior — Perf bumpers + reflector + reverse lamp variant
             'Bumper_F_Perf',
             'Bumper_R_Perf',
             'Bumper_R_Perf_Reflector',
             'Reverse_Light_Perf',
+            // Interior — Perf reuses the Long Range Center Console
+            // (no D50 alu accents on Performance either).
+            'Center_Console',
+            // Seats — Perf has its OWN sport top (with wings) and
+            // Perf-specific colour overlay. Bottom shares the
+            // Long Range physical mesh + Perf colour overlay.
             'Seat_Top_Perf_LF',
             'Seat_Top_Perf_RF',
             'Seat_Top_Perf_LF_Color',
             'Seat_Top_Perf_RF_Color',
+            'Seat_Bottom_LF',
+            'Seat_Bottom_RF',
             'Seat_Bottom_Perf_LF_Color',
             'Seat_Bottom_Perf_RF_Color',
           ],
