@@ -40,6 +40,13 @@ interface Props {
   visualState?: ShowroomVisualState;
   /** Setter for the ephemeral visual state. */
   onVisualChange?: (next: ShowroomVisualState) => void;
+}
+
+/** Top-level section props — adds debug-toggle wiring on top of the
+ *  shared sub-section `Props`. Kept separate so the per-sub-section
+ *  Props stays minimal (sub-sections don't need the debug toggle —
+ *  it's a single button rendered by the parent header). */
+interface SectionProps extends Props {
   /** Ephemeral debug flag: when true the viewer overlays the geometry
    *  anchor helpers (cable ground sphere, charge port fallback, plug
    *  socket cube, per-wheel spheres, body wireframe). Off by default. */
@@ -56,7 +63,7 @@ export function ShowroomGeometrySection({
   onVisualChange,
   debugAnchors,
   onToggleDebugAnchors,
-}: Props) {
+}: SectionProps) {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
