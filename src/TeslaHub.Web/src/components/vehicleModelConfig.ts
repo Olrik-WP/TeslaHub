@@ -432,6 +432,19 @@ export interface VehicleModelConfig {
     plasticRoughness: number;
     /** EnvMap boost for plastic. Default 1.5. */
     plasticEnvBoost: number;
+    /** Clearcoat strength applied to plastic wheel materials. 0..1.
+     *  When > 0, the material is silently upgraded to a
+     *  `MeshPhysicalMaterial` and a thin lacquer-like clearcoat layer
+     *  is added on top of the diffuse plastic. This is the secret
+     *  sauce for the Highland D50 / Y E41 plastic hubcaps that
+     *  otherwise read as dead matte black under the HDR environment:
+     *  the underlying plastic stays dark but the clearcoat picks up
+     *  the bright sky reflection so the hubcap reads as "polished
+     *  black plastic" rather than "absent". Tesla bakes a similar
+     *  clearcoat into their Godot scenes; we replicate it at runtime
+     *  so the user can dial it from 0 (mat) to 1 (full lacquer).
+     *  Default 0 (= old behaviour, no MeshPhysicalMaterial upgrade). */
+    plasticClearcoat: number;
   };
 
   // ───────────────────────────────────────────────────────────────────
@@ -523,13 +536,14 @@ export const PoppyseedConfig: VehicleModelConfig = {
   modelUrl: '/models/poppyseed.glb',
   wheelUrl: '/models/wheel_d50_highland.glb',
 
-  // Frame composition: 3/4 front view, slight elevation, car centred.
-  // Distance ~5.5 m gives a tight crop with the wheels touching the
-  // canvas bottom edge and a small headroom for the roof.
+  // Calibrated by user (2026-05) — 3/4 front-driver view with a wider
+  // FOV than the original 38° (now 45°) so the whole front bumper
+  // reads in frame; target nudged +0.6 m on Z to recentre the body
+  // visually around the windshield.
   cameraPose: {
-    position: [3.85, 1.9, 4.95],
-    target: [0, 0.6, 0],
-    fov: 38,
+    position: [4.85, 1.25, -3.45],
+    target: [0, 0.6, 0.6],
+    fov: 45,
   },
 
   // Wheelbase 2875 mm → x ±1.4375 with a +50 mm forward bias for the GLB.
@@ -548,20 +562,24 @@ export const PoppyseedConfig: VehicleModelConfig = {
     { name: 'Wheel_RR_Spatial', mirror: true },
   ],
 
-  // Charge port: rear-left fender, ~96 cm high. The fallback world
-  // position was measured at runtime by reading Charge_Cap_Spatial.
-  // `Charge_Cap_Spatial` is the trapdoor's REAR hinge pivot, NOT the
-  // plug socket itself — hence the small offset.
+  // Charge port: rear-left fender, ~92 cm high. Both `fallbackWorld`
+  // and `pivotToSocketOffset` were re-measured live via the Showroom
+  // anchor overlay (2026-05) — the red FALLBACK sphere snapped onto
+  // the cyan PLUG SOCKET cube, then the user dialled the X offset
+  // (-0.09) so the plug seats inside the port recess instead of
+  // floating outboard of the bodywork.
   chargePort: {
     nodeName: 'Charge_Cap_Spatial',
     alternateNames: ['Chargeport_Spatial', 'Charge_Port_Spatial', 'ChargePort'],
-    fallbackWorld: [-1.856, 0.966, -0.74],
-    pivotToSocketOffset: [-0.05, -0.06, 0],
+    fallbackWorld: [-1.94, 0.92, -0.74],
+    pivotToSocketOffset: [-0.09, -0.06, 0],
     plugDirection: [0, 0, 1],
   },
-  // ~3.5 m behind and 1.5 m to the left of the car centre — gives the
-  // cable enough length to drape on the floor before rising to the port.
-  cableGroundAnchor: [-3.5, 0, -1.5],
+  // User-calibrated cable ground anchor (2026-05): ~3 m behind and
+  // 1.5 m to the left of the car centre — slightly closer to the car
+  // than the original -3.5 m so the cable doesn't disappear off-frame
+  // at the wider FOV the user set above.
+  cableGroundAnchor: [-2.95, 0, -1.5],
 
   actionAnchors: {
     frunk: 'Hood_Spatial',
@@ -570,14 +588,19 @@ export const PoppyseedConfig: VehicleModelConfig = {
     window: 'Window_LF_Spatial',
   },
 
+  // User-calibrated Sentry camera positions (2026-05) — same 7-camera
+  // layout but refined live against the Highland body. Front bumper
+  // moved out to +2.33 to sit above the actual sensor housing; rear
+  // pulled in to -2.27; B-pillars dropped slightly forward to land on
+  // the actual camera lenses rather than mid-window.
   sentryCameraPositions: [
     [+0.40, 1.32, 0],      // 1. front rearview (top of windshield)
-    [+2.05, 0.55, 0],      // 2. front bumper centre (above black grille)
-    [+1.10, 0.72, -0.88],  // 3. left front fender (turn-signal lens)
-    [+1.10, 0.72, +0.88],  // 4. right front fender
-    [-0.18, 1.20, -0.88],  // 5. left B-pillar (rear-looking)
-    [-0.18, 1.20, +0.88],  // 6. right B-pillar
-    [-2.10, 0.80, 0],      // 7. rear (above license plate)
+    [+2.33, 0.25, 0],      // 2. front bumper centre (above black grille)
+    [+1.10, 0.72, -0.93],  // 3. left front fender (turn-signal lens)
+    [+1.10, 0.72, +0.93],  // 4. right front fender
+    [-0.31, 1.24, -0.74],  // 5. left B-pillar (rear-looking)
+    [-0.31, 1.24, +0.74],  // 6. right B-pillar
+    [-2.27, 0.81, 0],      // 7. rear (above license plate)
   ],
 
   brakeLightNodes: ['Brake_Lights_Left', 'Brake_Lights_Right', 'Brake_Lights_Center'],
@@ -632,34 +655,49 @@ export const PoppyseedConfig: VehicleModelConfig = {
   },
   bodyPaintColor: 0xf2f2f0,
   calloutHeight: 0.45,
+  // User-calibrated wheel finish (2026-05) tuned for the Highland D50
+  // plastic hubcaps. alloyRoughnessMin=0 keeps the alloy spokes as
+  // mirror-polish; plasticClearcoat will be tuned live by the user
+  // once they confirm the D50 hubcap material classification (see the
+  // console log `wheel polish: alloy=N plastic=M | materials seen: …`).
   wheelFinish: {
-    alloyRoughnessMin: 0.35,
-    alloyEnvBoost: 1.6,
-    plasticRoughness: 0.55,
-    plasticEnvBoost: 1.5,
+    alloyRoughnessMin: 0,
+    alloyEnvBoost: 0.4,
+    plasticRoughness: 0.45,
+    plasticEnvBoost: 0.5,
+    plasticClearcoat: 0,
   },
+  // User-calibrated glass finish (2026-05) for the Highland greenhouse.
+  // Much higher outerEnvMultiplier (1.5 vs old 0.3) lets the HDR sky
+  // dominate the door windows + windshield reflection. Door windows
+  // pushed to 90% opacity for proper privacy glass feel. Pano opacity
+  // dropped to 80% so the cabin reads through the roof.
   glassFinish: {
-    outerEnvMultiplier: 0.3,
-    doorWindowOpacity: 0.55,
-    doorWindowTint: 0.45,
-    panoroofOpacity: 0.9,
-    panoroofTint: 0.15,
+    outerEnvMultiplier: 1.5,
+    doorWindowOpacity: 0.9,
+    doorWindowTint: 0.0,
+    panoroofOpacity: 0.8,
+    panoroofTint: 0.0,
     // M3 has no separate trunk glass — these are kept for the type
     // (Showroom hides the slider when the model has no trunkGlassNode).
     trunkGlassOpacity: 0.85,
     trunkGlassTint: 0.30,
-    innerMixedOpacity: 0.08,
-    innerMixedEnvMultiplier: 0.02,
-    innerSoloOpacity: 0.85,
-    innerSoloEnvMultiplier: 0.6,
+    innerMixedOpacity: 0.5,
+    innerMixedEnvMultiplier: 0,
+    innerSoloOpacity: 0,
+    innerSoloEnvMultiplier: 0,
   },
+  // User-calibrated light tuning (2026-05). Brake doubled (5 vs old
+  // 2.5) for visibility under the wider FOV. Headlight reduced (0.7
+  // vs 1.4) and shifted to pure white (0xFFFFFF vs warm 0xfff5e8) for
+  // a more clinical LED feel. Reverse left at the default warm value.
   lightTuning: {
-    brakeIntensity: 2.5,
+    brakeIntensity: 5,
     brakeColor: 0xff1a1a,
     reverseIntensity: 1.8,
     reverseColor: 0xfff8e8,
-    headlightIntensity: 1.4,
-    headlightColor: 0xfff5e8,
+    headlightIntensity: 0.7,
+    headlightColor: 0xffffff,
   },
   // M3 Highland ships several interior materials as mid-grey
   // placeholders (Decor 0.51, InteriorSeats 0.37) that read as
@@ -908,30 +946,50 @@ export const PoppyseedConfig: VehicleModelConfig = {
 // Plus the Showroom-only `Fade` mesh that ghosts the whole car white
 // (this was the "verre blanc" mystery). Must be hidden.
 
+// ──────────────────────────────────────────────────────────────────────
+// IMPORTANT — Bayberry GLB axis convention (CONTRARY to file header).
+// The Tesla bayberry_e41.glb body is oriented with:
+//     +Z = longitudinal (forward), -Z = backward
+//     +X = lateral right, -X = lateral left
+//     +Y = up
+// — i.e. swapped vs the convention the file header documents (which
+// matches Poppyseed / M3 Highland). Confirmed live (2026-05) by the
+// Showroom anchor debug overlay: body bbox reads X=1.92m × Y=1.46m ×
+// Z=4.79m, matching the real Y Juniper spec (W=1.94, H=1.62, L=4.79).
+// All geometry values below are expressed in THIS frame and were
+// calibrated by the user against the live render. Don't "fix" them
+// to match the file header — they would render orthogonally to the
+// body if you do.
+// ──────────────────────────────────────────────────────────────────────
+
 export const BayberryConfig: VehicleModelConfig = {
   key: 'bayberry',
   displayName: 'Model Y Juniper Propulsion',
   modelUrl: '/models/bayberry_e41.glb',
   wheelUrl: '/models/wheel_e41.glb',
 
+  // Calibrated by the user (2026-05) — 3/4 rear-driver-side view with
+  // a wider FOV than M3 (50° vs 38°) to accommodate the Y's larger
+  // greenhouse without losing the wheels at the frame edge.
   cameraPose: {
-    // Y body is ~5 cm taller than Highland → target Y nudged up.
-    // Same orbit distance; fine-tune by eye once the car loads.
-    position: [3.85, 2.0, 4.95],
-    target: [0, 0.7, 0],
-    fov: 38,
+    position: [-4.156, 1.35, -4.416],
+    target: [-0.45, 0.7, 0],
+    fov: 50,
   },
 
+  // User-calibrated wheel placements (2026-05). Numbers reflect the
+  // Bayberry GLB axis convention noted at the top of this section
+  // (+Z = forward), so:
+  //   wheelbase along Z : (+1.40) − (−1.51) = 2.91 m  (real Y: 2.89 m)
+  //   track along X     : (+0.85) − (−0.85) = 1.70 m  (real Y: 1.65 m)
+  // rotY=±90° rotates the E41 hubcap to face the body's longitudinal
+  // axis (the wheel GLB exports its native hubcap facing +Z, which
+  // would otherwise read as "wheels rolling sideways" once placed).
   wheelFallbackPositions: [
-    // Wheelbase 2890 mm (Y Juniper) → x ±1.445.
-    // Track 1647/1646 mm centre-to-centre → ±0.823 m.
-    // E41 wheel is 19" with 255/45R19 → tyre radius ≈ 0.353 m.
-    // (Calibrate Z by eye if a wheel still sits proud of the arch — the
-    //  GLB's native wheel bbox isn't necessarily centred at its origin.)
-    { id: 'LF', x: +1.495, y: 0.353, z: -0.823, flipZ: true },
-    { id: 'RF', x: +1.495, y: 0.353, z: +0.823, flipZ: false },
-    { id: 'LR', x: -1.395, y: 0.353, z: -0.823, flipZ: true },
-    { id: 'RR', x: -1.395, y: 0.353, z: +0.823, flipZ: false },
+    { id: 'LF', x: +0.85, y: 0.353, z: -1.51, flipZ: true, rotY: -90 },
+    { id: 'RF', x: +0.85, y: 0.353, z: +1.40, flipZ: false, rotY: 90 },
+    { id: 'LR', x: -0.85, y: 0.353, z: -1.51, flipZ: true, rotY: 90 },
+    { id: 'RR', x: -0.85, y: 0.353, z: +1.40, flipZ: false, rotY: -90 },
   ],
   // Bayberry GLB does NOT ship Wheel_*_Spatial anchors — confirmed via
   // inspect. Always falls back to wheelFallbackPositions above.
@@ -941,13 +999,18 @@ export const BayberryConfig: VehicleModelConfig = {
     // Bayberry's pivot is named WITHOUT the abbreviated "Cap".
     nodeName: 'Charge_Port_Spatial',
     alternateNames: ['Charge_Cap_Spatial', 'Chargeport_Spatial', 'ChargePort'],
-    // TODO(model-y): re-measure live from the console once it loads:
-    //   scene.getObjectByName('Charge_Port_Spatial').getWorldPosition(new THREE.Vector3())
-    fallbackWorld: [-1.856, 1.016, -0.78],
-    pivotToSocketOffset: [-0.05, -0.06, 0],
-    plugDirection: [0, 0, 1],
+    // Live-measured from the Showroom anchor overlay (2026-05) on the
+    // user's Y Juniper Propulsion: the trapdoor pivot sits 78 cm
+    // below the roof on the rear-driver fender, ~2 m forward of the
+    // body centre (remember +Z = forward for this GLB).
+    fallbackWorld: [-0.785, 1.02, 1.98],
+    pivotToSocketOffset: [0.005, -0.055, 0.045],
+    plugDirection: [1, -0.2, 0.11],
   },
-  cableGroundAnchor: [-3.5, 0, -1.5],
+  // User-calibrated cable ground anchor — drapes the cable across the
+  // passenger side of the rear bumper so it stays clear of the orbit
+  // camera's main viewing arcs.
+  cableGroundAnchor: [-2.6, 0, 2.85],
 
   actionAnchors: {
     frunk: 'Hood_Spatial',         // identical to M3
@@ -956,16 +1019,20 @@ export const BayberryConfig: VehicleModelConfig = {
     window: 'Window_FL',           // RENAMED on Y (FL vs LF, no _Spatial)
   },
 
+  // User-calibrated Sentry pulse-dot positions (2026-05) — 7 hardware
+  // cameras matching the Y Juniper Hardware 4 layout:
+  //   1: windshield rearview               5: left rear pillar
+  //   2: front bumper centre               6: right rear pillar
+  //   3: left front fender repeater        7: rear tailgate plate
+  //   4: right front fender repeater
   sentryCameraPositions: [
-    // TODO(model-y): re-calibrate live. Y is taller, so windshield/B-pillar
-    // values rise by ~+0.05, and the rear sits higher above the plate.
-    [+0.40, 1.40, 0],
-    [+2.05, 0.60, 0],
-    [+1.10, 0.78, -0.91],
-    [+1.10, 0.78, +0.91],
-    [-0.18, 1.28, -0.91],
-    [-0.18, 1.28, +0.91],
-    [-2.10, 0.88, 0],
+    [0,     1.44, -0.52],
+    [0,     0.35, -2.35],
+    [+0.96, 0.81, -1.12],
+    [-0.96, 0.81, -1.12],
+    [-0.71, 1.40, +0.33],
+    [+0.71, 1.40, +0.33],
+    [0,     0.98, +2.30],
   ],
 
   // bayberry_e41.glb audit (2026-05) — the "On" meshes are SEPARATE
@@ -1062,7 +1129,11 @@ export const BayberryConfig: VehicleModelConfig = {
     // it to PANO so the windshield tint slider can reach it.
     sharedBodyNode: /^static_(door_)?exterior$/i,
   },
-  bodyPaintColor: 0xf2f2f0,  // Pearl White Multi-Coat (same as M3 default)
+  // "Midnight Cherry" deep aubergine — the user's personal Y Juniper
+  // Propulsion finish (Tesla don't ship a stock Pearl White Multi-Coat
+  // in this exact shade; this is a Showroom paint pick). Owners who
+  // prefer a different colour override via the Showroom paint picker.
+  bodyPaintColor: 0x450d59,
   calloutHeight: 0.50,        // +5 cm vs M3 — Y is taller, callouts need
                               // more lift to clear the higher roofline
 
@@ -1087,44 +1158,49 @@ export const BayberryConfig: VehicleModelConfig = {
     { key: 'cupholder', matchName: /^cupholder$/i, color: 0x1a1a1a, roughness: 0.7 },
     { key: 'Wing', matchName: /^Wing$/i, color: 0x1a1a1a, roughness: 0.7 },
   ],
+  // User-calibrated wheel finish (2026-05) on the E41 alloy + plastic
+  // brake-rotor cap. Higher alloyRoughnessMin (0.67) keeps the alloy
+  // from reading as a chrome mirror under the HDR environment; the
+  // env boost (2.1) restores enough HDR contrast to read as polished
+  // brushed alloy. Plastic dialled slightly less glossy than M3
+  // default to match the matte black of the brake-rotor cover.
   wheelFinish: {
-    alloyRoughnessMin: 0.35,
-    alloyEnvBoost: 1.6,
-    plasticRoughness: 0.55,
-    plasticEnvBoost: 1.5,
+    alloyRoughnessMin: 0.67,
+    alloyEnvBoost: 2.1,
+    plasticRoughness: 0.53,
+    plasticEnvBoost: 1.15,
+    plasticClearcoat: 0,
   },
+  // User-calibrated glass finish (2026-05) — pushes a much more
+  // transparent panoroof (16% opacity) and almost-clear inner mixed
+  // pane (0% so the windshield reads fully transparent). Outer env
+  // boost (1.18 vs old 0.3) lets the HDR sky reflection dominate the
+  // glass so the car looks polished even when parked indoors.
   glassFinish: {
-    outerEnvMultiplier: 0.3,
-    // Y door windows ship Glass_Windows alpha=0.45 → mid translucent
+    outerEnvMultiplier: 1.18,
     doorWindowOpacity: 0.55,
-    doorWindowTint: 0.45,
-    // Pano roof + windshield + lunette fused on Fade mesh
-    panoroofOpacity: 0.9,
+    doorWindowTint: 0.0,
+    panoroofOpacity: 0.16,
     panoroofTint: 0.15,
-    // Trunk hatch outer glass (Trunk_Cover_Main) — slightly more
-    // translucent than the pano so the brake-light cluster shines
-    // through correctly.
-    trunkGlassOpacity: 0.75,
-    trunkGlassTint: 0.35,
-    innerMixedOpacity: 0.08,
-    innerMixedEnvMultiplier: 0.02,
-    // Y rear privacy glass — the only pane is Glass_Interior with
-    // outer (no mat). Keep darker than front so it reads "privacy".
-    innerSoloOpacity: 0.85,
-    innerSoloEnvMultiplier: 0.6,
+    trunkGlassOpacity: 0.78,
+    trunkGlassTint: 0.0,
+    innerMixedOpacity: 0.0,
+    innerMixedEnvMultiplier: 0.0,
+    innerSoloOpacity: 0.6,
+    innerSoloEnvMultiplier: 0.0,
   },
+  // User-calibrated rear-cluster boost (2026-05). Brake at 5.0 (vs
+  // old 4.0) reads correctly against the user's dark body paint.
+  // Reverse + headlights disabled (0) — both ship as misplaced
+  // geometry on the Y E41 and the user prefers them off rather than
+  // visible-but-broken. Slider sits in the UI for owners who want to
+  // re-enable.
   lightTuning: {
-    // Bayberry rear-cluster boost cranked up vs M3 — the Y's rear
-    // lights ship as `Light` (opaque black) so they need more emissive
-    // gain to read as actual lit lamps under the HDR environment.
-    brakeIntensity: 4.0,
+    brakeIntensity: 5.0,
     brakeColor: 0xff0000,
-    reverseIntensity: 2.5,
+    reverseIntensity: 0.0,
     reverseColor: 0xfff8e8,
-    // Headlight boost is a no-op until a proper front-light target is
-    // wired (DRL_*/HighBeam_* are permanently hidden — see above).
-    // Slider stays in the UI for parity with the M3.
-    headlightIntensity: 1.4,
+    headlightIntensity: 0.0,
     headlightColor: 0xfff5e8,
   },
   // Tesla MY Juniper ships privacy glass on the rear doors (much darker

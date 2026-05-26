@@ -467,11 +467,24 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
       // already-boosted value (envMapIntensity → +∞, tint → drift).
       type WheelSnap = { roughness: number; envMapIntensity: number; color: number };
       const SNAP_KEY = '__teslahub_wheel_snap';
+      const PHYS_KEY = '__teslahub_wheel_plastic_phys';
       const wheelSceneAny = wheelGltf.scene as unknown as Record<string, unknown>;
       let snap = wheelSceneAny[SNAP_KEY] as WeakMap<THREE.Material, WheelSnap> | undefined;
       if (!snap) {
         snap = new WeakMap();
         wheelSceneAny[SNAP_KEY] = snap;
+      }
+      // Mapping ORIGINAL plastic Standard material → upgraded Physical
+      // material that carries the optional clearcoat layer. Built lazily
+      // on first encounter of each unique plastic mat so a wheel GLB
+      // with N shared plastic materials only allocates N physical
+      // clones (regardless of how many meshes reuse them).
+      let physMap = wheelSceneAny[PHYS_KEY] as
+        | WeakMap<THREE.Material, THREE.MeshPhysicalMaterial>
+        | undefined;
+      if (!physMap) {
+        physMap = new WeakMap();
+        wheelSceneAny[PHYS_KEY] = physMap;
       }
       const finish = cfg.wheelFinish;
       let alloyCount = 0;
@@ -480,39 +493,76 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
       wheelGltf.scene.traverse((obj) => {
         const mesh = obj as THREE.Mesh;
         if (!mesh.isMesh) return;
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        for (const m of mats) {
-          const mat = m as THREE.MeshStandardMaterial;
-          const matName = (mat as { name?: string }).name ?? '';
+        const matsArr: THREE.Material[] = Array.isArray(mesh.material)
+          ? (mesh.material as THREE.Material[])
+          : [mesh.material as THREE.Material];
+        for (let i = 0; i < matsArr.length; i++) {
+          const originalMat = matsArr[i] as THREE.MeshStandardMaterial;
+          const matName = (originalMat as { name?: string }).name ?? '';
           if (seenMats.indexOf(matName) === -1) seenMats.push(matName);
-          // Capture baseline ONCE — every subsequent re-run computes from
-          // these reference values, never from the mutated current ones.
-          let base = snap!.get(mat);
+          // Capture baseline from the ORIGINAL material ONCE — every
+          // subsequent re-run computes from these reference values,
+          // never from the mutated current ones. Even after we swap a
+          // plastic mat for a MeshPhysicalMaterial clone, the WeakMap
+          // is keyed on the original so the baseline survives.
+          let base = snap!.get(originalMat);
           if (!base) {
             base = {
-              roughness: mat.roughness ?? 0.5,
-              envMapIntensity: mat.envMapIntensity ?? 1,
-              color: mat.color ? mat.color.getHex() : 0xffffff,
+              roughness: originalMat.roughness ?? 0.5,
+              envMapIntensity: originalMat.envMapIntensity ?? 1,
+              color: originalMat.color ? originalMat.color.getHex() : 0xffffff,
             };
-            snap!.set(mat, base);
+            snap!.set(originalMat, base);
           }
           if (WHEEL_TIRE_MAT_RE.test(matName)) {
-            mat.metalness = 0;
-            mat.roughness = finish.plasticRoughness;
-            mat.envMapIntensity = base.envMapIntensity * finish.plasticEnvBoost;
+            // Plastic / tire path. Always upgrade to MeshPhysicalMaterial
+            // so the `plasticClearcoat` slider can dial in a lacquer
+            // layer on top of the diffuse plastic — without this Tesla-
+            // style trick the dark D50 hubcaps look as flat-black and
+            // absorbent as a dead pixel under the HDR environment
+            // (no amount of envBoost can save a fully-rough plastic).
+            let phys = physMap!.get(originalMat);
+            if (!phys) {
+              phys = new THREE.MeshPhysicalMaterial();
+              // Copy every Standard material property the GLB carried
+              // so the upgrade is visually identical at clearcoat=0.
+              phys.copy(originalMat);
+              phys.name = `${matName}_phys`;
+              physMap!.set(originalMat, phys);
+            }
+            // Swap the material reference on this slot. Other meshes
+            // sharing the same ORIGINAL material reach the same `phys`
+            // via the WeakMap so the swap propagates without us having
+            // to re-traverse.
+            if (Array.isArray(mesh.material)) {
+              (mesh.material as THREE.Material[])[i] = phys;
+            } else {
+              mesh.material = phys;
+            }
+            // Tune the physical material from the baseline.
+            phys.metalness = 0;
+            phys.roughness = finish.plasticRoughness;
+            phys.envMapIntensity = base.envMapIntensity * finish.plasticEnvBoost;
+            // Clearcoat: ~0 = old MeshStandardMaterial behaviour, 1 =
+            // full lacquer. Keep clearcoatRoughness low so the layer
+            // reads as a polished varnish (Tesla's hubcap finish).
+            phys.clearcoat = finish.plasticClearcoat;
+            phys.clearcoatRoughness = 0.1;
             plasticCount++;
           } else {
             // Everything that's not a tire on a wheel mesh is treated
             // as alloy/rim — covers all the bespoke Tesla material
             // names (Helix2_Dark2, GeminiDark3, Arachnid_V2_213,
             // BayberryE41Material, untitled primitives on D50, etc.).
-            mat.roughness = Math.max(base.roughness, finish.alloyRoughnessMin);
-            mat.envMapIntensity = base.envMapIntensity * finish.alloyEnvBoost;
-            if (mat.color) {
+            // We mutate IN PLACE (no Physical upgrade) because alloys
+            // don't benefit from clearcoat — they already self-reflect.
+            originalMat.roughness = Math.max(base.roughness, finish.alloyRoughnessMin);
+            originalMat.envMapIntensity = base.envMapIntensity * finish.alloyEnvBoost;
+            if (originalMat.color) {
               if (finish.alloyTint !== undefined) {
-                mat.color.setHex(finish.alloyTint);
+                originalMat.color.setHex(finish.alloyTint);
               } else {
-                mat.color.setHex(base.color);
+                originalMat.color.setHex(base.color);
               }
             }
             alloyCount++;
@@ -522,7 +572,8 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
       // eslint-disable-next-line no-console
       console.log(
         `[Poppyseed3D] wheel polish: alloy=${alloyCount} plastic=${plasticCount} | ` +
-          `materials seen: ${seenMats.join(', ')}`,
+          `materials seen: ${seenMats.join(', ')} | ` +
+          `clearcoat=${finish.plasticClearcoat.toFixed(2)}`,
       );
     }
 
@@ -2000,7 +2051,10 @@ function BodyBoundingBoxWire() {
         >
           body bbox
           <div style={{ fontSize: 9, opacity: 0.7 }}>
-            L={size.x.toFixed(2)}m · H={size.y.toFixed(2)}m · W={size.z.toFixed(2)}m
+            X={size.x.toFixed(2)}m · Y={size.y.toFixed(2)}m · Z={size.z.toFixed(2)}m
+          </div>
+          <div style={{ fontSize: 8, opacity: 0.5 }}>
+            (compare au Y r\u00e9el : 1.94 \u00d7 1.62 \u00d7 4.79 m)
           </div>
         </div>
       </Html>

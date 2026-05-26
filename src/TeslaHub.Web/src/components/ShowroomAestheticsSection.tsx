@@ -1023,6 +1023,7 @@ function WheelsSection({ overrides, onChange, defaults }: Props) {
   const alloyTint = wf.alloyTint ?? def.alloyTint;
   const plasticRoughness = wf.plasticRoughness ?? def.plasticRoughness;
   const plasticEnvBoost = wf.plasticEnvBoost ?? def.plasticEnvBoost;
+  const plasticClearcoat = wf.plasticClearcoat ?? def.plasticClearcoat;
   const overridden = !!overrides.wheelFinish && Object.keys(overrides.wheelFinish).length > 0;
 
   return (
@@ -1118,6 +1119,21 @@ function WheelsSection({ overrides, onChange, defaults }: Props) {
         step={0.05}
         unit="x"
       />
+      <ShowroomSlider
+        label="Clearcoat"
+        value={plasticClearcoat}
+        onChange={(n) => setField('plasticClearcoat', n)}
+        defaultValue={def.plasticClearcoat}
+        min={0}
+        max={1}
+        step={0.01}
+      />
+      <p className="text-[10px] text-[#6b7280] -mt-1">
+        Couche de vernis transparent par-dessus le plastique noir
+        (Highland D50 / Y E41). Donne le reflet brillant des hubcaps
+        Tesla sans changer la couleur de base. 0 = mat, 1 = vernis
+        complet.
+      </p>
     </SubSection>
   );
 }
