@@ -512,6 +512,18 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
         // "Cannot read 'x' of undefined" when the source is a plain
         // MeshStandardMaterial. Bypass via the parent class's copy.
         THREE.MeshStandardMaterial.prototype.copy.call(phys, original);
+        // CRITICAL: MeshStandardMaterial.copy() does `this.defines =
+        // { STANDARD: '' }`, which WIPES the `PHYSICAL` define the
+        // MeshPhysicalMaterial constructor set up. Without `PHYSICAL`,
+        // the lights_physical_* shader chunks short-circuit and the
+        // clearcoat uniform is read by no one — you'll see the
+        // material count, see the uniform value update in the console,
+        // and yet the viewport stays mat. Restore the Physical defines
+        // and flag `needsUpdate` so Three rebuilds the shader on the
+        // next render with the Physical BRDF (which knows about
+        // clearcoat) instead of the Standard BRDF.
+        phys.defines = { STANDARD: '', PHYSICAL: '' };
+        phys.needsUpdate = true;
         phys.name = `${name}_phys`;
         (phys as unknown as Record<string, unknown>)[PHYS_ORIGINAL_PROP] = original;
         physMap!.set(original, phys);
