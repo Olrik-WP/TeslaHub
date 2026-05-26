@@ -524,9 +524,16 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
             let phys = physMap!.get(originalMat);
             if (!phys) {
               phys = new THREE.MeshPhysicalMaterial();
-              // Copy every Standard material property the GLB carried
-              // so the upgrade is visually identical at clearcoat=0.
-              phys.copy(originalMat);
+              // IMPORTANT: do NOT call `phys.copy(originalMat)` — Three
+              // js's MeshPhysicalMaterial.copy() reads Physical-only
+              // fields off the source (clearcoatNormalScale, etc.) and
+              // crashes with "Cannot read 'x' of undefined" when the
+              // source is a plain MeshStandardMaterial. Bypass by
+              // invoking the PARENT class's copy via .call, which only
+              // touches MeshStandardMaterial fields the GLB actually
+              // exposes. The Physical-specific fields keep their
+              // constructor defaults; we set clearcoat below.
+              THREE.MeshStandardMaterial.prototype.copy.call(phys, originalMat);
               phys.name = `${matName}_phys`;
               physMap!.set(originalMat, phys);
             }
