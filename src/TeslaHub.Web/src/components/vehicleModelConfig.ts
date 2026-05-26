@@ -427,6 +427,18 @@ export interface VehicleModelConfig {
      *  Undefined = leave the GLB's native colour alone. Use to dial
      *  black-painted alloys, gold, bronze, etc. */
     alloyTint?: number;
+    /** Clearcoat strength applied to alloy / rim materials. 0..1.
+     *  When > 0 the material is silently upgraded to a
+     *  `MeshPhysicalMaterial` and a thin lacquer layer is added on
+     *  top of the diffuse alloy. This is the right tool for matte-
+     *  black painted alloys like the Highland D50 hubcaps (which the
+     *  classifier puts in the "alloy" bucket because their material
+     *  name doesn't match the tire/rubber regex): the underlying
+     *  matte stays matte but the clearcoat picks up the bright HDR
+     *  sky so the hubcap reads as "polished black paint" rather than
+     *  "absorbent black void". Default 0 (no upgrade, keeps the
+     *  cheaper MeshStandardMaterial shader path). */
+    alloyClearcoat: number;
     /** Roughness forced on plastic black / rubber materials. Default
      *  0.55 — sub-matte so brake-dust / tyre rubber reads correctly. */
     plasticRoughness: number;
@@ -663,6 +675,7 @@ export const PoppyseedConfig: VehicleModelConfig = {
   wheelFinish: {
     alloyRoughnessMin: 0,
     alloyEnvBoost: 0.4,
+    alloyClearcoat: 0,
     plasticRoughness: 0.45,
     plasticEnvBoost: 0.5,
     plasticClearcoat: 0,
@@ -1167,6 +1180,7 @@ export const BayberryConfig: VehicleModelConfig = {
   wheelFinish: {
     alloyRoughnessMin: 0.67,
     alloyEnvBoost: 2.1,
+    alloyClearcoat: 0,
     plasticRoughness: 0.53,
     plasticEnvBoost: 1.15,
     plasticClearcoat: 0,

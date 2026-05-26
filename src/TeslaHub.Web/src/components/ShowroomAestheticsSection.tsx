@@ -1020,6 +1020,7 @@ function WheelsSection({ overrides, onChange, defaults }: Props) {
   const def = defaults.wheelFinish;
   const alloyRoughness = wf.alloyRoughnessMin ?? def.alloyRoughnessMin;
   const alloyEnvBoost = wf.alloyEnvBoost ?? def.alloyEnvBoost;
+  const alloyClearcoat = wf.alloyClearcoat ?? def.alloyClearcoat;
   const alloyTint = wf.alloyTint ?? def.alloyTint;
   const plasticRoughness = wf.plasticRoughness ?? def.plasticRoughness;
   const plasticEnvBoost = wf.plasticEnvBoost ?? def.plasticEnvBoost;
@@ -1066,6 +1067,19 @@ function WheelsSection({ overrides, onChange, defaults }: Props) {
         step={0.05}
         unit="x"
       />
+      <ShowroomSlider
+        label="Clearcoat"
+        value={alloyClearcoat}
+        onChange={(n) => setField('alloyClearcoat', n)}
+        defaultValue={def.alloyClearcoat}
+        min={0}
+        max={1}
+        step={0.01}
+      />
+      <p className="text-[10px] text-[#6b7280] -mt-1">
+        Vernis transparent par-dessus la jante (idéal pour les hubcaps
+        Highland D50 peints en mat noir). 0 = mat, 1 = lacquer plein.
+      </p>
       <div className="flex items-center gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-[10px] uppercase tracking-wider text-[#9ca3af] font-mono truncate">

@@ -467,18 +467,26 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
       // already-boosted value (envMapIntensity → +∞, tint → drift).
       type WheelSnap = { roughness: number; envMapIntensity: number; color: number };
       const SNAP_KEY = '__teslahub_wheel_snap';
-      const PHYS_KEY = '__teslahub_wheel_plastic_phys';
+      const PHYS_KEY = '__teslahub_wheel_phys';
+      // Property tag added to every upgraded MeshPhysicalMaterial so
+      // subsequent traversals can resolve it back to its GLB-native
+      // original WITHOUT re-creating a new physical clone every tick
+      // (which previously snowballed mat names into Pirelli_phys_phys_
+      // phys_phys_... and leaked hundreds of GPU-allocated materials).
+      const PHYS_ORIGINAL_PROP = '__teslahub_phys_original';
       const wheelSceneAny = wheelGltf.scene as unknown as Record<string, unknown>;
       let snap = wheelSceneAny[SNAP_KEY] as WeakMap<THREE.Material, WheelSnap> | undefined;
       if (!snap) {
         snap = new WeakMap();
         wheelSceneAny[SNAP_KEY] = snap;
       }
-      // Mapping ORIGINAL plastic Standard material → upgraded Physical
-      // material that carries the optional clearcoat layer. Built lazily
-      // on first encounter of each unique plastic mat so a wheel GLB
-      // with N shared plastic materials only allocates N physical
-      // clones (regardless of how many meshes reuse them).
+      // Mapping ORIGINAL Standard material → upgraded Physical material
+      // that carries the optional clearcoat layer. Built lazily on
+      // first encounter of each unique mat so a wheel GLB with N
+      // shared materials only allocates N physical clones (regardless
+      // of how many meshes reuse them). The reverse path (resolving
+      // an already-swapped phys back to its original) is via the
+      // PHYS_ORIGINAL_PROP property tag set below.
       let physMap = wheelSceneAny[PHYS_KEY] as
         | WeakMap<THREE.Material, THREE.MeshPhysicalMaterial>
         | undefined;
@@ -486,9 +494,34 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
         physMap = new WeakMap();
         wheelSceneAny[PHYS_KEY] = physMap;
       }
+      // Get-or-create the MeshPhysicalMaterial upgrade for a given
+      // ORIGINAL Standard material. Always returns the SAME `phys` for
+      // the same original (memoised in physMap). The upgrade tags
+      // itself with PHYS_ORIGINAL_PROP so a later traversal sees it
+      // and avoids creating an Nth-generation clone.
+      const upgradeToPhysical = (
+        original: THREE.MeshStandardMaterial,
+        name: string,
+      ): THREE.MeshPhysicalMaterial => {
+        let phys = physMap!.get(original);
+        if (phys) return phys;
+        phys = new THREE.MeshPhysicalMaterial();
+        // IMPORTANT: do NOT call `phys.copy(original)` — Three.js's
+        // MeshPhysicalMaterial.copy() reads Physical-only fields off
+        // the source (clearcoatNormalScale, etc.) and crashes with
+        // "Cannot read 'x' of undefined" when the source is a plain
+        // MeshStandardMaterial. Bypass via the parent class's copy.
+        THREE.MeshStandardMaterial.prototype.copy.call(phys, original);
+        phys.name = `${name}_phys`;
+        (phys as unknown as Record<string, unknown>)[PHYS_ORIGINAL_PROP] = original;
+        physMap!.set(original, phys);
+        return phys;
+      };
+
       const finish = cfg.wheelFinish;
       let alloyCount = 0;
       let plasticCount = 0;
+      let physUpgrades = 0;
       const seenMats: string[] = [];
       wheelGltf.scene.traverse((obj) => {
         const mesh = obj as THREE.Mesh;
@@ -497,79 +530,93 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
           ? (mesh.material as THREE.Material[])
           : [mesh.material as THREE.Material];
         for (let i = 0; i < matsArr.length; i++) {
-          const originalMat = matsArr[i] as THREE.MeshStandardMaterial;
-          const matName = (originalMat as { name?: string }).name ?? '';
+          const slotMat = matsArr[i];
+          // Resolve back to the GLB-native ORIGINAL even if a previous
+          // tick already swapped this slot to a physical upgrade. This
+          // is what stops the Pirelli_phys_phys_phys snowball.
+          const original =
+            ((slotMat as unknown as Record<string, unknown>)[PHYS_ORIGINAL_PROP] as
+              | THREE.MeshStandardMaterial
+              | undefined) ?? (slotMat as THREE.MeshStandardMaterial);
+          const matName = (original as { name?: string }).name ?? '';
           if (seenMats.indexOf(matName) === -1) seenMats.push(matName);
           // Capture baseline from the ORIGINAL material ONCE — every
           // subsequent re-run computes from these reference values,
-          // never from the mutated current ones. Even after we swap a
-          // plastic mat for a MeshPhysicalMaterial clone, the WeakMap
-          // is keyed on the original so the baseline survives.
-          let base = snap!.get(originalMat);
+          // never from the mutated current ones.
+          let base = snap!.get(original);
           if (!base) {
             base = {
-              roughness: originalMat.roughness ?? 0.5,
-              envMapIntensity: originalMat.envMapIntensity ?? 1,
-              color: originalMat.color ? originalMat.color.getHex() : 0xffffff,
+              roughness: original.roughness ?? 0.5,
+              envMapIntensity: original.envMapIntensity ?? 1,
+              color: original.color ? original.color.getHex() : 0xffffff,
             };
-            snap!.set(originalMat, base);
+            snap!.set(original, base);
           }
           if (WHEEL_TIRE_MAT_RE.test(matName)) {
-            // Plastic / tire path. Always upgrade to MeshPhysicalMaterial
-            // so the `plasticClearcoat` slider can dial in a lacquer
-            // layer on top of the diffuse plastic — without this Tesla-
-            // style trick the dark D50 hubcaps look as flat-black and
-            // absorbent as a dead pixel under the HDR environment
-            // (no amount of envBoost can save a fully-rough plastic).
-            let phys = physMap!.get(originalMat);
-            if (!phys) {
-              phys = new THREE.MeshPhysicalMaterial();
-              // IMPORTANT: do NOT call `phys.copy(originalMat)` — Three
-              // js's MeshPhysicalMaterial.copy() reads Physical-only
-              // fields off the source (clearcoatNormalScale, etc.) and
-              // crashes with "Cannot read 'x' of undefined" when the
-              // source is a plain MeshStandardMaterial. Bypass by
-              // invoking the PARENT class's copy via .call, which only
-              // touches MeshStandardMaterial fields the GLB actually
-              // exposes. The Physical-specific fields keep their
-              // constructor defaults; we set clearcoat below.
-              THREE.MeshStandardMaterial.prototype.copy.call(phys, originalMat);
-              phys.name = `${matName}_phys`;
-              physMap!.set(originalMat, phys);
+            // Plastic / tire path. Upgrade to MeshPhysicalMaterial
+            // only when the user actually wants a clearcoat — keeps
+            // the bare-metal MeshStandardMaterial shader path active
+            // for users at clearcoat=0 (zero overhead).
+            let target: THREE.MeshStandardMaterial = original;
+            if (finish.plasticClearcoat > 0) {
+              const phys = upgradeToPhysical(original, matName);
+              if (Array.isArray(mesh.material)) {
+                (mesh.material as THREE.Material[])[i] = phys;
+              } else {
+                mesh.material = phys;
+              }
+              phys.clearcoat = finish.plasticClearcoat;
+              phys.clearcoatRoughness = 0.1;
+              target = phys;
+              physUpgrades++;
+            } else if (slotMat !== original) {
+              // User dialled clearcoat back to 0 — restore the slot.
+              if (Array.isArray(mesh.material)) {
+                (mesh.material as THREE.Material[])[i] = original;
+              } else {
+                mesh.material = original;
+              }
             }
-            // Swap the material reference on this slot. Other meshes
-            // sharing the same ORIGINAL material reach the same `phys`
-            // via the WeakMap so the swap propagates without us having
-            // to re-traverse.
-            if (Array.isArray(mesh.material)) {
-              (mesh.material as THREE.Material[])[i] = phys;
-            } else {
-              mesh.material = phys;
-            }
-            // Tune the physical material from the baseline.
-            phys.metalness = 0;
-            phys.roughness = finish.plasticRoughness;
-            phys.envMapIntensity = base.envMapIntensity * finish.plasticEnvBoost;
-            // Clearcoat: ~0 = old MeshStandardMaterial behaviour, 1 =
-            // full lacquer. Keep clearcoatRoughness low so the layer
-            // reads as a polished varnish (Tesla's hubcap finish).
-            phys.clearcoat = finish.plasticClearcoat;
-            phys.clearcoatRoughness = 0.1;
+            target.metalness = 0;
+            target.roughness = finish.plasticRoughness;
+            target.envMapIntensity = base.envMapIntensity * finish.plasticEnvBoost;
             plasticCount++;
           } else {
-            // Everything that's not a tire on a wheel mesh is treated
-            // as alloy/rim — covers all the bespoke Tesla material
+            // Alloy / rim path — covers all the bespoke Tesla mat
             // names (Helix2_Dark2, GeminiDark3, Arachnid_V2_213,
-            // BayberryE41Material, untitled primitives on D50, etc.).
-            // We mutate IN PLACE (no Physical upgrade) because alloys
-            // don't benefit from clearcoat — they already self-reflect.
-            originalMat.roughness = Math.max(base.roughness, finish.alloyRoughnessMin);
-            originalMat.envMapIntensity = base.envMapIntensity * finish.alloyEnvBoost;
-            if (originalMat.color) {
-              if (finish.alloyTint !== undefined) {
-                originalMat.color.setHex(finish.alloyTint);
+            // BayberryE41Material, untitled primitives on D50…) AND
+            // the Highland D50 painted-matte-black hubcaps that show
+            // up as classified "alloy" because their material name
+            // doesn't match the tire regex. The alloyClearcoat slider
+            // is the Tesla-style trick for THOSE: keep the diffuse
+            // matte black, lay a clearcoat layer on top so the HDR
+            // sky reflects off the lacquer.
+            let target: THREE.MeshStandardMaterial = original;
+            if (finish.alloyClearcoat > 0) {
+              const phys = upgradeToPhysical(original, matName);
+              if (Array.isArray(mesh.material)) {
+                (mesh.material as THREE.Material[])[i] = phys;
               } else {
-                originalMat.color.setHex(base.color);
+                mesh.material = phys;
+              }
+              phys.clearcoat = finish.alloyClearcoat;
+              phys.clearcoatRoughness = 0.1;
+              target = phys;
+              physUpgrades++;
+            } else if (slotMat !== original) {
+              if (Array.isArray(mesh.material)) {
+                (mesh.material as THREE.Material[])[i] = original;
+              } else {
+                mesh.material = original;
+              }
+            }
+            target.roughness = Math.max(base.roughness, finish.alloyRoughnessMin);
+            target.envMapIntensity = base.envMapIntensity * finish.alloyEnvBoost;
+            if (target.color) {
+              if (finish.alloyTint !== undefined) {
+                target.color.setHex(finish.alloyTint);
+              } else {
+                target.color.setHex(base.color);
               }
             }
             alloyCount++;
@@ -580,7 +627,9 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
       console.log(
         `[Poppyseed3D] wheel polish: alloy=${alloyCount} plastic=${plasticCount} | ` +
           `materials seen: ${seenMats.join(', ')} | ` +
-          `clearcoat=${finish.plasticClearcoat.toFixed(2)}`,
+          `clearcoat alloy=${finish.alloyClearcoat.toFixed(2)} ` +
+          `plastic=${finish.plasticClearcoat.toFixed(2)} | ` +
+          `physical upgrades=${physUpgrades}`,
       );
     }
 
