@@ -154,8 +154,8 @@ export default function Costs({ carId }: Props) {
   const [showGasSetup, setShowGasSetup] = useState(false);
 
   // Re-seed the three gas inputs whenever the cached carConfig changes.
-  // Critical when the user switches cars from the CarSelector: react-query
-  // hands us a fresh carConfig (different gasPrice/gasConso/gasName per
+  // Critical when the user switches cars from the VehicleSwitcherPills:
+  // react-query hands us a fresh carConfig (different gasPrice/gasConso/gasName per
   // vehicle), but the form inputs are now controlled by these state vars,
   // so without this effect they'd keep the previous car's values until
   // the user edits them manually. Also covers post-save re-fetches

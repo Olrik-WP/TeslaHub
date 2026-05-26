@@ -7,7 +7,7 @@ import { isAuthenticated, tryInitialRefresh, setAuthExpiredHandler } from './api
 import { useCars } from './hooks/useVehicle';
 import { getSettings } from './api/queries';
 import BottomNav from './components/BottomNav';
-import CarSelector from './components/CarSelector';
+import VehicleSwitcherPills from './components/VehicleSwitcherPills';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ControlFeedbackProvider } from './components/ControlFeedback';
 import { ScrollContainerProvider } from './contexts/ScrollContainerContext';
@@ -147,11 +147,11 @@ function AppLayout() {
           overflow:hidden in index.css, this forces ALL scrolling to
           happen inside the routed scroll container below. Otherwise
           body grows with the page content and the document scrolls,
-          which slides the CarSelector and every sticky page header
-          off the screen. */}
+          which slides the VehicleSwitcherPills and every sticky page
+          header off the screen. */}
       <div className="h-full bg-[#0a0a0a] flex flex-col">
         {cars && cars.length > 1 && (
-          <CarSelector
+          <VehicleSwitcherPills
             cars={cars}
             selectedId={selectedCarId}
             onChange={handleCarChange}
@@ -163,8 +163,8 @@ function AppLayout() {
             expanded) make the container taller than the viewport, so
             the inner overflow-y-auto never kicks in and the document
             scrolls instead. That breaks two things at once:
-              - the CarSelector (rendered above this div) scrolls out
-                of view, hiding the active vehicle;
+              - the VehicleSwitcherPills (rendered above this div)
+                scroll out of view, hiding the active vehicle;
               - position:sticky inside the routed pages anchors to the
                 document and the headers slide off with the rest. */}
         <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))]">
@@ -188,7 +188,7 @@ function AppLayout() {
                 <Route path="/locations" element={<Locations carId={selectedCarId} />} />
                 <Route path="/trip" element={<Trip carId={selectedCarId} />} />
                 <Route path="/dashboard" element={<Dashboard carId={selectedCarId} />} />
-                <Route path="/control" element={<Control carId={selectedCarId} onCarChange={handleCarChange} />} />
+                <Route path="/control" element={<Control carId={selectedCarId} />} />
                 <Route path="/settings" element={<Settings carId={selectedCarId} />} />
               </Routes>
             </Suspense>

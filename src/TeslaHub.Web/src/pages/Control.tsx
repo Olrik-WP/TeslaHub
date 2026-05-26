@@ -18,17 +18,9 @@ import MediaCard from '../components/control/MediaCard';
 import SoftwareCard from '../components/control/SoftwareCard';
 import RefreshIndicator from '../components/RefreshIndicator';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
-import ControlVehicleSwitcher from '../components/control/ControlVehicleSwitcher';
 
 interface Props {
   carId: number | undefined;
-  /**
-   * Lifted from App.tsx so the in-header switcher can change the
-   * globally selected car without leaving the Control page. Optional
-   * to keep the component back-compatible for any caller that doesn't
-   * need the switch behaviour.
-   */
-  onCarChange?: (id: number) => void;
 }
 
 /**
@@ -40,7 +32,7 @@ interface Props {
  * Visible only if Fleet API is connected and the current car has the
  * virtual key paired. Unpaired cars get a banner pointing to Settings.
  */
-export default function Control({ carId, onCarChange }: Props) {
+export default function Control({ carId }: Props) {
   const { t } = useTranslation();
   const { data: availability, isLoading: availLoading } = useControlAvailability();
   const { data: vehicleStatus } = useVehicleStatus(carId);
@@ -147,15 +139,14 @@ export default function Control({ carId, onCarChange }: Props) {
       >
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            {/* In-header vehicle switcher: keeps the active car visible
-                even after the user has scrolled past the global
-                CarSelector. Renders as a plain title when only one car
-                is configured, so single-car users see no extra UI. */}
-            <ControlVehicleSwitcher
-              selectedCarId={carId}
-              onChange={(id) => onCarChange?.(id)}
-              activeLabel={snapshot?.displayName ?? teslaVehicle.displayName ?? teslaVehicle.vin}
-            />
+            {/* Vehicle name as a plain title — the global
+                VehicleSwitcherPills (in App.tsx, above the scroll
+                container) handles car switching and stays visible
+                even when this page is scrolled, so no in-header
+                switcher is needed here anymore. */}
+            <h1 className="text-base font-semibold text-[#e0e0e0] truncate">
+              {snapshot?.displayName ?? teslaVehicle.displayName ?? teslaVehicle.vin}
+            </h1>
             <div className="flex items-center gap-2 mt-0.5">
               <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border ${stateColor}`}>
                 {stateLabel}

@@ -20,8 +20,9 @@ html {
   /* Lock the document height to the viewport so that scrolling happens
      INSIDE the routed scroll container, not on the document itself.
      Without this, body/html grow with their content and the whole
-     document scrolls — which makes the global CarSelector and any
-     position:sticky page header slide off with the rest of the page. */
+     document scrolls — which makes the global VehicleSwitcherPills
+     and any position:sticky page header slide off with the rest of
+     the page. */
   height: 100%;
   overflow: hidden;
 }
