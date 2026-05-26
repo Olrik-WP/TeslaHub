@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ControlCard from './ControlCard';
 import ControlButton from './ControlButton';
 import SeatHeaterRow from './SeatHeaterRow';
+import TempDial from './TempDial';
 import { capabilitiesLoaded, snapshotPatch, useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
 import type { VehicleStatus } from '../../api/queries';
 import { useUnits } from '../../hooks/useUnits';
@@ -63,6 +64,12 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
     const v = u.convertTemp(celsius);
     return v == null ? '—' : (u.tempUnit === '°F' ? v.toFixed(0) : v.toFixed(1));
   };
+  // The TempDial component is unit-agnostic — feed it values already
+  // converted to the display unit, plus a formatter that doesn't
+  // re-convert (otherwise we'd convert twice).
+  const displayValue = (celsius: number) => u.convertTemp(celsius) ?? celsius;
+  const formatDisplay = (v: number) =>
+    `${u.tempUnit === '°F' ? v.toFixed(0) : v.toFixed(1)}${u.tempUnit}`;
 
   // Optimistic patches mirror the HomeQuickActions behaviour — see the
   // snapshotPatch helper for the why-and-how on Control's Fleet-fed
@@ -121,30 +128,40 @@ export default function ClimateCard({ vehicleId, snapshot, vehicleStatus, capabi
   const copFanOnly = (climate.cabin_overheat_protection ?? '').toLowerCase().includes('no');
   const copLevel = copTempToInt(climate.cop_activation_temperature);
 
-  return (
-    <ControlCard title={t('control.climate.title')} icon={ICON}>
-      {/* Big central temperature stepper */}
-      <div className="grid grid-cols-3 items-center gap-2 my-2">
-        <button
-          type="button"
-          onClick={() => adjustDriver(-displayStep)}
-          disabled={setTemps.isPending}
-          className="h-14 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-[#e0e0e0] text-2xl active:bg-[#222] disabled:opacity-50"
-        >−</button>
-        <div className="flex flex-col items-center">
-          <span className="text-3xl font-semibold text-[#e0e0e0]">{fmt(driver)}{u.tempUnit}</span>
-          <span className="text-[10px] text-[#6b7280] uppercase tracking-wide">
-            {t('control.climate.driver')}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={() => adjustDriver(+displayStep)}
-          disabled={setTemps.isPending}
-          className="h-14 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-[#e0e0e0] text-2xl active:bg-[#222] disabled:opacity-50"
-        >+</button>
-      </div>
+  const climateOnBadge = (
+    <span
+      className={[
+        'text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border',
+        isOn
+          ? 'border-[#22c55e]/40 text-[#22c55e] bg-[#22c55e]/10'
+          : 'border-[#2a2a2a] text-[#6b7280]',
+      ].join(' ')}
+    >
+      {isOn ? t('control.climate.on', 'On') : t('control.climate.off', 'Off')}
+    </span>
+  );
 
+  return (
+    <ControlCard
+      id="control-climate"
+      title={t('control.climate.title')}
+      icon={ICON}
+      accent="climate"
+      badge={climateOnBadge}
+      hero={
+        <TempDial
+          value={displayValue(driver)}
+          min={displayValue(min)}
+          max={displayValue(max)}
+          step={displayStep}
+          formatValue={formatDisplay}
+          centerCaption={t('control.climate.driver')}
+          onDecrement={() => adjustDriver(-displayStep)}
+          onIncrement={() => adjustDriver(+displayStep)}
+          busy={setTemps.isPending}
+        />
+      }
+    >
       {/* ON/OFF */}
       <div className="my-3">
         <ControlButton

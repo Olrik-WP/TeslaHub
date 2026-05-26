@@ -35,7 +35,12 @@ export default function MediaCard({ vehicleId, online }: Props) {
   const volDn = useControlMutation(vehicleId, 'media/volume-down');
 
   return (
-    <ControlCard title={t('control.media.title')} icon={ICON}>
+    <ControlCard
+      id="control-media"
+      title={t('control.media.title')}
+      icon={ICON}
+      accent="media"
+    >
       <div className="grid grid-cols-3 gap-2 mb-2">
         <ControlButton label={t('control.media.prev')} onClick={() => prev.mutate(undefined as never)} loading={prev.isPending} disabled={false} icon={<SkipIcon back />} />
         <ControlButton label={t('control.media.play')} onClick={() => play.mutate(undefined as never)} loading={play.isPending} disabled={false} icon={<PlayIcon />} />

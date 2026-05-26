@@ -69,6 +69,10 @@
       "wokeNote": "(woken up first)",
       "error": "Command failed."
     },
+    "summary": {
+      "on": "On",
+      "off": "Off"
+    },
     "setup": {
       "configure": {
         "title": "Fleet API not configured",
@@ -96,6 +100,8 @@
       "title": "Climate",
       "start": "Start",
       "stop": "Stop",
+      "on": "On",
+      "off": "Off",
       "driver": "Driver",
       "passenger": "Passenger",
       "sync": "Sync",
@@ -153,6 +159,8 @@
     },
     "access": {
       "title": "Access",
+      "locked": "Locked",
+      "unlocked": "Unlocked",
       "lock": "Lock",
       "unlock": "Unlock",
       "sentry": "Sentry",
@@ -170,6 +178,9 @@
     },
     "openings": {
       "title": "Openings",
+      "allClosed": "All closed",
+      "someOpen_one": "{{count}} open",
+      "someOpen_other": "{{count}} open",
       "frunkOpen": "Open frunk",
       "frunkClose": "Close frunk",
       "trunkOpen": "Open trunk",

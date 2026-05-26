@@ -85,9 +85,28 @@ export default function AccessCard({ vehicleId, snapshot, vehicleStatus, online 
     );
   };
 
+  const accessBadge = (
+    <span
+      className={[
+        'text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border',
+        isLocked
+          ? 'border-[#22c55e]/40 text-[#22c55e] bg-[#22c55e]/10'
+          : 'border-[#ef4444]/40 text-[#ef4444] bg-[#ef4444]/10',
+      ].join(' ')}
+    >
+      {isLocked ? t('control.access.locked', 'Locked') : t('control.access.unlocked', 'Unlocked')}
+    </span>
+  );
+
   return (
     <>
-      <ControlCard title={t('control.access.title')} icon={ICON}>
+      <ControlCard
+        id="control-access"
+        title={t('control.access.title')}
+        icon={ICON}
+        accent="access"
+        badge={accessBadge}
+      >
         <div className="grid grid-cols-2 gap-2">
           <ControlButton
             label={t('control.access.lock')}

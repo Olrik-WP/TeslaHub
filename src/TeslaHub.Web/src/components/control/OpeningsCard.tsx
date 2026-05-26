@@ -55,6 +55,9 @@ export default function OpeningsCard({ vehicleId, snapshot, vehicleStatus, capab
   const frunkOpen = (v.ft ?? 0) > 0;
   const trunkOpen = (v.rt ?? 0) > 0;
   const windowsOpen = [v.fd_window, v.fp_window, v.rd_window, v.rp_window].some((w) => (w ?? 0) > 0);
+  // Count of OPEN openings — frunk + trunk + (any window). Shown as a
+  // badge so the user can tell at a glance whether everything's shut.
+  const openCount = (frunkOpen ? 1 : 0) + (trunkOpen ? 1 : 0) + (windowsOpen ? 1 : 0);
 
   // Show the openings card unless we explicitly know the car has no
   // actuated trunks. Treat "capabilities never loaded" (sleeping car)
@@ -63,8 +66,29 @@ export default function OpeningsCard({ vehicleId, snapshot, vehicleStatus, capab
     return null;
   }
 
+  const openingsBadge = (
+    <span
+      className={[
+        'text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border',
+        openCount === 0
+          ? 'border-[#22c55e]/40 text-[#22c55e] bg-[#22c55e]/10'
+          : 'border-[#f59e0b]/40 text-[#f59e0b] bg-[#f59e0b]/10',
+      ].join(' ')}
+    >
+      {openCount === 0
+        ? t('control.openings.allClosed', 'All closed')
+        : t('control.openings.someOpen', { count: openCount, defaultValue: '{{count}} open' })}
+    </span>
+  );
+
   return (
-    <ControlCard title={t('control.openings.title')} icon={ICON}>
+    <ControlCard
+      id="control-openings"
+      title={t('control.openings.title')}
+      icon={ICON}
+      accent="openings"
+      badge={openingsBadge}
+    >
       <div className="grid grid-cols-2 gap-2">
         <ControlButton
           label={frunkOpen ? t('control.openings.frunkClose') : t('control.openings.frunkOpen')}

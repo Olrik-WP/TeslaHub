@@ -62,6 +62,10 @@
       "offline": "Offline",
       "unknown": "Unbekannt"
     },
+    "summary": {
+      "on": "An",
+      "off": "Aus"
+    },
     "feedback": {
       "sending": "Senden…",
       "waking": "Tesla wird geweckt…",
@@ -96,6 +100,8 @@
       "title": "Klimaanlage",
       "start": "Start",
       "stop": "Stopp",
+      "on": "Ein",
+      "off": "Aus",
       "driver": "Fahrer",
       "passenger": "Beifahrer",
       "sync": "Sync",
@@ -153,6 +159,8 @@
     },
     "access": {
       "title": "Zugang",
+      "locked": "Verriegelt",
+      "unlocked": "Entriegelt",
       "lock": "Verriegeln",
       "unlock": "Entriegeln",
       "sentry": "Wächter",
@@ -170,6 +178,9 @@
     },
     "openings": {
       "title": "Öffnungen",
+      "allClosed": "Alle geschlossen",
+      "someOpen_one": "{{count}} offen",
+      "someOpen_other": "{{count}} offen",
       "frunkOpen": "Frunk öffnen",
       "frunkClose": "Frunk schließen",
       "trunkOpen": "Kofferraum öffnen",

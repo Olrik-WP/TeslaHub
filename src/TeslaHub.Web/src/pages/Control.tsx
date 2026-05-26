@@ -16,6 +16,7 @@ import AccessCard from '../components/control/AccessCard';
 import OpeningsCard from '../components/control/OpeningsCard';
 import MediaCard from '../components/control/MediaCard';
 import SoftwareCard from '../components/control/SoftwareCard';
+import ControlQuickSummary from '../components/control/ControlQuickSummary';
 import RefreshIndicator from '../components/RefreshIndicator';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 
@@ -218,6 +219,11 @@ export default function Control({ carId }: Props) {
           {t('control.staleHint')}
         </div>
       )}
+
+      {/* At-a-glance summary strip — 4 tiles (Climate / Charge / Access /
+          Openings) that smooth-scroll to the matching card below. NOT
+          a modal or a separate page — just a table-of-contents header. */}
+      <ControlQuickSummary snapshot={snapshot} vehicleStatus={vehicleStatus} />
 
       <div className="space-y-3 pb-4">
         <ClimateCard vehicleId={vehicleId!} snapshot={snapshot} vehicleStatus={vehicleStatus} capabilities={teslaVehicle.capabilities} online={online} />

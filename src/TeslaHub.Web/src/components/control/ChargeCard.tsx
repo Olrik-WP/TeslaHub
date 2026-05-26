@@ -2,8 +2,10 @@ import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import ControlCard from './ControlCard';
 import ControlButton from './ControlButton';
+import ChargeArc from './ChargeArc';
 import { presumeSupported, snapshotPatch, useControlMutation, type VehicleCapabilities, type VehicleStateSnapshot } from '../../hooks/useVehicleControl';
 import type { VehicleStatus } from '../../api/queries';
+import { useUnits } from '../../hooks/useUnits';
 import { readCharge } from './stateParsers';
 
 interface Props {
@@ -26,6 +28,7 @@ const ICON = (
  */
 export default function ChargeCard({ vehicleId, snapshot, vehicleStatus, capabilities, online }: Props) {
   const { t } = useTranslation();
+  const u = useUnits();
   const charge = readCharge(snapshot, vehicleStatus);
 
   const isCharging = (charge.charging_state ?? '').toLowerCase() === 'charging';
@@ -96,21 +99,47 @@ export default function ChargeCard({ vehicleId, snapshot, vehicleStatus, capabil
     </span>
   );
 
-  return (
-    <ControlCard title={t('control.charge.title')} icon={ICON} badge={stateBadge}>
-      {/* Battery + power read-out */}
-      <div className="flex items-baseline justify-between text-sm text-[#e0e0e0] mb-3">
-        <span>
-          {charge.battery_level != null ? `${charge.battery_level}%` : '—'}
-          {charge.battery_range != null && (
-            <span className="text-[#6b7280] text-xs ml-2">{Math.round(charge.battery_range)} km</span>
-          )}
-        </span>
-        {isCharging && charge.charger_power != null && (
-          <span className="text-xs text-[#22c55e]">+{charge.charger_power.toFixed(1)} kW</span>
-        )}
-      </div>
+  // Subline shown under the % in the centre of the arc. We blend
+  // range (always shown when known) with live power (only while
+  // actively charging) so the user gets the "+11.0 kW" reassurance
+  // without having to look elsewhere.
+  const rangeText =
+    charge.battery_range != null
+      ? `${u.fmtDist(charge.battery_range, 0)} ${u.distanceUnit}`
+      : null;
+  const powerText =
+    isCharging && charge.charger_power != null
+      ? `+${charge.charger_power.toFixed(1)} kW`
+      : null;
+  const arcSubline =
+    rangeText && powerText
+      ? `${rangeText} · ${powerText}`
+      : rangeText ?? powerText ?? null;
 
+  const arcAccent: 'charging' | 'plugged' | 'idle' = isCharging
+    ? 'charging'
+    : isPlugged
+      ? 'plugged'
+      : 'idle';
+
+  return (
+    <ControlCard
+      id="control-charge"
+      title={t('control.charge.title')}
+      icon={ICON}
+      accent="charge"
+      badge={stateBadge}
+      hero={
+        <ChargeArc
+          percent={charge.battery_level ?? 0}
+          limit={charge.charge_limit_soc ?? null}
+          centerValue={charge.battery_level != null ? charge.battery_level : '—'}
+          centerSuffix={charge.battery_level != null ? '%' : null}
+          subline={arcSubline}
+          accent={arcAccent}
+        />
+      }
+    >
       {/* Limit slider */}
       <div className="mb-3">
         <div className="flex justify-between text-[11px] text-[#9ca3af] mb-1">

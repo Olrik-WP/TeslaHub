@@ -49,7 +49,13 @@ export default function SoftwareCard({ vehicleId, snapshot, online }: Props) {
 
   return (
     <>
-      <ControlCard title={t('control.software.title')} icon={ICON} badge={hasPending ? stateBadge : undefined}>
+      <ControlCard
+        id="control-software"
+        title={t('control.software.title')}
+        icon={ICON}
+        accent="software"
+        badge={hasPending ? stateBadge : undefined}
+      >
         {update?.version && (
           <p className="text-xs text-[#9ca3af] mb-3">
             {t('control.software.version')}: <span className="text-[#e0e0e0]">{update.version}</span>

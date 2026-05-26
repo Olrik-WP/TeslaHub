@@ -69,6 +69,10 @@
       "wokeNote": "(voiture réveillée)",
       "error": "Échec de la commande."
     },
+    "summary": {
+      "on": "Actif",
+      "off": "Inactif"
+    },
     "setup": {
       "configure": {
         "title": "API Fleet non configurée",
@@ -96,6 +100,8 @@
       "title": "Climatisation",
       "start": "Démarrer",
       "stop": "Arrêter",
+      "on": "Allumée",
+      "off": "Éteinte",
       "driver": "Conducteur",
       "passenger": "Passager",
       "sync": "Sync",
@@ -153,6 +159,8 @@
     },
     "access": {
       "title": "Accès",
+      "locked": "Verrouillé",
+      "unlocked": "Déverrouillé",
       "lock": "Verrouiller",
       "unlock": "Déverrouiller",
       "sentry": "Sentinelle",
@@ -170,6 +178,9 @@
     },
     "openings": {
       "title": "Ouvertures",
+      "allClosed": "Tout fermé",
+      "someOpen_one": "{{count}} ouverte",
+      "someOpen_other": "{{count}} ouvertes",
       "frunkOpen": "Ouvrir le frunk",
       "frunkClose": "Fermer le frunk",
       "trunkOpen": "Ouvrir le coffre",
