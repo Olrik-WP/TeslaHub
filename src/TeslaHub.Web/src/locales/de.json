@@ -62,6 +62,9 @@
       "offline": "Offline",
       "unknown": "Unbekannt"
     },
+    "drawer": {
+      "close": "Schließen"
+    },
     "feedback": {
       "sending": "Senden…",
       "waking": "Tesla wird geweckt…",
@@ -490,6 +493,12 @@
     "pressure": "Reifendruckeinheit",
     "costSource": "Kostenquelle",
     "language": "Sprache",
+    "controlLayout": {
+      "label": "Layout der Steuerung",
+      "tiles": "Kompakt (Kacheln)",
+      "list": "Vollständig (gestapelte Karten)",
+      "hint": "Die kompakte Ansicht zeigt eine Zusammenfassung pro Kachel. Tippen Sie, um die Detailsteuerung zu öffnen."
+    },
     "mapStyle": "Kartenstil",
     "mapPositron": "Positron (hell)",
     "mapBright": "Bright (bunt)",

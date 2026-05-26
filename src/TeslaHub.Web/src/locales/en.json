@@ -62,6 +62,9 @@
       "offline": "Offline",
       "unknown": "Unknown"
     },
+    "drawer": {
+      "close": "Close"
+    },
     "feedback": {
       "sending": "Sending…",
       "waking": "Waking your Tesla…",
@@ -490,6 +493,12 @@
     "pressure": "Tire pressure unit",
     "costSource": "Cost source",
     "language": "Language",
+    "controlLayout": {
+      "label": "Control page layout",
+      "tiles": "Compact (tiles)",
+      "list": "Full (stacked cards)",
+      "hint": "Compact view shows a summary per tile. Tap to open the detailed controls."
+    },
     "mapStyle": "Map style",
     "mapPositron": "Positron (light)",
     "mapBright": "Bright (colorful)",

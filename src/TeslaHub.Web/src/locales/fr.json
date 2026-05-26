@@ -69,6 +69,9 @@
       "wokeNote": "(voiture réveillée)",
       "error": "Échec de la commande."
     },
+    "drawer": {
+      "close": "Fermer"
+    },
     "setup": {
       "configure": {
         "title": "API Fleet non configurée",
@@ -490,6 +493,12 @@
     "pressure": "Unité de pression pneus",
     "costSource": "Source des coûts",
     "language": "Langue",
+    "controlLayout": {
+      "label": "Mise en page Contrôles",
+      "tiles": "Compact (tuiles)",
+      "list": "Complet (cartes empilées)",
+      "hint": "La vue compacte affiche un résumé par tuile. Touchez pour ouvrir les commandes détaillées."
+    },
     "mapStyle": "Style de carte",
     "mapPositron": "Positron (clair)",
     "mapBright": "Bright (coloré)",

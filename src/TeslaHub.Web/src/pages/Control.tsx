@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -10,6 +10,7 @@ import {
 } from '../hooks/useVehicleControl';
 import { useVehicleStatus } from '../hooks/useVehicle';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import { useControlLayout } from '../hooks/useControlLayout';
 import ClimateCard from '../components/control/ClimateCard';
 import ChargeCard from '../components/control/ChargeCard';
 import AccessCard from '../components/control/AccessCard';
@@ -18,6 +19,9 @@ import MediaCard from '../components/control/MediaCard';
 import SoftwareCard from '../components/control/SoftwareCard';
 import RefreshIndicator from '../components/RefreshIndicator';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
+import ControlTileGrid from '../components/control/ControlTileGrid';
+import ControlDrawer from '../components/control/ControlDrawer';
+import { isPanelId, type PanelId } from '../components/control/controlPanels';
 
 interface Props {
   carId: number | undefined;
@@ -81,6 +85,30 @@ export default function Control({ carId }: Props) {
     }
     await Promise.all(tasks);
   });
+
+  // Tile-grid vs long-scroll layout. Tile grid is the new default;
+  // list is preserved as a per-device rollback safety net (see
+  // `useControlLayout` for the storage strategy).
+  const [layout] = useControlLayout();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const panelParam = searchParams.get('panel');
+  const activePanel: PanelId | null = isPanelId(panelParam) ? panelParam : null;
+
+  const openPanel = useCallback(
+    (next: PanelId) => {
+      // Push a new history entry so the back button closes the drawer.
+      const sp = new URLSearchParams(searchParams);
+      sp.set('panel', next);
+      setSearchParams(sp);
+    },
+    [searchParams, setSearchParams],
+  );
+
+  const closePanel = useCallback(() => {
+    const sp = new URLSearchParams(searchParams);
+    sp.delete('panel');
+    setSearchParams(sp);
+  }, [searchParams, setSearchParams]);
 
   if (availLoading) {
     return <div className="p-4 text-sm text-[#9ca3af]">{t('control.loading')}</div>;
@@ -219,30 +247,60 @@ export default function Control({ carId }: Props) {
         </div>
       )}
 
-      <div className="space-y-3 pb-4">
-        <ClimateCard vehicleId={vehicleId!} snapshot={snapshot} vehicleStatus={vehicleStatus} capabilities={teslaVehicle.capabilities} online={online} />
-        <ChargeCard vehicleId={vehicleId!} snapshot={snapshot} vehicleStatus={vehicleStatus} capabilities={teslaVehicle.capabilities} online={online} />
-        <AccessCard vehicleId={vehicleId!} snapshot={snapshot} vehicleStatus={vehicleStatus} online={online} />
-        <OpeningsCard vehicleId={vehicleId!} snapshot={snapshot} vehicleStatus={vehicleStatus} capabilities={teslaVehicle.capabilities} online={online} />
-        <MediaCard vehicleId={vehicleId!} online={online} />
-        <SoftwareCard vehicleId={vehicleId!} snapshot={snapshot} online={online} />
+      {/* Map shortcut — shown in both layouts. Tiles layout puts it at
+          the bottom of the tile list; list layout puts it under the
+          card stack like before. Identical destination either way. */}
+      {layout === 'tiles' ? (
+        <div className="space-y-2 pb-4">
+          <ControlTileGrid onOpenPanel={openPanel} />
+          <MapShortcut t={t} />
+        </div>
+      ) : (
+        <div className="space-y-3 pb-4">
+          <ClimateCard vehicleId={vehicleId!} snapshot={snapshot} vehicleStatus={vehicleStatus} capabilities={teslaVehicle.capabilities} online={online} />
+          <ChargeCard vehicleId={vehicleId!} snapshot={snapshot} vehicleStatus={vehicleStatus} capabilities={teslaVehicle.capabilities} online={online} />
+          <AccessCard vehicleId={vehicleId!} snapshot={snapshot} vehicleStatus={vehicleStatus} online={online} />
+          <OpeningsCard vehicleId={vehicleId!} snapshot={snapshot} vehicleStatus={vehicleStatus} capabilities={teslaVehicle.capabilities} online={online} />
+          <MediaCard vehicleId={vehicleId!} online={online} />
+          <SoftwareCard vehicleId={vehicleId!} snapshot={snapshot} online={online} />
+          <MapShortcut t={t} />
+        </div>
+      )}
 
-        {/* Navigation lives on the Map page (richer search + reverse geocode). */}
-        <Link
-          to="/map"
-          className="flex items-center justify-between bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 text-sm text-[#9ca3af] active:bg-[#1a1a1a]"
-        >
-          <span className="flex items-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="10" r="3" />
-              <path d="M12 2a8 8 0 0 0-8 8c0 5 8 12 8 12s8-7 8-12a8 8 0 0 0-8-8z" />
-            </svg>
-            {t('control.navigation.openMap')}
-          </span>
-          <span>→</span>
-        </Link>
-      </div>
+      {/* Drawer overlays the tile grid when ?panel= is set. Mounts
+          only when the param is valid — invalid values (typo, stale
+          deep-link) silently fall back to the bare tile grid. */}
+      {layout === 'tiles' && activePanel && (
+        <ControlDrawer
+          panel={activePanel}
+          vehicleId={vehicleId!}
+          snapshot={snapshot}
+          vehicleStatus={vehicleStatus}
+          capabilities={teslaVehicle.capabilities}
+          online={online}
+          onClose={closePanel}
+        />
+      )}
     </div>
+  );
+}
+
+/** Navigation lives on the Map page (richer search + reverse geocode). */
+function MapShortcut({ t }: { t: (k: string) => string }) {
+  return (
+    <Link
+      to="/map"
+      className="flex items-center justify-between bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 text-sm text-[#9ca3af] active:bg-[#1a1a1a]"
+    >
+      <span className="flex items-center gap-2">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="10" r="3" />
+          <path d="M12 2a8 8 0 0 0-8 8c0 5 8 12 8 12s8-7 8-12a8 8 0 0 0-8-8z" />
+        </svg>
+        {t('control.navigation.openMap')}
+      </span>
+      <span>→</span>
+    </Link>
   );
 }
 
