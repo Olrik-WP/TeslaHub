@@ -7,7 +7,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES } from '../i18n';
 import { MAP_STYLES } from '../hooks/useMapStyle';
-import { useControlLayout, type ControlLayout } from '../hooks/useControlLayout';
 import type { GlobalSettings, ChargingLocation } from '../api/queries';
 import CustomSelect from '../components/CustomSelect';
 import SecurityAlertsCard from '../components/SecurityAlertsCard';
@@ -29,7 +28,6 @@ export default function Settings({ carId }: Props) {
   const { t, i18n } = useTranslation();
   const u = useUnits();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [controlLayout, setControlLayout] = useControlLayout();
 
   // Tabs are URL-driven (?tab=tesla) so other parts of the app (e.g. the
   // map's "Send to car" panel) can deep-link straight to the right section.
@@ -392,24 +390,6 @@ export default function Settings({ carId }: Props) {
             onChange={(v) => setForm({ ...form, mapStyle: v })}
             options={Object.entries(MAP_STYLES).map(([key, s]) => ({ value: key, label: t(s.labelKey) }))}
           />
-        </div>
-
-        {/* Control page layout — purely client-side (localStorage), so
-            no `save.mutate()` here; the change is reflected on the
-            Control page on the next render. */}
-        <div>
-          <label className="text-xs text-[#9ca3af] uppercase tracking-wider block mb-1">{t('settings.controlLayout.label')}</label>
-          <CustomSelect
-            value={controlLayout}
-            onChange={(v) => setControlLayout(v as ControlLayout)}
-            options={[
-              { value: 'tiles', label: t('settings.controlLayout.tiles') },
-              { value: 'list', label: t('settings.controlLayout.list') },
-            ]}
-          />
-          <p className="text-xs text-[#6b7280] mt-1">
-            {t('settings.controlLayout.hint')}
-          </p>
         </div>
 
         {/* Public chargers (Open Charge Map) ─────────────────────── */}
