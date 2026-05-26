@@ -375,6 +375,23 @@ const GLASS_DEBUG_COLORS = {
 //           polish (roughness, envBoost, optional tint).
 const WHEEL_TIRE_MAT_RE = /^(tire|pirelli|conti(nental)?|michelin|rubber|plastic_black)/i;
 
+// PBR-aware plastic detector for ANONYMOUS wheel materials.
+//
+// Real-world example that motivated this: the Highland Model 3 D50
+// hubcap GLB has 4 materials, only the tire is named ("Pirelli"); the
+// other 3 are anonymous. Two are real metal (jante alu + chromed bolts,
+// metalness=0.9). The third — the big flat black "cap" you stare at
+// from outside the car — is metalness=0.0, roughness=0.9. It is
+// physically PLASTIC, not metal, but a name-only classifier flags it
+// as "alloy" and the plastic-clearcoat slider never touches it. End
+// result: the hubcap stays matte black no matter what the user does.
+//
+// Fall back to the glTF PBR factors: metallic=~0 + roughness=~rubber
+// means "painted/molded plastic", route it through the plastic path.
+// Named materials still win — only anonymous primitives get sniffed.
+const isPlasticByPbr = (mat: THREE.MeshStandardMaterial): boolean =>
+  (mat.metalness ?? 0) < 0.2 && (mat.roughness ?? 0) > 0.7;
+
 // ---- Per-model derived constants -----------------------------------------
 // Returns the same shape as the old file-level CFG block, but driven by
 // the React Context-provided `useActiveModel()`. Memoised on the config
@@ -551,7 +568,6 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
               | THREE.MeshStandardMaterial
               | undefined) ?? (slotMat as THREE.MeshStandardMaterial);
           const matName = (original as { name?: string }).name ?? '';
-          if (seenMats.indexOf(matName) === -1) seenMats.push(matName);
           // Capture baseline from the ORIGINAL material ONCE — every
           // subsequent re-run computes from these reference values,
           // never from the mutated current ones.
@@ -564,7 +580,15 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
             };
             snap!.set(original, base);
           }
-          if (WHEEL_TIRE_MAT_RE.test(matName)) {
+          // Classification: named "tire" mats are plastic. Anonymous
+          // mats fall back to PBR sniffing — see isPlasticByPbr().
+          const isPlastic =
+            WHEEL_TIRE_MAT_RE.test(matName) ||
+            (matName === '' && isPlasticByPbr(original));
+          const tag = matName || `(unnamed metal=${(original.metalness ?? 0).toFixed(2)} rough=${(original.roughness ?? 0).toFixed(2)})`;
+          const label = `${tag}→${isPlastic ? 'plastic' : 'alloy'}`;
+          if (seenMats.indexOf(label) === -1) seenMats.push(label);
+          if (isPlastic) {
             // Plastic / tire path. Upgrade to MeshPhysicalMaterial
             // only when the user actually wants a clearcoat — keeps
             // the bare-metal MeshStandardMaterial shader path active
