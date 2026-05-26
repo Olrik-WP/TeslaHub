@@ -40,6 +40,12 @@ interface Props {
   visualState?: ShowroomVisualState;
   /** Setter for the ephemeral visual state. */
   onVisualChange?: (next: ShowroomVisualState) => void;
+  /** Ephemeral debug flag: when true the viewer overlays the geometry
+   *  anchor helpers (cable ground sphere, charge port fallback, plug
+   *  socket cube, per-wheel spheres, body wireframe). Off by default. */
+  debugAnchors: boolean;
+  /** Toggle the anchors debug flag. */
+  onToggleDebugAnchors: (next: boolean) => void;
 }
 
 export function ShowroomGeometrySection({
@@ -48,15 +54,49 @@ export function ShowroomGeometrySection({
   defaults,
   visualState,
   onVisualChange,
+  debugAnchors,
+  onToggleDebugAnchors,
 }: Props) {
   return (
     <section className="space-y-3">
-      <h3 className="text-xs uppercase tracking-wider text-[#9ca3af] font-medium">
-        Géométrie
-      </h3>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-xs uppercase tracking-wider text-[#9ca3af] font-medium">
+          Géométrie
+        </h3>
+        {/* Debug toggle — pill style identical to the GlassSection
+            debug button so the UX is consistent across debug modes. */}
+        <button
+          type="button"
+          onClick={() => onToggleDebugAnchors(!debugAnchors)}
+          className={
+            'h-7 px-2 text-[10px] uppercase tracking-wider rounded-md font-medium ' +
+            'transition-colors border ' +
+            (debugAnchors
+              ? 'bg-[#e31937] border-[#e31937] text-white'
+              : 'bg-[#1a1a1a] border-[#2a2a2a] text-[#9ca3af] hover:text-white')
+          }
+          title="Affiche en sur-impression les sphères de calibration (ancrages câble, port de charge, roues, bbox carrosserie)"
+        >
+          {debugAnchors ? '● Ancrages affichés' : 'Afficher les ancrages'}
+        </button>
+      </div>
       <p className="text-[10px] text-[#6b7280] -mt-2">
         Position des roues, charge port, câble, caméra. Sauvegardé par voiture.
       </p>
+      {debugAnchors && (
+        <div className="border border-[#1a2a1a] rounded-md bg-[#0a140a] p-2 space-y-0.5">
+          <p className="text-[10px] uppercase tracking-wider text-[#a3e635] font-medium">
+            Légende ancrages
+          </p>
+          <p className="text-[10px] text-[#9ca3af]">
+            🟢 cableGroundAnchor &nbsp;·&nbsp; 🔴 fallbackWorld (⚠ si trop proche du
+            centre) &nbsp;·&nbsp; 🟦 plug socket live
+          </p>
+          <p className="text-[10px] text-[#9ca3af]">
+            Roues : 🟢 LF · 🔴 RF · 🟡 LR · 🔵 RR &nbsp;·&nbsp; ⬜ wireframe = bbox carrosserie
+          </p>
+        </div>
+      )}
 
       <WheelsSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <ChargePortSection overrides={overrides} onChange={onChange} defaults={defaults} />

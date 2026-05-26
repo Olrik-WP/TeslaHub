@@ -48,8 +48,15 @@ export interface ShowroomDebugFlags {
    *  blue, inner-solo = green, nomat-glass = orange, nomat-privacy =
    *  violet). Pure visualisation aid for the Showroom calibration. */
   glass: boolean;
+  /** Render geometry-anchor helpers: green sphere at cableGroundAnchor,
+   *  red sphere at chargePort.fallbackWorld, cyan cube at the live plug
+   *  socket, one coloured sphere per wheel (LF=green, RF=red, LR=yellow,
+   *  RR=blue), white wireframe around the body GLB. All overlaid via
+   *  `depthTest=false` so they're visible through the car. Lets the user
+   *  SEE the otherwise-invisible calibration values they're dragging. */
+  anchors: boolean;
 }
-const DEFAULT_DEBUG_FLAGS: ShowroomDebugFlags = { glass: false };
+const DEFAULT_DEBUG_FLAGS: ShowroomDebugFlags = { glass: false, anchors: false };
 const ShowroomDebugContext = createContext<ShowroomDebugFlags>(DEFAULT_DEBUG_FLAGS);
 // URL of the custom body wrap PNG to apply on top of the `Paint`
 // material (NOT `PaintRough`). `null` = no wrap, render solid paint
@@ -1843,6 +1850,183 @@ function ShowroomAnchorMarkers() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// WheelMarkers — one coloured sphere per wheel position with its world
+// coordinates printed underneath. The colours match the cardinal corner
+// (LF=green, RF=red, LR=yellow, RR=blue) so the user can identify which
+// slider moves which sphere without reading the label. Reads
+// WHEEL_FALLBACK_POSITIONS directly — these are the EXACT world coords
+// the runtime feeds to `wrapper.position.set(x, y, z)` (line ~1349 in
+// PoppyseedModel), so what you see here is what the wheel renderer sees.
+// ---------------------------------------------------------------------------
+function WheelMarkers() {
+  const { WHEEL_FALLBACK_POSITIONS } = useModelConsts();
+  const cornerColours: Record<string, string> = {
+    LF: '#22c55e',
+    RF: '#ef4444',
+    LR: '#facc15',
+    RR: '#3b82f6',
+  };
+  return (
+    <>
+      {WHEEL_FALLBACK_POSITIONS.map((w) => (
+        <group key={w.id} position={[w.x, w.y, w.z]}>
+          <mesh renderOrder={999}>
+            <sphereGeometry args={[0.06, 14, 14]} />
+            <meshBasicMaterial
+              color={cornerColours[w.id] ?? '#ffffff'}
+              depthTest={false}
+              transparent
+              opacity={0.9}
+            />
+          </mesh>
+          <Html distanceFactor={6} center>
+            <div
+              style={{
+                background: 'rgba(0,0,0,0.78)',
+                color: cornerColours[w.id] ?? '#ffffff',
+                padding: '3px 7px',
+                borderRadius: 4,
+                fontSize: 11,
+                fontFamily: 'monospace',
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+                transform: 'translateY(-1.4em)',
+              }}
+            >
+              {w.id}
+              <div style={{ fontSize: 9, opacity: 0.7 }}>
+                [{w.x.toFixed(2)}, {w.y.toFixed(2)}, {w.z.toFixed(2)}]
+              </div>
+            </div>
+          </Html>
+        </group>
+      ))}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// BodyBoundingBoxWire — wireframe box around the loaded body GLB to make
+// the actual rendered body dimensions visible to the user. Useful when
+// the wheel positions look right "by eye" but the absolute numbers don't
+// match the real-car spec (typical sign that the GLB has a scale factor
+// baked into a parent transform — the wireframe shows the in-scene size
+// vs the real-world spec the user can mentally compare to).
+//
+// We can't compute bbox of the whole scene (it'd include the floor +
+// wheels which are added separately). Instead we look for one of the
+// known body root nodes per family. Falls back to the entire model GLB
+// scene minus floor meshes if no body root is found.
+// ---------------------------------------------------------------------------
+function BodyBoundingBoxWire() {
+  const { scene } = useThree();
+  const { FLOOR_NODE_NAMES } = useModelConsts();
+  const [bbox, setBbox] = useState<{ size: THREE.Vector3; center: THREE.Vector3 } | null>(null);
+  const triesRef = useRef(0);
+
+  // Retry until something useful shows up in the scene graph. Same
+  // pattern as LiveChargingCable — the body GLB streams in async via
+  // Suspense and isn't necessarily present on the first frame.
+  useFrame(() => {
+    if (bbox) return;
+    triesRef.current += 1;
+    // Look for known body root node names first (cheaper + tighter box).
+    const candidates = ['Body', 'Static_Exterior'];
+    let target: THREE.Object3D | undefined;
+    for (const name of candidates) {
+      const obj = scene.getObjectByName(name);
+      if (obj) {
+        target = obj;
+        break;
+      }
+    }
+    // Fallback: union bbox of every visible mesh NOT in the floor set
+    // and NOT a wheel wrapper. Heavier but always something.
+    let box: THREE.Box3;
+    if (target) {
+      box = new THREE.Box3().setFromObject(target);
+    } else {
+      box = new THREE.Box3();
+      let collected = 0;
+      scene.traverse((obj) => {
+        if (!(obj instanceof THREE.Mesh)) return;
+        if (!obj.visible) return;
+        if (FLOOR_NODE_NAMES.has(obj.name)) return;
+        if (obj.parent?.name?.startsWith('WheelWrapper_')) return;
+        box.expandByObject(obj);
+        collected++;
+      });
+      if (collected === 0) box.makeEmpty();
+    }
+    if (!box.isEmpty()) {
+      const size = new THREE.Vector3();
+      const center = new THREE.Vector3();
+      box.getSize(size);
+      box.getCenter(center);
+      setBbox({ size, center });
+    } else if (triesRef.current > 240) {
+      // 4 seconds of failure — give up so we don't poll forever.
+      setBbox({ size: new THREE.Vector3(), center: new THREE.Vector3() });
+    }
+  });
+
+  if (!bbox || bbox.size.length() === 0) return null;
+  const { size, center } = bbox;
+  return (
+    <group position={center}>
+      <mesh renderOrder={998}>
+        <boxGeometry args={[size.x, size.y, size.z]} />
+        <meshBasicMaterial
+          color="#ffffff"
+          wireframe
+          depthTest={false}
+          transparent
+          opacity={0.35}
+        />
+      </mesh>
+      <Html distanceFactor={6} center position={[0, size.y / 2 + 0.15, 0]}>
+        <div
+          style={{
+            background: 'rgba(0,0,0,0.78)',
+            color: '#ffffff',
+            padding: '3px 7px',
+            borderRadius: 4,
+            fontSize: 11,
+            fontFamily: 'monospace',
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+          }}
+        >
+          body bbox
+          <div style={{ fontSize: 9, opacity: 0.7 }}>
+            L={size.x.toFixed(2)}m · H={size.y.toFixed(2)}m · W={size.z.toFixed(2)}m
+          </div>
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// DebugAnchorOverlay — single gate that mounts (or unmounts) all geometry
+// debug helpers in one shot based on the `anchors` debug flag. Reading
+// the context HERE (instead of inside each marker sub-component) lets
+// the entire subtree stay unmounted when the toggle is off — zero scene
+// graph cost when the user isn't calibrating.
+// ---------------------------------------------------------------------------
+function DebugAnchorOverlay() {
+  const debug = useContext(ShowroomDebugContext);
+  if (!debug.anchors) return null;
+  return (
+    <>
+      <ShowroomAnchorMarkers />
+      <WheelMarkers />
+      <BodyBoundingBoxWire />
+    </>
+  );
+}
+
 function Loader() {
   return (
     <Html center>
@@ -2322,11 +2506,14 @@ function VehicleTopView3DInner({ vehicle, showroomMode }: Props) {
                   and mutates scene nodes directly (no React props/state
                   churn). */}
               <VehicleLightEffects vehicle={vehicle} />
-              {/* Visual debug helpers for the 3 "blind" geometry inputs
-                  (cableGroundAnchor, chargePort.fallbackWorld, computed
-                  plug socket). Mounted ONLY in Showroom so the user
-                  SEES what these sliders do — Home/cards stay clean. */}
-              {showroomMode && <ShowroomAnchorMarkers />}
+              {/* Visual debug helpers for the otherwise-invisible
+                  geometry inputs (cableGroundAnchor, fallbackWorld,
+                  plug socket, wheel positions, body bbox). Wrapped in
+                  a debug-flag gate so the user can toggle the whole
+                  set on/off from the Showroom UI without clutter when
+                  not calibrating. Mounted ONLY in Showroom — Home/
+                  cards stay completely clean. */}
+              {showroomMode && <DebugAnchorOverlay />}
             </group>
           </Suspense>
 
