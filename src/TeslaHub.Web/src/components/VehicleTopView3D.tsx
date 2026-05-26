@@ -392,6 +392,50 @@ const WHEEL_TIRE_MAT_RE = /^(tire|pirelli|conti(nental)?|michelin|rubber|plastic
 const isPlasticByPbr = (mat: THREE.MeshStandardMaterial): boolean =>
   (mat.metalness ?? 0) < 0.2 && (mat.roughness ?? 0) > 0.7;
 
+// Re-share the multi-material arrays of a freshly-cloned wheel with
+// the template it was cloned from. Background: three.js's `Mesh.copy`
+// (called via `SkeletonUtils.clone` for non-skinned meshes) does
+// `this.material = source.material.slice()` for ARRAY materials —
+// i.e. each clone gets its OWN independent array, holding references
+// to the same Material instances as the template.
+//
+// That is fine while the polish only MUTATES material properties
+// (`color`, `roughness`, `envMapIntensity` — those live on the shared
+// instance and propagate everywhere). It breaks the moment the polish
+// SWAPS a slot (`mesh.material[i] = phys`) to flip a slot from the
+// MeshStandardMaterial original to its MeshPhysicalMaterial upgrade
+// for clearcoat: the swap happens on the TEMPLATE's array only, the
+// four wheel clones keep rendering the un-upgraded material at slot i
+// and nothing the user does in the Showroom is visible.
+//
+// Symptom: "alloy rough works fine, the moment I touch alloy clearcoat
+// every slider stops working — even the tint — and I have to refresh".
+//
+// Fix: after the clone, replace its independent array with a direct
+// REFERENCE to the template's array. Now `template.material[i] = phys`
+// is seen by every clone on the next frame, without any extra
+// per-clone bookkeeping.
+const relinkSharedMaterialArrays = (
+  clone: THREE.Object3D,
+  template: THREE.Object3D,
+): void => {
+  const cm = clone as THREE.Mesh;
+  const tm = template as THREE.Mesh;
+  if (cm.isMesh && tm.isMesh) {
+    if (Array.isArray(cm.material) && Array.isArray(tm.material)) {
+      cm.material = tm.material;
+    }
+  }
+  // Walk children in lock-step. SkeletonUtils.clone preserves the
+  // 1:1 hierarchy ordering. If they ever diverge (e.g. a clone with
+  // an extra helper Object3D added later) we just stop pairing — that
+  // sub-tree won't get re-linked, but nothing crashes either.
+  const cc = clone.children;
+  const tc = template.children;
+  const n = Math.min(cc.length, tc.length);
+  for (let i = 0; i < n; i++) relinkSharedMaterialArrays(cc[i], tc[i]);
+};
+
 // ---- Per-model derived constants -----------------------------------------
 // Returns the same shape as the old file-level CFG block, but driven by
 // the React Context-provided `useActiveModel()`. Memoised on the config
@@ -1442,6 +1486,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           for (const { name, mirror } of WHEEL_ANCHORS) {
             const anchor = anchors[name];
             const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
+            relinkSharedMaterialArrays(wheelClone, wheelGltf.scene);
             if (mirror) wheelClone.rotation.y = Math.PI;
             anchor.add(wheelClone);
             wheelsAttached++;
@@ -1471,6 +1516,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           if (!wrapper) {
             // First time we see this corner — clone + re-center on bbox.
             const wheelClone = SkeletonUtils.clone(wheelGltf.scene);
+            relinkSharedMaterialArrays(wheelClone, wheelGltf.scene);
             wheelClone.updateMatrixWorld(true);
             const wheelBox = new THREE.Box3().setFromObject(wheelClone);
             const wheelCenter = wheelBox.getCenter(new THREE.Vector3());
