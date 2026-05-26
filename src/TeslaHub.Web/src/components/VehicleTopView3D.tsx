@@ -1,5 +1,5 @@
-import { Suspense, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   useGLTF,
   OrbitControls,
@@ -1579,56 +1579,91 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
     CABLE_GROUND_WORLD,
   } = useModelConsts();
 
-  const endWorld = useMemo(() => {
-    // Try the main name then several known alternates in order.
-    // Different Godot exports keep different parent pivots intact.
-    // See vehicleModelConfig.ts for the per-model overrides.
-    const candidates = [CHARGE_PORT_NODE, ...CHARGE_PORT_ALT_NAMES];
-    let anchor: THREE.Object3D | undefined;
-    let usedName = '';
-    for (const name of candidates) {
-      const obj = scene.getObjectByName(name);
-      if (obj) {
-        anchor = obj;
-        usedName = name;
-        break;
-      }
-    }
-    if (!anchor) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        `[Vehicle3D] charge port anchor not found (tried: ${candidates.join(', ')}) - ` +
-          'falling back to per-model world position.',
-      );
-      return CHARGE_PORT_FALLBACK_WORLD.clone();
-    }
+  // Resolved anchor + last-computed plug world position. We split them
+  // so the `useFrame` retry below only does work until the anchor is
+  // found, after which it's a no-op (no per-frame scene traversal).
+  const anchorRef = useRef<THREE.Object3D | null>(null);
+  const retriesRef = useRef(0);
+  const [endWorld, setEndWorld] = useState<THREE.Vector3 | null>(null);
+
+  // Recompute the plug socket world position from the cached anchor.
+  // `chargePortOpenness` is folded in via the effect below so the
+  // socket follows the trapdoor as it animates open / closed.
+  const recomputeFromAnchor = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return null;
     // CRITICAL: matrixWorld is stale until the first render. Force-update
     // up the parent chain BEFORE reading getWorldPosition, otherwise we
     // get the local origin (0,0,0) of an un-rendered scene.
     anchor.updateWorldMatrix(true, false);
     const pivotWorld = new THREE.Vector3();
     anchor.getWorldPosition(pivotWorld);
-    // Offset from the hinge pivot to the actual plug socket.
-    const w = pivotWorld.clone().add(PORT_FROM_PIVOT_OFFSET);
-    // eslint-disable-next-line no-console
-    console.log(
-      `[Vehicle3D] charge port anchor: "${usedName}" pivot=(${pivotWorld.x.toFixed(3)}, ${pivotWorld.y.toFixed(3)}, ${pivotWorld.z.toFixed(3)}) ` +
-        `plug=(${w.x.toFixed(3)}, ${w.y.toFixed(3)}, ${w.z.toFixed(3)})`,
-    );
-    return w;
-    // chargePortOpenness intentionally re-runs the effect when the trapdoor
-    // animates open/closed - the anchor world position changes with it.
-    // CHARGE_PORT_*/PORT_FROM_PIVOT_OFFSET only change on VIN swap.
-  }, [
-    scene,
-    chargePortOpenness,
-    CHARGE_PORT_NODE,
-    CHARGE_PORT_ALT_NAMES,
-    CHARGE_PORT_FALLBACK_WORLD,
-    PORT_FROM_PIVOT_OFFSET,
-  ]);
+    return pivotWorld.add(PORT_FROM_PIVOT_OFFSET);
+  }, [PORT_FROM_PIVOT_OFFSET]);
+
+  // Re-resolve the anchor when the VIN swaps (different alternate names)
+  // or when the user reloads — clears the cached ref so the retry loop
+  // below picks up the new scene.
+  useEffect(() => {
+    anchorRef.current = null;
+    retriesRef.current = 0;
+    setEndWorld(null);
+  }, [CHARGE_PORT_NODE, CHARGE_PORT_ALT_NAMES]);
+
+  // Re-place the plug whenever the trapdoor animates open/closed —
+  // the anchor's world position changes with the hinge angle.
+  useEffect(() => {
+    if (!anchorRef.current) return;
+    const w = recomputeFromAnchor();
+    if (w) setEndWorld(w);
+  }, [chargePortOpenness, recomputeFromAnchor]);
+
+  // Retry-until-found loop. Fixes the race where <LiveChargingCable>
+  // mounts BEFORE the GLB is added to the scene (e.g. the user lands
+  // on Home with MQTT already saying "plugged" while the lazy-loaded
+  // 3D model is still streaming in). useMemo on `scene` couldn't see
+  // this because the scene reference is stable — only its children
+  // change. We poll the scene graph every frame until the named anchor
+  // appears, then fold its world position into `endWorld` and stop
+  // doing per-frame work. After ~2s of failure (120 frames @ 60fps)
+  // we settle on the per-model fallback world so the cable doesn't
+  // stay invisible forever on an unknown GLB.
+  useFrame(() => {
+    if (anchorRef.current) return;
+    const candidates = [CHARGE_PORT_NODE, ...CHARGE_PORT_ALT_NAMES];
+    for (const name of candidates) {
+      const obj = scene.getObjectByName(name);
+      if (obj) {
+        anchorRef.current = obj;
+        const w = recomputeFromAnchor();
+        if (w) {
+          setEndWorld(w);
+          // eslint-disable-next-line no-console
+          console.log(
+            `[Vehicle3D] charge port anchor "${name}" resolved at world ` +
+              `(${w.x.toFixed(3)}, ${w.y.toFixed(3)}, ${w.z.toFixed(3)}) ` +
+              `after ${retriesRef.current} frame(s).`,
+          );
+        }
+        return;
+      }
+    }
+    retriesRef.current += 1;
+    if (retriesRef.current === 120) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[Vehicle3D] charge port anchor not found after 120 frames ` +
+          `(tried: ${candidates.join(', ')}) — using per-model fallback.`,
+      );
+      setEndWorld(CHARGE_PORT_FALLBACK_WORLD.clone());
+    }
+  });
 
   if (mode === 'off') return null;
+  // Hide the cable for at most a couple of frames while we wait for
+  // the GLB anchor — much better than rendering it at (0,0,0) under
+  // the car for the user to see for ~1 second.
+  if (!endWorld) return null;
 
   // Enable visual debug helpers by appending ?debug=cable to the URL.
   // Renders two small markers: green=ground start, red=charge port end.
@@ -1657,6 +1692,153 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
           <axesHelper args={[2]} />
         </>
       )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ShowroomAnchorMarkers — visual debug helpers for the 3 "blind" geometry
+// inputs that have NO live preview tied to them by default. Without these
+// the user can drag the sliders and silently break the rig because the
+// only visible effect is conditional (the fallback only appears if the
+// GLB anchor goes missing, the cable ground only matters when plugged in,
+// the plug-socket offset is invisible unless you mentally subtract the
+// anchor world position). Mounted ONLY when `showroomMode === true`
+// (the Showroom passes it, Home doesn't) so it has zero impact in prod.
+//
+//   GREEN sphere : cableGroundAnchor — where the cable touches the floor
+//   RED   sphere : chargePort.fallbackWorld — invisible in prod IF the
+//                  GLB anchor is found; this marker tells you so AND warns
+//                  if it's parked dangerously close to the origin (which
+//                  is why users land on a cable glued under the car when
+//                  they swap a GLB or hit the race condition)
+//   CYAN  cube   : computed plug socket (anchor world + pivotToSocketOffset)
+//                  — the actual point the cable's plug attaches to
+// ---------------------------------------------------------------------------
+function ShowroomAnchorMarkers() {
+  const { scene } = useThree();
+  const {
+    CHARGE_PORT_NODE,
+    CHARGE_PORT_ALT_NAMES,
+    CHARGE_PORT_FALLBACK_WORLD,
+    PORT_FROM_PIVOT_OFFSET,
+    CABLE_GROUND_WORLD,
+  } = useModelConsts();
+
+  const anchorRef = useRef<THREE.Object3D | null>(null);
+  const plugSocketGroupRef = useRef<THREE.Group>(null);
+  const [anchorFound, setAnchorFound] = useState(false);
+
+  // Reset the cached anchor on model swap so we re-resolve against
+  // the new scene (different node names possible per family).
+  useEffect(() => {
+    anchorRef.current = null;
+    setAnchorFound(false);
+  }, [CHARGE_PORT_NODE, CHARGE_PORT_ALT_NAMES]);
+
+  // Live-update the plug socket marker every frame so dragging the
+  // pivotToSocketOffset sliders moves the cyan cube in realtime. We
+  // mutate the wrapper group's position imperatively to avoid the
+  // React state churn that would come from setState-per-frame.
+  useFrame(() => {
+    if (!anchorRef.current) {
+      const candidates = [CHARGE_PORT_NODE, ...CHARGE_PORT_ALT_NAMES];
+      for (const name of candidates) {
+        const obj = scene.getObjectByName(name);
+        if (obj) {
+          anchorRef.current = obj;
+          setAnchorFound(true);
+          break;
+        }
+      }
+    }
+    const group = plugSocketGroupRef.current;
+    const anchor = anchorRef.current;
+    if (anchor && group) {
+      anchor.updateWorldMatrix(true, false);
+      const pivot = new THREE.Vector3();
+      anchor.getWorldPosition(pivot);
+      group.position.copy(pivot.add(PORT_FROM_PIVOT_OFFSET));
+    }
+  });
+
+  // "Dangerously close to origin" check — same heuristic that traps the
+  // bug where the user drags the fallbackWorld sliders to ~(0,0,0)
+  // without noticing because nothing on screen moves.
+  const fallbackBroken =
+    CHARGE_PORT_FALLBACK_WORLD.length() < 0.5;
+
+  const labelStyle = (color: string): React.CSSProperties => ({
+    background: 'rgba(0,0,0,0.78)',
+    color,
+    padding: '3px 7px',
+    borderRadius: 4,
+    fontSize: 11,
+    fontFamily: 'monospace',
+    whiteSpace: 'nowrap',
+    pointerEvents: 'none',
+    transform: 'translateY(-1.4em)',
+  });
+
+  return (
+    <>
+      {/* Green sphere — cable ground anchor (where cable touches floor) */}
+      <group position={CABLE_GROUND_WORLD}>
+        <mesh renderOrder={999}>
+          <sphereGeometry args={[0.08, 16, 16]} />
+          <meshBasicMaterial color="#22c55e" depthTest={false} transparent opacity={0.9} />
+        </mesh>
+        <Html distanceFactor={6} center>
+          <div style={labelStyle('#22c55e')}>
+            cableGroundAnchor
+            <div style={{ fontSize: 9, opacity: 0.7 }}>
+              [{CABLE_GROUND_WORLD.x.toFixed(2)}, {CABLE_GROUND_WORLD.y.toFixed(2)},{' '}
+              {CABLE_GROUND_WORLD.z.toFixed(2)}]
+            </div>
+          </div>
+        </Html>
+      </group>
+
+      {/* Red sphere — charge port fallback (only used when anchor missing) */}
+      <group position={CHARGE_PORT_FALLBACK_WORLD}>
+        <mesh renderOrder={999}>
+          <sphereGeometry args={[0.08, 16, 16]} />
+          <meshBasicMaterial color="#ef4444" depthTest={false} transparent opacity={0.9} />
+        </mesh>
+        <Html distanceFactor={6} center>
+          <div style={labelStyle('#ef4444')}>
+            chargePort.fallbackWorld
+            <div style={{ fontSize: 9, opacity: 0.8 }}>
+              [{CHARGE_PORT_FALLBACK_WORLD.x.toFixed(2)},{' '}
+              {CHARGE_PORT_FALLBACK_WORLD.y.toFixed(2)},{' '}
+              {CHARGE_PORT_FALLBACK_WORLD.z.toFixed(2)}]
+              {anchorFound ? ' — INACTIF (anchor trouvé)' : ' — ACTIF (anchor introuvable!)'}
+            </div>
+            {fallbackBroken && (
+              <div style={{ fontSize: 10, color: '#f97316', marginTop: 2 }}>
+                ⚠ Trop proche du centre du monde — risque de câble sous le modèle
+              </div>
+            )}
+          </div>
+        </Html>
+      </group>
+
+      {/* Cyan cube — actual plug socket world position (live) */}
+      <group ref={plugSocketGroupRef}>
+        <mesh renderOrder={999}>
+          <boxGeometry args={[0.06, 0.06, 0.06]} />
+          <meshBasicMaterial color="#06b6d4" depthTest={false} transparent opacity={0.9} />
+        </mesh>
+        <Html distanceFactor={6} center>
+          <div style={labelStyle('#06b6d4')}>
+            plug socket (live)
+            <div style={{ fontSize: 9, opacity: 0.7 }}>
+              anchor + pivotToSocketOffset
+              {!anchorFound && ' — anchor introuvable'}
+            </div>
+          </div>
+        </Html>
+      </group>
     </>
   );
 }
@@ -2140,6 +2322,11 @@ function VehicleTopView3DInner({ vehicle, showroomMode }: Props) {
                   and mutates scene nodes directly (no React props/state
                   churn). */}
               <VehicleLightEffects vehicle={vehicle} />
+              {/* Visual debug helpers for the 3 "blind" geometry inputs
+                  (cableGroundAnchor, chargePort.fallbackWorld, computed
+                  plug socket). Mounted ONLY in Showroom so the user
+                  SEES what these sliders do — Home/cards stay clean. */}
+              {showroomMode && <ShowroomAnchorMarkers />}
             </group>
           </Suspense>
 

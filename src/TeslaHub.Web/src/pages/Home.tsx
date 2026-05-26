@@ -17,6 +17,11 @@ import SecurityAlertsTeaser from '../components/SecurityAlertsTeaser';
 import HomeQuickActions from '../components/HomeQuickActions';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import { useFleetMergedVehicleStatus } from '../hooks/useFleetMergedVehicleStatus';
+import {
+  useControlAvailability,
+  useRefreshVehicleState,
+} from '../hooks/useVehicleControl';
 import { getStats, getChargingStats, getDriveStats, getSettings, getCostOverrides, getCostSummary, getTeslaMateCostSummary, getCarConfig } from '../api/queries';
 import type { VehicleStatus } from '../api/queries';
 import { useTranslation } from 'react-i18next';
@@ -89,7 +94,14 @@ export default function Home({ carId }: Props) {
   const navigate = useNavigate();
   const { data: rawVehicle } = useVehicleStatus(carId);
   const { data: live, connected: liveConnected } = useLiveStream(carId);
-  const vehicle = useStickyVehicle(rawVehicle);
+  const stickyVehicle = useStickyVehicle(rawVehicle);
+  // Fuse the Fleet API snapshot (fresh ~5s after every command, see
+  // useControlMutation) on top of the TeslaMate MQTT VehicleStatus
+  // (which can lag 30s – several minutes on body signals like the
+  // frunk). Every downstream consumer — HomeQuickActions and the
+  // VehicleTopView3D viewer via useVehicleVisualSync — now reads the
+  // same fresh booleans as the Control page does via readVehicle().
+  const vehicle = useFleetMergedVehicleStatus(stickyVehicle);
   const liveActive = liveConnected && live?.latitude != null && live?.longitude != null;
   const { data: charges } = useChargingSessions(carId, 10);
   const { data: drives } = useDrives(carId, 5);
@@ -249,12 +261,29 @@ export default function Home({ carId }: Props) {
   }, [tripInProgress]);
 
   // Native pull-to-refresh on mobile (and trackpad two-finger pull on
-  // some laptops). Refetches every active query for the current car so
-  // the user has a manual escape hatch when the TeslaMate MQTT cache is
-  // lagging behind a Fleet API command they just sent.
+  // some laptops). Two parallel jobs:
+  //   1. Refetch every active query for the current car (TeslaMate /
+  //      MQTT side) — gives the user a manual escape hatch for
+  //      anything the MQTT cache might be lagging on.
+  //   2. Force a Fleet API `force=true` snapshot read for the matched
+  //      Tesla vehicle (bypasses the 30s server cache). That's the
+  //      ONLY way to surface a frunk/trunk/door state that the user
+  //      changed manually at the car — TeslaMate polls on its own
+  //      schedule (30s – 15min) and our normal refetch hits that
+  //      stale value otherwise.
   const qc = useQueryClient();
+  const { data: availability } = useControlAvailability();
+  const teslaVehicleId = useMemo(() => {
+    if (!availability?.vehicles?.length || !vehicle?.vin) return undefined;
+    const matches = availability.vehicles.filter((v) => v.vin === vehicle.vin);
+    return (matches.find((v) => v.keyPaired) ?? matches[0])?.id;
+  }, [availability, vehicle?.vin]);
+  const refreshFleet = useRefreshVehicleState();
   const ptr = usePullToRefresh(async () => {
-    await qc.refetchQueries({ type: 'active' });
+    await Promise.all([
+      qc.refetchQueries({ type: 'active' }),
+      teslaVehicleId ? refreshFleet.mutateAsync(teslaVehicleId) : Promise.resolve(),
+    ]);
   });
 
   if (!vehicle) {
