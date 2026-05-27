@@ -114,6 +114,7 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           and the user pops it shut by hand. */}
       {!frunkOpen && (
         <Callout
+          calloutKey="frunk"
           anchorName={ANCHORS.frunk}
           label="Ouvrir frunk"
           icon={<PlusIcon />}
@@ -126,6 +127,7 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           Motorised actuator both ways. Single endpoint `actuate_trunk`
           toggles it. */}
       <Callout
+        calloutKey="trunk"
         anchorName={ANCHORS.trunk}
         label={trunkOpen ? 'Fermer coffre' : 'Ouvrir coffre'}
         icon={trunkOpen ? <XIcon /> : <PlusIcon />}
@@ -142,6 +144,7 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           pluggedIn so each click has unambiguous semantics. */}
       {pluggedIn ? (
         <Callout
+          calloutKey="chargePort"
           anchorName={ANCHORS.chargePort}
           label="Déverrouiller câble"
           icon={<UnlockIcon />}
@@ -150,6 +153,7 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
         />
       ) : (
         <Callout
+          calloutKey="chargePort"
           anchorName={ANCHORS.chargePort}
           label={portOpen ? 'Fermer trappe' : 'Ouvrir trappe'}
           icon={portOpen ? <XIcon /> : <PlusIcon />}
@@ -162,6 +166,7 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           TeslaMate exposes only an aggregate boolean. The `vent` Tesla
           command cracks all four 1cm and `close` closes them all. */}
       <Callout
+        calloutKey="window"
         anchorName={ANCHORS.window}
         label={windowsOpen ? 'Fermer vitres' : 'Aérer vitres'}
         icon={windowsOpen ? <XIcon /> : <VentIcon />}
@@ -175,6 +180,7 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           Tesla's mobile app mirrors this exact colour logic. */}
       {vehicle.isLocked != null && (
         <Callout
+          calloutKey="lock"
           anchorName={ANCHORS.lock}
           label={vehicle.isLocked ? 'Déverrouiller' : 'Verrouiller'}
           icon={<LockIcon open={!vehicle.isLocked} />}
@@ -190,6 +196,7 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           as the control surface (not the indicator). */}
       {vehicle.sentryMode != null && (
         <Callout
+          calloutKey="sentry"
           anchorName={ANCHORS.sentry}
           label={vehicle.sentryMode ? 'Sentinelle ON' : 'Sentinelle'}
           icon={<EyeIcon />}
@@ -204,6 +211,7 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           `climate/stop` via the parent — same endpoint as ClimateCard. */}
       {vehicle.isClimateOn != null && (
         <Callout
+          calloutKey="climate"
           anchorName={ANCHORS.climate}
           label={vehicle.isClimateOn ? 'Clim ON' : 'Démarrer clim'}
           icon={<SnowflakeIcon />}
@@ -369,7 +377,36 @@ export function LiveChargeInfoCallout({ info }: LiveChargeInfoCalloutProps) {
 
 type CalloutVariant = 'closed' | 'open' | 'plug' | 'secure' | 'danger' | 'info';
 
+/**
+ * Stable identifier for each callout — keyed by SEMANTIC purpose (not
+ * by the underlying scene-node name) so per-car position overrides
+ * stored in `showroomOverrides.calloutOffsets` survive future anchor
+ * renames or per-model anchor swaps. New callouts must add a key here
+ * and the matching position in `calloutOffsets`.
+ */
+export type CalloutKey =
+  | 'frunk'
+  | 'trunk'
+  | 'chargePort'
+  | 'window'
+  | 'lock'
+  | 'sentry'
+  | 'climate';
+
+// Hex colour used by the leader line + anchor dot for each variant.
+// Hex form so we can feed both `<lineBasicMaterial color>` (THREE.Color)
+// and inline CSS for the dot ring without juggling formats.
+const VARIANT_LINE_COLOR: Record<CalloutVariant, string> = {
+  closed: '#ffffff',
+  open:   '#f59e0b',
+  plug:   '#3b82f6',
+  secure: '#22c55e',
+  danger: '#e31937',
+  info:   '#3b82f6',
+};
+
 interface CalloutProps {
+  calloutKey: CalloutKey;
   anchorName: string;
   label: string;
   icon: ReactNode;
@@ -377,7 +414,7 @@ interface CalloutProps {
   action: CalloutAction;
 }
 
-function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
+function Callout({ calloutKey, anchorName, label, icon, variant, action }: CalloutProps) {
   const { scene } = useThree();
   const cfg = useActiveModel();
 
@@ -421,8 +458,18 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
     return g;
   }, []);
   const groupRef = useRef<THREE.Group>(null);
+  const tipGroupRef = useRef<THREE.Group>(null);
   const tip = useRef(new THREE.Vector3());
   const top = useRef(new THREE.Vector3());
+
+  // Per-callout XYZ offset applied AFTER the calloutHeight lift. Stored
+  // in showroomOverrides.calloutOffsets and reads through the active
+  // model config via `useActiveModel()`. Zero offset = default position
+  // directly above the anchor. Used by the Showroom Callouts section
+  // to let the user nudge each button independently. Keyed by the
+  // semantic `calloutKey` so per-model anchor renames (M3 vs Y) don't
+  // invalidate user calibration.
+  const offset = cfg.calloutOffsets?.[calloutKey] ?? null;
 
   useFrame(({ clock }) => {
     if (!anchorRef.current) {
@@ -451,8 +498,21 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
     anchor.getWorldPosition(tip.current);
     top.current.copy(tip.current);
     top.current.y += cfg.calloutHeight;
+    // Apply user-calibrated per-callout offset on top of the default
+    // lift. Stored as a plain [x, y, z] tuple in world space so the
+    // calibration is intuitive in the Showroom (positive X = forward,
+    // positive Y = up, positive Z = right — matches the rest of the
+    // overrides).
+    if (offset) {
+      top.current.x += offset[0];
+      top.current.y += offset[1];
+      top.current.z += offset[2];
+    }
 
     groupRef.current.position.copy(top.current);
+    if (tipGroupRef.current) {
+      tipGroupRef.current.position.copy(tip.current);
+    }
 
     const pos = lineGeom.attributes.position as THREE.BufferAttribute;
     pos.setXYZ(0, tip.current.x, tip.current.y, tip.current.z);
@@ -479,25 +539,45 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
             : variant === 'info'
               ? 'bg-[#3b82f6]/80 hover:bg-[#2563eb] text-white opacity-95 border-white/40'
               : 'bg-white/85 hover:bg-white text-black opacity-55 hover:opacity-100 border-white/25';
+
+  // Leader line + anchor dot colour, picked to match the pill so the
+  // "this button controls THIS spot" relationship reads instantly.
+  // Closed (at-rest) stays neutral white to avoid visual noise.
+  const lineColor = VARIANT_LINE_COLOR[variant];
   // Line opacity follows the same logic — bright when there's something
   // important to act on, dim when at rest.
-  const lineOpacity = variant === 'closed' ? 0.35 : 0.65;
+  const lineOpacity = variant === 'closed' ? 0.35 : 0.7;
 
   return (
     <>
       {/* Leader line — raw <line> primitive with a mutable BufferGeometry
           keeps allocations to zero per frame. depthTest=false so the
           line stays visible when the camera is on the "wrong" side of
-          the anchor (e.g. orbiting behind the car). */}
+          the anchor (e.g. orbiting behind the car). Tinted with the
+          variant colour so the line visually belongs to the button it
+          serves (white for at-rest, green for "good state", red for
+          "danger", etc.). */}
       <line>
         <primitive object={lineGeom} attach="geometry" />
         <lineBasicMaterial
-          color="white"
+          color={lineColor}
           transparent
           opacity={lineOpacity}
           depthTest={false}
         />
       </line>
+
+      {/* Anchor dot — a small flat ring rendered AT the tip in 3D so it
+          sits on the car body surface. Same colour as the leader line.
+          Tied to the same `groupRef.position` minus the lift would
+          drift across frames, so we mount it on its own group whose
+          position is updated from `tip.current` every frame. */}
+      <group ref={tipGroupRef}>
+        <mesh renderOrder={998}>
+          <sphereGeometry args={[0.025, 14, 14]} />
+          <meshBasicMaterial color={lineColor} transparent opacity={lineOpacity} depthTest={false} />
+        </mesh>
+      </group>
 
       <group ref={groupRef}>
         <Html

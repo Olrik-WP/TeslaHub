@@ -115,6 +115,7 @@ export function ShowroomGeometrySection({
         visualState={visualState}
         onVisualChange={onVisualChange}
       />
+      <CalloutsSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <CameraSection overrides={overrides} onChange={onChange} defaults={defaults} />
     </section>
   );
@@ -622,6 +623,138 @@ function SentryCamerasSection({
               defaultValue={def as [number, number, number]}
               min={-3}
               max={3}
+              step={0.01}
+              unit="m"
+            />
+          </div>
+        );
+      })}
+    </SubSection>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// CALLOUTS — per-button XYZ nudge on top of the default anchor-above
+// position. Lets the user shift the floating Lock / Sentry / Frunk /
+// etc. buttons so they sit on the actual door handle, mirror, hood
+// line, instead of the auto-lifted default. World axes: +X forward,
+// +Y up, +Z right. Defaults to [0,0,0] = unchanged.
+// ────────────────────────────────────────────────────────────────────
+
+type CalloutKey =
+  | 'frunk'
+  | 'trunk'
+  | 'chargePort'
+  | 'window'
+  | 'lock'
+  | 'sentry'
+  | 'climate';
+
+const CALLOUT_DEFS: Array<{ key: CalloutKey; label: string; hint: string }> = [
+  { key: 'frunk',      label: 'Frunk',         hint: 'Coffre avant — au-dessus du capot' },
+  { key: 'trunk',      label: 'Coffre',        hint: 'Coffre arrière — au-dessus du hayon' },
+  { key: 'chargePort', label: 'Trappe charge', hint: 'Trappe / câble — flanc arrière gauche' },
+  { key: 'window',     label: 'Vitres',        hint: 'Vitres — vitre avant gauche' },
+  { key: 'lock',       label: 'Verrouillage',  hint: 'Verrouillage — poignée conducteur' },
+  { key: 'sentry',     label: 'Sentinelle',    hint: 'Sentinelle — caméra de toit ou B-pilier' },
+  { key: 'climate',    label: 'Clim',          hint: 'Climatisation — côté passager' },
+];
+
+function CalloutsSection({ overrides, onChange, defaults }: Props) {
+  const offsets = overrides.calloutOffsets ?? {};
+
+  const eq = (a: readonly [number, number, number]) =>
+    Math.abs(a[0]) < 1e-6 && Math.abs(a[1]) < 1e-6 && Math.abs(a[2]) < 1e-6;
+
+  const setOffset = (key: CalloutKey, v: [number, number, number]) => {
+    const next: typeof offsets = { ...offsets, [key]: v };
+    // If the new value is back to zero, drop the key entirely so a
+    // saved blob stays minimal (no `[0,0,0]` no-op entries).
+    if (eq(v)) delete next[key];
+    onChange({
+      ...overrides,
+      calloutOffsets: Object.keys(next).length > 0 ? next : undefined,
+    });
+  };
+
+  const resetOffset = (key: CalloutKey) => {
+    const next = { ...offsets };
+    delete next[key];
+    onChange({
+      ...overrides,
+      calloutOffsets: Object.keys(next).length > 0 ? next : undefined,
+    });
+  };
+
+  const resetAll = () => {
+    const { calloutOffsets: _, ...rest } = overrides;
+    void _;
+    onChange(rest);
+  };
+
+  const overridden = Object.keys(offsets).length > 0;
+  const defaultOffsets = defaults.calloutOffsets ?? {};
+
+  return (
+    <SubSection
+      title={`Boutons flottants (${CALLOUT_DEFS.length})`}
+      rightSlot={
+        overridden ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              resetAll();
+            }}
+            className="text-[10px] text-[#6b7280] hover:text-white"
+          >
+            ↺ Reset
+          </button>
+        ) : null
+      }
+    >
+      <p className="text-[10px] text-[#6b7280] -mt-1">
+        Décale chaque bouton flottant (frunk, lock, sentinelle, clim…)
+        par rapport à son ancrage. +X = vers l'avant · +Y = vers le haut ·
+        +Z = vers la droite. Garde l'écart à 0 pour la position par défaut.
+      </p>
+      {CALLOUT_DEFS.map(({ key, label, hint }) => {
+        const value: [number, number, number] = [
+          offsets[key]?.[0] ?? defaultOffsets[key]?.[0] ?? 0,
+          offsets[key]?.[1] ?? defaultOffsets[key]?.[1] ?? 0,
+          offsets[key]?.[2] ?? defaultOffsets[key]?.[2] ?? 0,
+        ];
+        const isOverridden = !!offsets[key] && !eq(value);
+        return (
+          <div
+            key={key}
+            className="border border-[#1a1a1a] rounded-md p-2 space-y-1"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-wider text-[#d4d4d4] font-medium truncate">
+                  {label}
+                </p>
+                <p className="text-[9px] text-[#6b7280] truncate">{hint}</p>
+              </div>
+              {isOverridden && (
+                <button
+                  type="button"
+                  onClick={() => resetOffset(key)}
+                  title="Réinitialiser ce bouton"
+                  className="text-[10px] text-[#6b7280] hover:text-white shrink-0"
+                >
+                  ↺
+                </button>
+              )}
+            </div>
+            <ShowroomVec3Slider
+              label=""
+              value={value}
+              onChange={(v) => setOffset(key, v)}
+              defaultValue={[0, 0, 0]}
+              min={-1.5}
+              max={1.5}
               step={0.01}
               unit="m"
             />

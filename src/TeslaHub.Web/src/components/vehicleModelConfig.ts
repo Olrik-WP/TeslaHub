@@ -519,6 +519,21 @@ export interface VehicleModelConfig {
    *  Y is 5 cm taller than 3 so the offset needs to be slightly bigger
    *  to clear the roof. */
   calloutHeight: number;
+  /** Per-callout XYZ nudge (metres, world axes) applied AFTER the
+   *  `calloutHeight` lift. Used by the Showroom Callouts panel so each
+   *  user can fine-tune where the floating button sits relative to its
+   *  default anchor-above position (e.g. shift the "Lock" callout off
+   *  the windshield and onto the driver door handle).
+   *
+   *  Convention: world axes — +X forward (toward the front of the car),
+   *  +Y up, +Z right. Missing keys / `[0,0,0]` → default anchor-above
+   *  position, unchanged. Keyed by the SEMANTIC callout id (not the
+   *  underlying GLB node name) so per-model anchor renames don't
+   *  invalidate user calibration. */
+  calloutOffsets?: Partial<Record<
+    'frunk' | 'trunk' | 'chargePort' | 'window' | 'lock' | 'sentry' | 'climate',
+    readonly [number, number, number]
+  >>;
 
   // ───────────────────────────────────────────────────────────────────
   // Opening animations — per-model (Tesla ships different keyframes per

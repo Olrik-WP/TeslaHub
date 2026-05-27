@@ -151,6 +151,19 @@ export interface ShowroomOverrides {
   /** Vertical lift of floating callouts (metres). Default ~0.45-0.50
    *  depending on roof height. */
   calloutHeight?: number;
+  /** Per-callout XYZ nudge (metres, world axes) applied AFTER the
+   *  `calloutHeight` lift. Lets the user position each floating button
+   *  independently via the Showroom Callouts panel — e.g. push the
+   *  Lock callout closer to the driver-door handle, drop the Sentry
+   *  callout onto the B-pillar camera, etc.
+   *
+   *  Convention: +X forward, +Y up, +Z right. Missing keys → default
+   *  position (just above the anchor). Keyed by SEMANTIC callout id
+   *  so M3-vs-Y anchor renames don't void calibration. */
+  calloutOffsets?: Partial<Record<
+    'frunk' | 'trunk' | 'chargePort' | 'window' | 'lock' | 'sentry' | 'climate',
+    readonly [number, number, number]
+  >>;
   /** Per-slot interior colour overrides. Keys match the `key` field
    *  on each `interiorOverrides` entry in the model's config
    *  (`Interior2`, `Decor`, `cupholder`, `Wing`). Values are RGB hex.
@@ -311,6 +324,13 @@ export function mergeShowroomConfig(
     // Visual chrome (scalars)
     bodyPaintColor: overrides.bodyPaintColor ?? defaults.bodyPaintColor,
     calloutHeight: overrides.calloutHeight ?? defaults.calloutHeight,
+    // Per-callout XYZ nudge — shallow merge so a user override on a
+    // single callout (e.g. lock) doesn't reset the others; absent keys
+    // fall back to the model defaults (currently undefined for every
+    // shipped model — anchors are already well-placed by hand).
+    calloutOffsets: overrides.calloutOffsets
+      ? { ...(defaults.calloutOffsets ?? {}), ...overrides.calloutOffsets }
+      : defaults.calloutOffsets,
 
     // Interior colours — per-slot override keyed on the entry's `key`.
     // Each entry keeps its matchName/roughness/metalness from the
