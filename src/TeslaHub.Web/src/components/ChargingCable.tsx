@@ -74,7 +74,11 @@ export interface ChargingCableProps {
   radialSegments?: number;
   /** Number of segments along the tube length (32 = smooth curve). */
   tubularSegments?: number;
-  /** Pulsing speed of the flow when charging. */
+  /** Speed of the electrical flow when charging. The three traveling
+   *  pulses complete one full pass of the cable every `1/flowSpeed`
+   *  seconds — so `1.0` makes a pulse arrive at the car port every
+   *  ~0.33 s, which reads as "active fast-charging" without feeling
+   *  frantic. */
   flowSpeed?: number;
   /** Slack multiplier for the FIRST segment (start → via). 1.0 = default
    *  drape, &lt;1 = taut/short cable, &gt;1 = more slack. Only used when
@@ -94,8 +98,10 @@ const DEFAULT_PLUG_DIRECTION = new THREE.Vector3(0, 0, 1);
 const IDLE_COLOR = new THREE.Color('#6c7480');
 const CHARGE_COLOR = new THREE.Color('#39d96a');
 
-// Flowing-gradient shader applied to the cable tube. UV.y goes 0 -> 1 along
-// the curve length, so we scroll a smooth bright band along it.
+// Flowing-energy shader applied to the cable tube. UV.v goes 0 → 1 along
+// the curve length (start → end). Three narrow Gaussian pulses race down
+// the V axis at evenly spaced phases, giving a clear "current flows from
+// the Supercharger toward the car" reading at a glance.
 const CABLE_VERTEX_SHADER = /* glsl */ `
   varying vec2 vUv;
   void main() {
@@ -111,19 +117,41 @@ const CABLE_FRAGMENT_SHADER = /* glsl */ `
   uniform float uFlowSpeed;
   uniform vec3  uBaseColor;
 
+  // Narrow Gaussian centred on \`centre\` along a periodic [0,1] V axis.
+  // \`tightness\` controls the pulse width — bigger = sharper bright band.
+  float ringPulse(float v, float centre, float tightness) {
+    float d = v - centre;
+    // Wrap d into the [-0.5, 0.5] range so the pulse near v=1 and v=0
+    // overlap visually (no dark spot at the seam).
+    d -= floor(d + 0.5);
+    return exp(-d * d * tightness);
+  }
+
   void main() {
-    // Two thin bright bands traveling along the cable.
-    float band = fract(vUv.y * 3.0 - uTime * uFlowSpeed);
-    float pulse = smoothstep(0.0, 0.45, band) * smoothstep(1.0, 0.55, band);
+    float v = vUv.y;
+    float t = uTime * uFlowSpeed;
 
-    // Base shading: slight rim darkening for cylinder feel.
+    // Three pulses chasing each other from start (SC) → end (car port).
+    // \`t\` increases over time → pulses translate in the +V direction.
+    float p1 = ringPulse(v, fract(t),         140.0);
+    float p2 = ringPulse(v, fract(t + 0.333), 140.0);
+    float p3 = ringPulse(v, fract(t + 0.667), 140.0);
+    float pulse = p1 + p2 + p3;
+
+    // Rim darkening to give the tube a cylindrical feel.
     float rim = pow(1.0 - abs(vUv.x * 2.0 - 1.0), 0.6);
-    vec3 base = uBaseColor * mix(0.55, 1.0, rim);
 
-    // Charging: add bright emissive bands on top.
-    vec3 col = base + uBaseColor * pulse * uIntensity * 2.5;
+    // Permanent baseline glow — soft when idle, slightly brighter when
+    // charging (so the cable doesn't look completely dark between pulses).
+    float baseGlow = mix(0.35, 0.7, uIntensity);
+    vec3 base = uBaseColor * mix(0.55, 1.05, rim) * baseGlow;
 
-    gl_FragColor = vec4(col, 1.0);
+    // Hot saturated bands on top.
+    vec3 hot = uBaseColor * pulse * uIntensity * 3.2;
+    // White-hot core for the "electric arc" feel — only when charging.
+    vec3 core = vec3(1.0, 1.0, 0.92) * pulse * uIntensity * 0.55;
+
+    gl_FragColor = vec4(base + hot + core, 1.0);
   }
 `;
 
@@ -261,7 +289,7 @@ export function ChargingCable({
   radius = 0.012,
   radialSegments = 12,
   tubularSegments = 48,
-  flowSpeed = 0.7,
+  flowSpeed = 1.0,
   slackStart = 1,
   slackEnd = 1,
 }: ChargingCableProps) {

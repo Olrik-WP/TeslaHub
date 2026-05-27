@@ -466,7 +466,7 @@ function SuperchargerSection({ overrides, onChange, defaults }: Props) {
         value={sc.cablePortOffset}
         onChange={(v) => patch({ cablePortOffset: v })}
         defaultValue={defaults.supercharger.cablePortOffset}
-        min={-1}
+        min={-2}
         max={2}
         step={0.01}
         unit="m"
