@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { Component, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { useGLTF } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
@@ -33,5 +34,30 @@ export function SuperchargerModel() {
     <group position={sc.position} rotation={[0, rotationRad, 0]}>
       <primitive object={scene} />
     </group>
+  );
+}
+
+/** Swallow GLB load failures so a missing SC asset never crashes the viewer. */
+class SuperchargerErrorBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  render() {
+    if (this.state.failed) return null;
+    return this.props.children;
+  }
+}
+
+export function SuperchargerModelSafe() {
+  return (
+    <SuperchargerErrorBoundary>
+      <SuperchargerModel />
+    </SuperchargerErrorBoundary>
   );
 }

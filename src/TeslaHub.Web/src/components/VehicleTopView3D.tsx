@@ -15,10 +15,10 @@ import {
   useOpeningsContext,
 } from './useVehicleOpenings';
 import { ChargingCable } from './ChargingCable';
-import { SuperchargerModel } from './SuperchargerModel';
+import { SuperchargerModelSafe } from './SuperchargerModel';
 import {
+  groundToCarPlugDirection,
   superchargerCablePortWorld,
-  superchargerToGroundPlugDirection,
 } from './superchargerUtils';
 import { useVehicleVisualSync } from './VehicleVisualSync';
 import {
@@ -1727,11 +1727,6 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
     SUPERCHARGER_PORT_WORLD,
   } = useModelConsts();
 
-  const scToGroundDir = useMemo(
-    () => superchargerToGroundPlugDirection(SUPERCHARGER_PORT_WORLD, CABLE_GROUND_WORLD),
-    [SUPERCHARGER_PORT_WORLD, CABLE_GROUND_WORLD],
-  );
-
   // Resolved anchor + last-computed plug world position.
   // so the `useFrame` retry below only does work until the anchor is
   // found, after which it's a no-op (no per-frame scene traversal).
@@ -1812,6 +1807,15 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
     }
   });
 
+  const groundToCarDir = useMemo(
+    () =>
+      groundToCarPlugDirection(
+        CABLE_GROUND_WORLD,
+        endWorld ?? CHARGE_PORT_FALLBACK_WORLD,
+      ),
+    [CABLE_GROUND_WORLD, endWorld, CHARGE_PORT_FALLBACK_WORLD],
+  );
+
   if (mode === 'off') return null;
   // Hide the cable for at most a couple of frames while we wait for
   // the GLB anchor — much better than rendering it at (0,0,0) under
@@ -1831,7 +1835,7 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
       <ChargingCable
         startWorld={SUPERCHARGER_PORT_WORLD}
         endWorld={CABLE_GROUND_WORLD}
-        plugDirection={scToGroundDir}
+        plugDirection={groundToCarDir}
         charging={charging}
         radius={0.014}
       />
@@ -2307,19 +2311,36 @@ function ModelAvailabilityBanner({ vin }: { vin: string | null | undefined }) {
   );
 }
 
+async function probeAssetUrl(url: string): Promise<boolean> {
+  const isUsable = (status: number, contentType: string): boolean =>
+    (status === 200 || status === 206) &&
+    !contentType.startsWith('text/') &&
+    !contentType.includes('text/html');
+
+  // Never cache probes — a stale 404 from before the file was added would
+  // otherwise block the Supercharger forever until a hard refresh.
+  const head = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+  const headCt = head.headers.get('content-type') ?? '';
+  if (isUsable(head.status, headCt)) return true;
+
+  // Caddy / some proxies mishandle HEAD — fall back to a tiny ranged GET.
+  const get = await fetch(url, {
+    headers: { Range: 'bytes=0-15' },
+    cache: 'no-store',
+  });
+  const getCt = get.headers.get('content-type') ?? '';
+  return isUsable(get.status, getCt);
+}
+
 function useAssetAvailable(url: string): boolean | null {
   const [state, setState] = useState<{ url: string; available: boolean } | null>(null);
   useEffect(() => {
     let cancelled = false;
-    fetch(url, { method: 'HEAD', cache: 'force-cache' })
-      .then((r) => {
+    probeAssetUrl(url)
+      .then((ok) => {
         if (cancelled) return;
-        const ct = r.headers.get('content-type') ?? '';
-        const ok = r.ok && !ct.startsWith('text/');
         // eslint-disable-next-line no-console
-        console.log(
-          `[Poppyseed3D] probe ${url} → status=${r.status} content-type="${ct}" → available=${ok}`,
-        );
+        console.log(`[Poppyseed3D] probe ${url} → available=${ok}`);
         setState({ url, available: ok });
       })
       .catch((err) => {
@@ -2799,7 +2820,10 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
                   green-flow inside <ChargingCable>. */}
               {cableMode !== 'off' && handleAvailable !== null && (
                 <>
-                  {superchargerAvailable && <SuperchargerModel />}
+                  {/* Try loading while the probe is in flight (null); skip only
+                      after a confirmed 404 so a fresh Docker rebuild / volume
+                      mount is picked up without a stale cached HEAD miss. */}
+                  {superchargerAvailable !== false && <SuperchargerModelSafe />}
                   <LiveChargingCable mode={cableMode} handleAvailable={handleAvailable} />
                 </>
               )}
