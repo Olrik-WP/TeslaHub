@@ -3227,7 +3227,13 @@ function CameraPoseSync({ activeMode }: { activeMode: CableMode }) {
     return () => controls.removeEventListener?.('start', onStart);
   }, [controls]);
 
-  // External "set camera pose" requests (Showroom preview toggle, etc.)
+  // External "set camera pose" requests (Showroom preview buttons).
+  // Each event always wins: even if the new pose is identical to the
+  // current one, we force the anim budget back up and clear the
+  // user-active flag so the next frames will (re)apply it. Without
+  // that, clicking "Aller à la vue de charge" right after a 📸 capture
+  // would do nothing because the camera was already there AND a prior
+  // orbit might still hold the lock.
   useEffect(() => {
     const canvas = gl.domElement;
     const handler = (event: Event) => {
@@ -3235,6 +3241,8 @@ function CameraPoseSync({ activeMode }: { activeMode: CableMode }) {
         pose?: typeof idlePose | null;
       } | undefined;
       setForcedPose(detail?.pose ?? null);
+      animBudgetRef.current = 1.0;
+      userActiveRef.current = false;
     };
     canvas.addEventListener('teslahub:set-camera-pose', handler);
     return () => canvas.removeEventListener('teslahub:set-camera-pose', handler);

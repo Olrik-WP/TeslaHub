@@ -1108,30 +1108,38 @@ function ChargingCameraSubFields({ overrides, onChange, defaults }: Props) {
   const overridden =
     !!overrides.chargingCameraPose && Object.keys(overrides.chargingCameraPose).length > 0;
 
-  const [previewing, setPreviewing] = useState(false);
-
   const dispatchPose = (
     pose: { position: [number, number, number]; target: [number, number, number]; fov: number } | null,
   ) => {
+    // Always emit fresh array copies so CameraPoseSync's useEffect sees
+    // a reference change even when the values are identical to where
+    // the camera already sits (typical right after "📸 Capturer").
+    const cloned = pose
+      ? {
+          position: [...pose.position] as [number, number, number],
+          target: [...pose.target] as [number, number, number],
+          fov: pose.fov,
+        }
+      : null;
     const canvas = document.querySelector('canvas');
     canvas?.dispatchEvent(
-      new CustomEvent('teslahub:set-camera-pose', { detail: { pose } }),
+      new CustomEvent('teslahub:set-camera-pose', { detail: { pose: cloned } }),
     );
   };
 
-  const togglePreview = () => {
-    if (previewing) {
-      // Back to normal: clear the forced pose, viewer resumes its
-      // cable-mode-driven pose (and the user can orbit freely).
-      dispatchPose(null);
-      setPreviewing(false);
-    } else {
-      // Force the charging pose live (using current sliders so the
-      // user can fine-tune while looking at the result).
-      dispatchPose({ position, target, fov });
-      setPreviewing(true);
-    }
+  // Effective NORMAL pose = shipped defaults + user overrides on cameraPose.
+  // Lets the "Vue normale" button glide the camera back even when the
+  // cable mode is also "charging" (auto pose === chargingPose → clearing
+  // forcedPose would produce zero visible animation).
+  const normalCp = overrides.cameraPose ?? {};
+  const normalPose = {
+    position: (normalCp.position ?? defaults.cameraPose.position) as [number, number, number],
+    target: (normalCp.target ?? defaults.cameraPose.target) as [number, number, number],
+    fov: normalCp.fov ?? defaults.cameraPose.fov,
   };
+
+  const showCharging = () => dispatchPose({ position, target, fov });
+  const showNormal = () => dispatchPose(normalPose);
 
   const captureCurrent = () => {
     const canvas = document.querySelector('canvas');
@@ -1149,27 +1157,26 @@ function ChargingCameraSubFields({ overrides, onChange, defaults }: Props) {
 
   return (
     <div className="mt-2 pt-2 border-t border-[#1f1f1f] space-y-2">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className="text-[10px] uppercase tracking-wider text-[#9ca3af] font-medium">
           Vue « en charge »
         </span>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
           <button
             type="button"
-            onClick={togglePreview}
-            className={
-              'text-[10px] px-2 py-0.5 rounded-md border ' +
-              (previewing
-                ? 'bg-[#e31937] border-[#e31937] text-white'
-                : 'bg-[#1a1a1a] border-[#2a2a2a] hover:bg-[#202020] text-white')
-            }
-            title={
-              previewing
-                ? 'Repasse à la caméra normale et libère l\'orbite'
-                : 'Active la vue de charge pour voir le résultat des sliders'
-            }
+            onClick={showCharging}
+            className="text-[10px] px-2 py-0.5 rounded-md bg-[#1a1a1a] hover:bg-[#202020] border border-[#2a2a2a] text-white"
+            title="Bouge la caméra vers la pose de charge actuelle"
           >
-            {previewing ? '↩ Vue normale' : '👁 Aperçu vue de charge'}
+            👁 Aller à la vue de charge
+          </button>
+          <button
+            type="button"
+            onClick={showNormal}
+            className="text-[10px] px-2 py-0.5 rounded-md bg-[#1a1a1a] hover:bg-[#202020] border border-[#2a2a2a] text-white"
+            title="Repasse à la caméra normale (pose hors charge)"
+          >
+            ↩ Vue normale
           </button>
           <button
             type="button"
@@ -1191,10 +1198,9 @@ function ChargingCameraSubFields({ overrides, onChange, defaults }: Props) {
         </div>
       </div>
       <p className="text-[10px] text-[#6b7280]">
-        Cadrage automatique pendant « Branché » / « Recharge » — bouge la
-        souris pour reprendre la main à tout moment. <b>👁 Aperçu</b> verrouille
-        la vue de charge pour calibrer. <b>📸 Capturer</b> enregistre la vue
-        actuelle.
+        Cadrage automatique pendant « Branché » / « Recharge ». À tout moment,
+        utilise la souris pour orbiter — la caméra te laisse la main jusqu'à ton
+        prochain clic sur un de ces boutons.
       </p>
       <ShowroomVec3Slider
         label="Position caméra (charge)"
