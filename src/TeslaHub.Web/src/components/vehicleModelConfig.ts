@@ -178,6 +178,22 @@ export interface VehicleModelConfig {
    *  metres behind / outside the rear bumper). */
   cableGroundAnchor: [number, number, number];
 
+  /** Tesla Supercharger V3/V4 post placement — shown when the car is
+   *  plugged in or charging. The cable runs SC port → ground anchor →
+   *  charge port. Calibrated per car in the Showroom. */
+  supercharger: {
+    /** GLB URL relative to public/. */
+    modelUrl: string;
+    /** World position of the SC base origin (metres). */
+    position: [number, number, number];
+    /** Y-axis rotation in degrees — faces the post toward the car. */
+    rotationY: number;
+    /** Local offset from the SC base origin to the cable connector
+     *  (applied before rotationY). Tune in Showroom until the orange
+     *  debug marker sits on the handle recess. */
+    cablePortOffset: [number, number, number];
+  };
+
   // ───────────────────────────────────────────────────────────────────
   // Action anchors — pivots used by callouts to attach floating buttons
   // ───────────────────────────────────────────────────────────────────
@@ -669,6 +685,13 @@ export const PoppyseedConfig: VehicleModelConfig = {
   // at the wider FOV the user set above.
   cableGroundAnchor: [-2.95, 0, -1.5],
 
+  supercharger: {
+    modelUrl: '/models/supercharger_base.glb',
+    position: [-4.2, 0, -1.6],
+    rotationY: -90,
+    cablePortOffset: [0.08, 1.05, -0.15],
+  },
+
   actionAnchors: {
     frunk: 'Hood_Spatial',
     trunk: 'Trunk_Spatial',
@@ -1114,6 +1137,13 @@ export const BayberryConfig: VehicleModelConfig = {
   // passenger side of the rear bumper so it stays clear of the orbit
   // camera's main viewing arcs.
   cableGroundAnchor: [-2.6, 0, 2.85],
+
+  supercharger: {
+    modelUrl: '/models/supercharger_base.glb',
+    position: [-3.8, 0, 3.0],
+    rotationY: -90,
+    cablePortOffset: [0.08, 1.05, -0.15],
+  },
 
   actionAnchors: {
     frunk: 'Hood_Spatial',         // identical to M3

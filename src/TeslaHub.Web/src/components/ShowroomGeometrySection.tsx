@@ -88,7 +88,7 @@ export function ShowroomGeometrySection({
         </button>
       </div>
       <p className="text-[10px] text-[#6b7280] -mt-2">
-        Position des roues, charge port, câble, caméra. Sauvegardé par voiture.
+        Position des roues, charge port, superchargeur, câble, caméra. Sauvegardé par voiture.
       </p>
       {debugAnchors && (
         <div className="border border-[#1a2a1a] rounded-md bg-[#0a140a] p-2 space-y-0.5">
@@ -96,8 +96,8 @@ export function ShowroomGeometrySection({
             Légende ancrages
           </p>
           <p className="text-[10px] text-[#9ca3af]">
-            🟢 cableGroundAnchor &nbsp;·&nbsp; 🔴 fallbackWorld (⚠ si trop proche du
-            centre) &nbsp;·&nbsp; 🟦 plug socket live
+            🟢 cableGroundAnchor &nbsp;·&nbsp; 🟠 supercharger (base + port câble) &nbsp;·&nbsp; 🔴
+            fallbackWorld (⚠ si trop proche du centre) &nbsp;·&nbsp; 🟦 plug socket live
           </p>
           <p className="text-[10px] text-[#9ca3af]">
             Roues : 🟢 LF · 🔴 RF · 🟡 LR · 🔵 RR &nbsp;·&nbsp; ⬜ wireframe = bbox carrosserie
@@ -107,6 +107,7 @@ export function ShowroomGeometrySection({
 
       <WheelsSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <ChargePortSection overrides={overrides} onChange={onChange} defaults={defaults} />
+      <SuperchargerSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <CableSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <SentryCamerasSection
         overrides={overrides}
@@ -405,6 +406,80 @@ function ChargePortSection({ overrides, onChange, defaults }: Props) {
 }
 
 // ────────────────────────────────────────────────────────────────────
+// SUPERCHARGER — post placement + cable port offset
+// ────────────────────────────────────────────────────────────────────
+
+function SuperchargerSection({ overrides, onChange, defaults }: Props) {
+  const sc = { ...defaults.supercharger, ...overrides.supercharger };
+  const isOverridden = !!overrides.supercharger;
+
+  const patch = (patch: Partial<typeof sc>) => {
+    onChange({ ...overrides, supercharger: { ...overrides.supercharger, ...patch } });
+  };
+
+  const reset = () => {
+    const { supercharger: _, ...rest } = overrides;
+    void _;
+    onChange(rest);
+  };
+
+  return (
+    <SubSection
+      title="Superchargeur"
+      rightSlot={
+        isOverridden ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              reset();
+            }}
+            className="text-[10px] text-[#6b7280] hover:text-white"
+          >
+            ↺ Reset
+          </button>
+        ) : null
+      }
+    >
+      <ShowroomVec3Slider
+        label="Position du poteau (base)"
+        value={sc.position}
+        onChange={(v) => patch({ position: v })}
+        defaultValue={defaults.supercharger.position}
+        min={-8}
+        max={8}
+        step={0.05}
+        unit="m"
+      />
+      <ShowroomSlider
+        label="Rotation Y (face à la voiture)"
+        value={sc.rotationY}
+        onChange={(v) => patch({ rotationY: v })}
+        defaultValue={defaults.supercharger.rotationY}
+        min={-180}
+        max={180}
+        step={1}
+        unit="°"
+      />
+      <ShowroomVec3Slider
+        label="Offset port câble (local → orange)"
+        value={sc.cablePortOffset}
+        onChange={(v) => patch({ cablePortOffset: v })}
+        defaultValue={defaults.supercharger.cablePortOffset}
+        min={-1}
+        max={2}
+        step={0.01}
+        unit="m"
+      />
+      <p className="text-[10px] text-[#6b7280]">
+        Affiché en mode « Branché » ou « Recharge ». Le câble va port SC → ancrage sol
+        (vert) → port voiture. Calibre avec « Afficher les ancrages ».
+      </p>
+    </SubSection>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
 // CÂBLE — ground anchor (où le câble pose au sol)
 // ────────────────────────────────────────────────────────────────────
 
@@ -450,8 +525,8 @@ function CableSection({ overrides, onChange, defaults }: Props) {
         unit="m"
       />
       <p className="text-[10px] text-[#6b7280]">
-        X négatif = derrière la voiture. Z négatif = à gauche. Y = 0 (sol).
-        Typiquement -3 à -4m derrière + 1 à 2m sur le côté.
+        Point intermédiaire au sol entre le Superchargeur et la voiture. Alignez-le
+        sur la sphère orange (port SC) pour un branchement réaliste.
       </p>
     </SubSection>
   );

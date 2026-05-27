@@ -138,6 +138,8 @@ export interface ShowroomOverrides {
   // Charge port + cable
   chargePort?: Partial<VehicleModelConfig['chargePort']>;
   cableGroundAnchor?: [number, number, number];
+  /** Supercharger post placement — shallow-merged over model default. */
+  supercharger?: Partial<VehicleModelConfig['supercharger']>;
 
   // Sentry
   /** Override the WHOLE sentry array (it's typed as 7 cameras for a Y
@@ -320,6 +322,11 @@ export function mergeShowroomConfig(
 
     // Cable ground anchor (tuple → replace entirely)
     cableGroundAnchor: overrides.cableGroundAnchor ?? defaults.cableGroundAnchor,
+
+    // Supercharger post (object → shallow merge)
+    supercharger: overrides.supercharger
+      ? { ...defaults.supercharger, ...overrides.supercharger }
+      : defaults.supercharger,
 
     // Sentry cameras (array → replace entirely; the geometry is
     // tightly coupled so per-camera merge would be confusing)

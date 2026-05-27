@@ -15,6 +15,11 @@ import {
   useOpeningsContext,
 } from './useVehicleOpenings';
 import { ChargingCable } from './ChargingCable';
+import { SuperchargerModel } from './SuperchargerModel';
+import {
+  superchargerCablePortWorld,
+  superchargerToGroundPlugDirection,
+} from './superchargerUtils';
 import { useVehicleVisualSync } from './VehicleVisualSync';
 import {
   VehicleCallouts,
@@ -518,6 +523,8 @@ function useModelConsts() {
       PORT_FROM_PIVOT_OFFSET: new THREE.Vector3(...cfg.chargePort.pivotToSocketOffset),
       PLUG_DIRECTION: new THREE.Vector3(...cfg.chargePort.plugDirection),
       CABLE_GROUND_WORLD: new THREE.Vector3(...cfg.cableGroundAnchor),
+      SUPERCHARGER_PORT_WORLD: superchargerCablePortWorld(cfg.supercharger),
+      SUPERCHARGER_MODEL_URL: cfg.supercharger.modelUrl,
       FLOOR_NODE_NAMES: new Set(cfg.floorNodes),
       HIDDEN_NODE_NAMES: new Set(cfg.hiddenNodes),
       // Re-asserted on every cleanedScene pass so they can never be
@@ -1717,9 +1724,15 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
     PORT_FROM_PIVOT_OFFSET,
     PLUG_DIRECTION,
     CABLE_GROUND_WORLD,
+    SUPERCHARGER_PORT_WORLD,
   } = useModelConsts();
 
-  // Resolved anchor + last-computed plug world position. We split them
+  const scToGroundDir = useMemo(
+    () => superchargerToGroundPlugDirection(SUPERCHARGER_PORT_WORLD, CABLE_GROUND_WORLD),
+    [SUPERCHARGER_PORT_WORLD, CABLE_GROUND_WORLD],
+  );
+
+  // Resolved anchor + last-computed plug world position.
   // so the `useFrame` retry below only does work until the anchor is
   // found, after which it's a no-op (no per-frame scene traversal).
   const anchorRef = useRef<THREE.Object3D | null>(null);
@@ -1810,17 +1823,32 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
   const debugCable =
     typeof window !== 'undefined' && window.location.search.includes('debug=cable');
 
+  const charging = mode === 'charging';
+
   return (
     <>
+      {/* SC post → ground anchor (no handle — connector stays on the post). */}
+      <ChargingCable
+        startWorld={SUPERCHARGER_PORT_WORLD}
+        endWorld={CABLE_GROUND_WORLD}
+        plugDirection={scToGroundDir}
+        charging={charging}
+        radius={0.014}
+      />
+      {/* Ground anchor → car charge port (handle at the car end). */}
       <ChargingCable
         startWorld={CABLE_GROUND_WORLD}
         endWorld={endWorld}
         plugDirection={PLUG_DIRECTION}
-        charging={mode === 'charging'}
+        charging={charging}
         handleUrl={handleAvailable ? HANDLE_URL : undefined}
       />
       {debugCable && (
         <>
+          <mesh position={SUPERCHARGER_PORT_WORLD}>
+            <boxGeometry args={[0.1, 0.1, 0.1]} />
+            <meshBasicMaterial color="#f59e0b" />
+          </mesh>
           <mesh position={CABLE_GROUND_WORLD}>
             <boxGeometry args={[0.1, 0.1, 0.1]} />
             <meshBasicMaterial color="#22c55e" />
@@ -1857,13 +1885,19 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
 // ---------------------------------------------------------------------------
 function ShowroomAnchorMarkers() {
   const { scene } = useThree();
+  const cfg = useActiveModel();
   const {
     CHARGE_PORT_NODE,
     CHARGE_PORT_ALT_NAMES,
     CHARGE_PORT_FALLBACK_WORLD,
     PORT_FROM_PIVOT_OFFSET,
     CABLE_GROUND_WORLD,
+    SUPERCHARGER_PORT_WORLD,
   } = useModelConsts();
+  const scPosition = useMemo(
+    () => new THREE.Vector3(...cfg.supercharger.position),
+    [cfg.supercharger.position],
+  );
 
   const anchorRef = useRef<THREE.Object3D | null>(null);
   const plugSocketGroupRef = useRef<THREE.Group>(null);
@@ -1934,6 +1968,47 @@ function ShowroomAnchorMarkers() {
             <div style={{ fontSize: 9, opacity: 0.7 }}>
               [{CABLE_GROUND_WORLD.x.toFixed(2)}, {CABLE_GROUND_WORLD.y.toFixed(2)},{' '}
               {CABLE_GROUND_WORLD.z.toFixed(2)}]
+            </div>
+          </div>
+        </Html>
+      </group>
+
+      {/* Orange sphere — Supercharger cable port (SC → ground segment start) */}
+      <group position={SUPERCHARGER_PORT_WORLD}>
+        <mesh renderOrder={999}>
+          <sphereGeometry args={[0.08, 16, 16]} />
+          <meshBasicMaterial color="#f59e0b" depthTest={false} transparent opacity={0.9} />
+        </mesh>
+        <Html distanceFactor={6} center>
+          <div style={labelStyle('#f59e0b')}>
+            supercharger.cablePortOffset
+            <div style={{ fontSize: 9, opacity: 0.7 }}>
+              [{SUPERCHARGER_PORT_WORLD.x.toFixed(2)}, {SUPERCHARGER_PORT_WORLD.y.toFixed(2)},{' '}
+              {SUPERCHARGER_PORT_WORLD.z.toFixed(2)}]
+            </div>
+          </div>
+        </Html>
+      </group>
+
+      {/* Amber wireframe — Supercharger base origin */}
+      <group position={scPosition}>
+        <mesh renderOrder={998}>
+          <boxGeometry args={[0.35, 2.1, 0.35]} />
+          <meshBasicMaterial
+            color="#f59e0b"
+            wireframe
+            depthTest={false}
+            transparent
+            opacity={0.55}
+          />
+        </mesh>
+        <Html distanceFactor={6} center>
+          <div style={labelStyle('#f59e0b')}>
+            supercharger.position
+            <div style={{ fontSize: 9, opacity: 0.7 }}>
+              [{scPosition.x.toFixed(2)}, {scPosition.y.toFixed(2)}, {scPosition.z.toFixed(2)}]
+              {' · rotY '}
+              {cfg.supercharger.rotationY}°
             </div>
           </div>
         </Html>
@@ -2389,6 +2464,7 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
   const cfg = useActiveModel();
   const wheelsAvailable = useAssetAvailable(cfg.wheelUrl);
   const handleAvailable = useAssetAvailable(HANDLE_URL);
+  const superchargerAvailable = useAssetAvailable(cfg.supercharger.modelUrl);
   // Auto-rotate OFF by default — was distracting and made clicking on
   // a moving target frustrating. Toggle in top-right corner.
   const [autoRotate, setAutoRotate] = useState(false);
@@ -2722,7 +2798,10 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
                   charging. Animated colour switches between grey-pulse and
                   green-flow inside <ChargingCable>. */}
               {cableMode !== 'off' && handleAvailable !== null && (
-                <LiveChargingCable mode={cableMode} handleAvailable={handleAvailable} />
+                <>
+                  {superchargerAvailable && <SuperchargerModel />}
+                  <LiveChargingCable mode={cableMode} handleAvailable={handleAvailable} />
+                </>
               )}
               {/* Callouts mounted inside Canvas so they can read the scene
                   graph (anchor positions) via useThree.scene. They render
@@ -3081,3 +3160,4 @@ function VehicleStateSync({
 // login isn't blocked by a network round-trip. Per-model preload happens
 // implicitly on first useGLTF call inside <PoppyseedModel>.
 useGLTF.preload(PoppyseedConfig.modelUrl);
+useGLTF.preload(PoppyseedConfig.supercharger.modelUrl);
