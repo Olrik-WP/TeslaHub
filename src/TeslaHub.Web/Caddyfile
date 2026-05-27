@@ -16,8 +16,19 @@
 	# own the assets. Serve them with aggressive caching (immutable filename
 	# pattern) and return a proper 404 instead of falling through to
 	# index.html, so the frontend's HEAD probe can detect absence reliably.
+	#
+	# IMPORTANT: only attach the long-cache header on SUCCESSFUL responses
+	# (matcher @models_ok). A blanket header would also be applied to 404s,
+	# which makes the browser remember "this file does not exist" for 30
+	# days — meaning a model dropped into the bind-mount AFTER the page was
+	# first opened never becomes visible until a hard refresh / cache wipe.
+	@models_ok {
+		path /models/*
+		status 200
+	}
+	header @models_ok Cache-Control "public, max-age=2592000, immutable"
+
 	handle /models/* {
-		header Cache-Control "public, max-age=2592000, immutable"
 		file_server
 	}
 

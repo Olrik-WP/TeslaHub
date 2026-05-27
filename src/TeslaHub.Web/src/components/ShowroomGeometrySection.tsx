@@ -1051,6 +1051,115 @@ function CameraSection({ overrides, onChange, defaults }: Props) {
         Astuce : utilise la souris pour orbiter, puis ajuste les sliders
         pour fixer le cadrage par défaut.
       </p>
+
+      <ChargingCameraSubFields
+        overrides={overrides}
+        onChange={onChange}
+        defaults={defaults}
+      />
     </SubSection>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Caméra en charge — pose secondaire utilisée quand cableMode !== 'off'.
+// Optional: si absent, la pose normale est conservée pendant la charge.
+// ────────────────────────────────────────────────────────────────────
+
+function ChargingCameraSubFields({ overrides, onChange, defaults }: Props) {
+  const fallback = defaults.chargingCameraPose ?? defaults.cameraPose;
+  const cp = overrides.chargingCameraPose ?? {};
+  const setField = <K extends keyof VehicleModelConfig['cameraPose']>(
+    key: K,
+    value: VehicleModelConfig['cameraPose'][K],
+  ) => {
+    onChange({ ...overrides, chargingCameraPose: { ...cp, [key]: value } });
+  };
+  const resetAll = () => {
+    const { chargingCameraPose: _, ...rest } = overrides;
+    void _;
+    onChange(rest);
+  };
+  const position = (cp.position ?? fallback.position) as [number, number, number];
+  const target = (cp.target ?? fallback.target) as [number, number, number];
+  const fov = cp.fov ?? fallback.fov;
+  const overridden =
+    !!overrides.chargingCameraPose && Object.keys(overrides.chargingCameraPose).length > 0;
+
+  const captureCurrent = () => {
+    const canvas = document.querySelector('canvas');
+    const event = new CustomEvent<{
+      onPose: (pose: { position: [number, number, number]; target: [number, number, number]; fov: number }) => void;
+    }>('teslahub:capture-camera-pose', {
+      detail: {
+        onPose: (pose) => {
+          onChange({ ...overrides, chargingCameraPose: pose });
+        },
+      },
+    });
+    canvas?.dispatchEvent(event);
+  };
+
+  return (
+    <div className="mt-2 pt-2 border-t border-[#1f1f1f] space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] uppercase tracking-wider text-[#9ca3af] font-medium">
+          Vue « en charge »
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={captureCurrent}
+            className="text-[10px] px-2 py-0.5 rounded-md bg-[#1a1a1a] hover:bg-[#202020] border border-[#2a2a2a] text-white"
+            title="Capture la vue courante de l'orbite comme pose de charge"
+          >
+            ⟲ Vue courante
+          </button>
+          {overridden && (
+            <button
+              type="button"
+              onClick={resetAll}
+              className="text-[10px] text-[#6b7280] hover:text-white"
+            >
+              ↺ Reset
+            </button>
+          )}
+        </div>
+      </div>
+      <p className="text-[10px] text-[#6b7280]">
+        Cadrage automatique pendant « Branché » / « Recharge » — pour mettre
+        en valeur la voiture et le Superchargeur ensemble.
+      </p>
+      <ShowroomVec3Slider
+        label="Position caméra (charge)"
+        value={position}
+        onChange={(v) => setField('position', v)}
+        defaultValue={fallback.position as [number, number, number]}
+        min={-12}
+        max={12}
+        step={0.05}
+        unit="m"
+      />
+      <ShowroomVec3Slider
+        label="Target (charge)"
+        value={target}
+        onChange={(v) => setField('target', v)}
+        defaultValue={fallback.target as [number, number, number]}
+        min={-5}
+        max={5}
+        step={0.05}
+        unit="m"
+      />
+      <ShowroomSlider
+        label="FOV (charge)"
+        value={fov}
+        onChange={(v) => setField('fov', v)}
+        defaultValue={fallback.fov}
+        min={10}
+        max={120}
+        step={1}
+        unit="°"
+      />
+    </div>
   );
 }

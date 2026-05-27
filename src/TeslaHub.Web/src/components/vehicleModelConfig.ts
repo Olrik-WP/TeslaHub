@@ -194,6 +194,16 @@ export interface VehicleModelConfig {
     cablePortOffset: [number, number, number];
   };
 
+  /** Optional secondary camera pose used while the car is charging — lets
+   *  the showroom / Home animate to a 3/4 rear view that nicely frames
+   *  the Supercharger + car together. When null the regular `cameraPose`
+   *  is used regardless of charging state. */
+  chargingCameraPose?: {
+    position: [number, number, number];
+    target: [number, number, number];
+    fov: number;
+  };
+
   // ───────────────────────────────────────────────────────────────────
   // Action anchors — pivots used by callouts to attach floating buttons
   // ───────────────────────────────────────────────────────────────────
@@ -692,6 +702,12 @@ export const PoppyseedConfig: VehicleModelConfig = {
     cablePortOffset: [0.08, 1.05, -0.15],
   },
 
+  chargingCameraPose: {
+    position: [-4.8, 2.4, -4.2],
+    target: [-1.5, 0.6, -0.6],
+    fov: 38,
+  },
+
   actionAnchors: {
     frunk: 'Hood_Spatial',
     trunk: 'Trunk_Spatial',
@@ -1143,6 +1159,12 @@ export const BayberryConfig: VehicleModelConfig = {
     position: [-3.8, 0, 3.0],
     rotationY: -90,
     cablePortOffset: [0.08, 1.05, -0.15],
+  },
+
+  chargingCameraPose: {
+    position: [-4.4, 2.5, 4.6],
+    target: [-1.4, 0.6, 1.4],
+    fov: 38,
   },
 
   actionAnchors: {

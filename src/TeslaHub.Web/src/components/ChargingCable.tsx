@@ -51,6 +51,11 @@ export interface ChargingCableProps {
   startWorld: THREE.Vector3;
   /** World position of the charge port socket on the car. */
   endWorld: THREE.Vector3;
+  /** Optional ground waypoint — when provided the curve is a single
+   *  continuous tube that touches the ground at this point before
+   *  rising to the car. Used to chain a Supercharger post → ground
+   *  drape → car port without visible junction. */
+  viaWorld?: THREE.Vector3;
   /**
    * Unit vector pointing FROM the plug INTO the port (i.e. perpendicular to
    * the car's body where the port sits). For a Model 3 / Model Y the port
@@ -114,6 +119,64 @@ const CABLE_FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
+/**
+ * Three-point cable curve: start → via (ground drape) → end (car port).
+ *
+ * Built as a CurvePath of two cubic Beziers sharing a TANGENT at `via`,
+ * which produces a single continuous tube with no visible junction —
+ * unlike rendering two independent ChargingCable instances which always
+ * "kink" because each segment computes its own tangent.
+ */
+function buildViaCableCurve(
+  start: THREE.Vector3,
+  via: THREE.Vector3,
+  end: THREE.Vector3,
+  plugDir: THREE.Vector3,
+): THREE.Curve<THREE.Vector3> {
+  // Shared tangent at the ground point: horizontal direction toward the car
+  // port. Both segments leave the junction along this vector, so the tube
+  // has G1 continuity (no visible break in slope).
+  const tangent = new THREE.Vector3(end.x - via.x, 0, end.z - via.z);
+  if (tangent.lengthSq() < 1e-6) tangent.set(1, 0, 0);
+  tangent.normalize();
+
+  const dist1 = start.distanceTo(via);
+  const dist2 = via.distanceTo(end);
+
+  // Segment 1: SC port → ground via.
+  //   - p1 leaves the SC head pointing down + forward (cable falls naturally)
+  //   - p2 approaches the ground OPPOSITE to `tangent` so the curve arrives
+  //     tangent to it at `via`.
+  const downForward = tangent.clone().multiplyScalar(0.3 * dist1).add(
+    new THREE.Vector3(0, -Math.min(0.4, start.y * 0.4), 0),
+  );
+  const seg1P1 = start.clone().add(downForward);
+  const seg1P2 = via.clone().addScaledVector(tangent, -Math.max(0.3, dist1 * 0.35));
+  const seg1 = new THREE.CubicBezierCurve3(
+    start.clone(),
+    seg1P1,
+    seg1P2,
+    via.clone(),
+  );
+
+  // Segment 2: ground via → car port.
+  //   - p1 leaves the ground along `tangent` (same direction as seg1 arrived)
+  //     so the slope is continuous through the junction.
+  //   - p2 aligns the curve with `plugDir` at the port end (same logic as
+  //     the legacy two-point curve).
+  const seg2P1 = via.clone().addScaledVector(tangent, Math.max(0.3, dist2 * 0.35));
+  const seg2P2 = end.clone().addScaledVector(
+    plugDir,
+    -Math.max(0.4, dist2 * 0.45),
+  );
+  const seg2 = new THREE.CubicBezierCurve3(via.clone(), seg2P1, seg2P2, end.clone());
+
+  const path = new THREE.CurvePath<THREE.Vector3>();
+  path.add(seg1);
+  path.add(seg2);
+  return path;
+}
+
 function buildCableCurve(
   start: THREE.Vector3,
   end: THREE.Vector3,
@@ -172,6 +235,7 @@ const CABLE_HANDLE_OVERLAP = 0.02;
 export function ChargingCable({
   startWorld,
   endWorld,
+  viaWorld,
   plugDirection = DEFAULT_PLUG_DIRECTION,
   charging,
   handleUrl,
@@ -196,13 +260,20 @@ export function ChargingCable({
   );
 
   const curve = useMemo(
-    () => buildCableCurve(startWorld, cableEndWorld, plugDir),
-    [startWorld, cableEndWorld, plugDir],
+    () =>
+      viaWorld
+        ? buildViaCableCurve(startWorld, viaWorld, cableEndWorld, plugDir)
+        : buildCableCurve(startWorld, cableEndWorld, plugDir),
+    [startWorld, viaWorld, cableEndWorld, plugDir],
   );
 
+  // When a waypoint is present the tube is longer (two bezier segments) so
+  // bump the tessellation up to keep it smooth.
+  const effectiveTubular = viaWorld ? tubularSegments * 2 : tubularSegments;
+
   const geometry = useMemo(
-    () => new THREE.TubeGeometry(curve, tubularSegments, radius, radialSegments, false),
-    [curve, tubularSegments, radius, radialSegments],
+    () => new THREE.TubeGeometry(curve, effectiveTubular, radius, radialSegments, false),
+    [curve, effectiveTubular, radius, radialSegments],
   );
 
   const uniforms = useMemo(

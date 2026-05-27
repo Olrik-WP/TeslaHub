@@ -126,6 +126,10 @@ export interface ShowroomOverrides {
 
   // Camera
   cameraPose?: Partial<VehicleModelConfig['cameraPose']>;
+  /** Charging-mode camera pose — same shape as `cameraPose`, used as
+   *  override on top of `defaults.chargingCameraPose`. Optional: when
+   *  no defaults and no overrides exist, the regular pose is reused. */
+  chargingCameraPose?: Partial<VehicleModelConfig['cameraPose']>;
 
   // Wheels
   /** Swap the wheel GLB (Cypress, Halo, Riptide for M3; Helix2, Machina2,
@@ -308,6 +312,15 @@ export function mergeShowroomConfig(
     cameraPose: overrides.cameraPose
       ? { ...defaults.cameraPose, ...overrides.cameraPose }
       : defaults.cameraPose,
+
+    // Charging-mode camera pose (optional on both sides → only emit
+    // when at least one side defines it; merge shallowly otherwise).
+    chargingCameraPose: overrides.chargingCameraPose
+      ? {
+          ...(defaults.chargingCameraPose ?? defaults.cameraPose),
+          ...overrides.chargingCameraPose,
+        }
+      : defaults.chargingCameraPose,
 
     // Wheels (array → per-corner merge)
     wheelFallbackPositions: mergeWheelPositions(

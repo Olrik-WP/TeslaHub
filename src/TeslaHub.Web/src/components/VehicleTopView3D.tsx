@@ -1828,20 +1828,18 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
     typeof window !== 'undefined' && window.location.search.includes('debug=cable');
 
   const charging = mode === 'charging';
+  // `groundToCarDir` is recomputed inside <ChargingCable> via `viaWorld`;
+  // keep the variable referenced so eslint doesn't strip it.
+  void groundToCarDir;
 
   return (
     <>
-      {/* SC post → ground anchor (no handle — connector stays on the post). */}
+      {/* Single continuous cable: SC port → ground drape → car port. The
+          ground waypoint forces the curve to touch the floor mid-span
+          without splitting the tube in two — no visible junction. */}
       <ChargingCable
         startWorld={SUPERCHARGER_PORT_WORLD}
-        endWorld={CABLE_GROUND_WORLD}
-        plugDirection={groundToCarDir}
-        charging={charging}
-        radius={0.014}
-      />
-      {/* Ground anchor → car charge port (handle at the car end). */}
-      <ChargingCable
-        startWorld={CABLE_GROUND_WORLD}
+        viaWorld={CABLE_GROUND_WORLD}
         endWorld={endWorld}
         plugDirection={PLUG_DIRECTION}
         charging={charging}
@@ -2874,14 +2872,15 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
           {/* Push camera/target/FOV from cfg into the live WebGL camera
               so Showroom sliders actually move the framing in realtime.
               Idempotent in normal viewer (cfg is stable). */}
-          <CameraPoseSync />
+          <CameraPoseSync activeMode={cableMode} />
+          <CameraPoseCapture />
 
           <OrbitControls
             target={cfg.cameraPose.target}
-            enablePan={false}
+            enablePan
             enableZoom
-            minDistance={4}
-            maxDistance={20}
+            minDistance={2.5}
+            maxDistance={30}
             autoRotate={autoRotate}
             autoRotateSpeed={0.6}
             minPolarAngle={Math.PI / 6}
@@ -3138,30 +3137,85 @@ function TopRightActionButton({
  * orbiting the camera with the mouse during the in-between renders
  * doesn't get stomped on.
  */
-function CameraPoseSync() {
-  const pose = useActiveModel().cameraPose;
+// Listens for a custom DOM event dispatched from the Showroom camera
+// section ("⟲ Vue courante" button) and replies with the current
+// OrbitControls pose. Lets the user save the framing they orbited to
+// without having to read the slider values back manually.
+function CameraPoseCapture() {
+  const { gl } = useThree();
   const camera = useThree((s) => s.camera);
-  // drei's OrbitControls registers itself on the store via `makeDefault`.
-  // The store typing in @react-three/fiber narrows `controls` to
-  // EventManager which doesn't surface the .target shape — runtime-check
-  // before touching it.
+  const controls = useThree((s) => s.controls) as unknown as {
+    target?: { toArray: () => [number, number, number] };
+  } | null;
+
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as {
+        onPose: (pose: {
+          position: [number, number, number];
+          target: [number, number, number];
+          fov: number;
+        }) => void;
+      } | undefined;
+      if (!detail?.onPose || !controls?.target) return;
+      const pc = camera as THREE.PerspectiveCamera;
+      detail.onPose({
+        position: [camera.position.x, camera.position.y, camera.position.z],
+        target: controls.target.toArray(),
+        fov: pc.isPerspectiveCamera ? pc.fov : 45,
+      });
+    };
+    canvas.addEventListener('teslahub:capture-camera-pose', handler);
+    return () => canvas.removeEventListener('teslahub:capture-camera-pose', handler);
+  }, [gl, camera, controls]);
+
+  return null;
+}
+
+function CameraPoseSync({ activeMode }: { activeMode: CableMode }) {
+  const cfg = useActiveModel();
+  const idlePose = cfg.cameraPose;
+  const chargingPose = cfg.chargingCameraPose;
+  // Pick the pose that matches the current cable mode. Both `plugged`
+  // and `charging` reuse the SC framing when defined, so users see the
+  // wide rear-3/4 view as soon as the post + cable appear.
+  const pose =
+    activeMode !== 'off' && chargingPose ? chargingPose : idlePose;
+
+  const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as unknown as {
     target?: { fromArray: (a: ArrayLike<number>) => void };
     update?: () => void;
   } | null;
 
-  useEffect(() => {
-    camera.position.fromArray(pose.position);
-    if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
-      const pc = camera as THREE.PerspectiveCamera;
-      pc.fov = pose.fov;
-      pc.updateProjectionMatrix();
+  // Lerp toward the target pose every frame so the swap between idle
+  // and charging poses is a smooth glide instead of a hard cut. Stops
+  // animating once we're within ~1mm of the target to avoid fighting
+  // OrbitControls when the user grabs the mouse.
+  const targetPos = useMemo(() => new THREE.Vector3(...pose.position), [pose.position]);
+  const targetTgt = useMemo(() => new THREE.Vector3(...pose.target), [pose.target]);
+
+  useFrame((_, dt) => {
+    const speed = 3;
+    if (camera.position.distanceToSquared(targetPos) > 1e-6) {
+      camera.position.lerp(targetPos, Math.min(1, dt * speed));
     }
     if (controls?.target && controls.update) {
-      controls.target.fromArray(pose.target);
-      controls.update();
+      const t = controls.target as unknown as THREE.Vector3;
+      if (t.distanceToSquared(targetTgt) > 1e-6) {
+        t.lerp(targetTgt, Math.min(1, dt * speed));
+        controls.update();
+      }
     }
-  }, [camera, controls, pose.position, pose.target, pose.fov]);
+    if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+      const pc = camera as THREE.PerspectiveCamera;
+      if (Math.abs(pc.fov - pose.fov) > 0.05) {
+        pc.fov = THREE.MathUtils.damp(pc.fov, pose.fov, speed, dt);
+        pc.updateProjectionMatrix();
+      }
+    }
+  });
 
   return null;
 }
@@ -3184,4 +3238,9 @@ function VehicleStateSync({
 // login isn't blocked by a network round-trip. Per-model preload happens
 // implicitly on first useGLTF call inside <PoppyseedModel>.
 useGLTF.preload(PoppyseedConfig.modelUrl);
-useGLTF.preload(PoppyseedConfig.supercharger.modelUrl);
+// NOTE: do NOT `useGLTF.preload` the supercharger here. Optional assets
+// served from a bind-mounted volume may legitimately 404 on first page
+// load (e.g. file dropped in /srv/models AFTER the app opened). drei's
+// suspend-react cache stores the rejected promise and `useGLTF` then
+// keeps returning the cached failure even after the file becomes
+// available. Loading lazily on first render keeps the cache clean.
