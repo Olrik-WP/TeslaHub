@@ -2836,8 +2836,22 @@ function TopRightActionBar({
   vehicle: VehicleStatus;
   actions: CalloutsActions;
 }) {
+  // PR-tweak 2026-05: user's preferred top-bar layout =
+  //   Lock · Sentry · Presence · Climate · Defrost · Honk · Flash
+  // Frunk + Vent dropped from the bar (still reachable as 3D callouts).
+  // Presence is RENDERED here as a status indicator only — clicking it
+  // is a no-op, but seeing "someone in the cabin" at a glance is what
+  // the user wanted to keep from the legacy VehicleTopView pills now
+  // that the SVG view is gone in 3D mode.
+  //
+  // Defrost has 3 logical states from Tesla:
+  //   - off               (defrostMode = 0)
+  //   - on but not max    (defrostMode = 1, rare)
+  //   - max defrost on    (defrostMode = 2) ← what HomeQuickActions toggles
+  // We only flip between OFF and MAX (mirrors HomeQuickActions exactly).
+  const defrostActive = (vehicle.defrostMode ?? 0) === 2;
   return (
-    <div className="flex items-center gap-1 sm:gap-1.5">
+    <div className="flex items-center gap-0.5 sm:gap-1">
       {/* Lock — green when locked (good), red when unlocked (urgent). */}
       {vehicle.isLocked != null && (
         <TopRightActionButton
@@ -2873,6 +2887,21 @@ function TopRightActionBar({
           </svg>
         </TopRightActionButton>
       )}
+      {/* Presence — read-only indicator. Green = someone in the cabin,
+          neutral = empty / unknown. Tap does nothing on purpose. */}
+      {vehicle.isUserPresent != null && (
+        <TopRightActionButton
+          title={vehicle.isUserPresent ? 'Conducteur à bord' : 'Cabine vide'}
+          state={vehicle.isUserPresent ? 'secure' : 'neutral'}
+          onClick={() => { /* read-only — presence isn't actionable */ }}
+          loading={false}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="7" r="4" />
+            <path d="M4 21c.5-5 4-7 8-7s7.5 2 8 7" />
+          </svg>
+        </TopRightActionButton>
+      )}
       {/* Climate — green when active, neutral otherwise. */}
       {vehicle.isClimateOn != null && (
         <TopRightActionButton
@@ -2887,37 +2916,45 @@ function TopRightActionBar({
           </svg>
         </TopRightActionButton>
       )}
-      {/* Frunk — orange when open (Tesla can't close it). Only show
-          the open-button when the frunk is currently closed, matching
-          the 3D callout logic. */}
-      {!vehicle.frunkOpen && (
-        <TopRightActionButton
-          title="Ouvrir le coffre avant"
-          state="neutral"
-          onClick={actions.openFrunk.onClick}
-          loading={actions.openFrunk.loading}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 13l2-6h14l2 6" />
-            <rect x="2" y="13" width="20" height="6" rx="2" />
-            <path d="M9 7l-1-2" />
-          </svg>
-        </TopRightActionButton>
-      )}
-      {/* Vent — orange when open (toggle to close), neutral when shut. */}
+      {/* Defrost — amber pulsing when MAX is engaged, neutral otherwise. */}
       <TopRightActionButton
-        title={vehicle.windowsOpen ? 'Vitres ouvertes — toucher pour fermer' : 'Toucher pour entrouvrir les vitres'}
-        state={vehicle.windowsOpen ? 'warning' : 'neutral'}
-        onClick={
-          vehicle.windowsOpen
-            ? actions.closeWindows.onClick
-            : actions.ventWindows.onClick
-        }
-        loading={actions.ventWindows.loading || actions.closeWindows.loading}
+        title={defrostActive ? 'Dégivrage max — toucher pour arrêter' : 'Toucher pour activer le dégivrage max'}
+        state={defrostActive ? 'warning' : 'neutral'}
+        onClick={actions.defrostToggle.onClick}
+        loading={actions.defrostToggle.loading}
+        pulse={defrostActive}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="4" y="4" width="16" height="16" rx="2" />
-          {!vehicle.windowsOpen && <path d="M4 12h16" />}
+          {/* Tesla-style 3-arrow wavy defrost glyph */}
+          <path d="M3 19h18" />
+          <path d="M6 16c0-2 2-2 2-4s-2-2-2-4" />
+          <path d="M12 16c0-2 2-2 2-4s-2-2-2-4" />
+          <path d="M18 16c0-2 2-2 2-4s-2-2-2-4" />
+        </svg>
+      </TopRightActionButton>
+      {/* Honk — one-shot, no persistent state. */}
+      <TopRightActionButton
+        title="Klaxonner"
+        state="neutral"
+        onClick={actions.honkHorn.onClick}
+        loading={actions.honkHorn.loading}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 10v4l5 1 7 4V5L8 9 3 10z" />
+          <path d="M18 8a4 4 0 0 1 0 8" />
+        </svg>
+      </TopRightActionButton>
+      {/* Flash — one-shot, no persistent state. */}
+      <TopRightActionButton
+        title="Appels de phares"
+        state="neutral"
+        onClick={actions.flashLights.onClick}
+        loading={actions.flashLights.loading}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          {/* Headlight half-circle with beams */}
+          <path d="M3 6h6a5 5 0 0 1 0 10H3z" />
+          <path d="M14 8h2M14 12h3M14 16h2" />
         </svg>
       </TopRightActionButton>
     </div>
@@ -2963,7 +3000,10 @@ function TopRightActionButton({
       title={title}
       aria-label={title}
       className={
-        'w-8 h-8 flex items-center justify-center rounded-full ' +
+        // 7 buttons on mobile = tight squeeze. Bump back up on small+
+        // (≥640px) where there's room. Same hit area as before on
+        // desktop (32x32) but a touch tighter on phones.
+        'w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full ' +
         'border backdrop-blur-md transition-all ' +
         'active:scale-95 disabled:opacity-50 ' +
         (pulse ? 'animate-pulse ' : '') +

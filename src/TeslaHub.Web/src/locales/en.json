@@ -278,6 +278,13 @@
       "userPresent": "Present",
       "userAbsent": "Absent"
     },
+    "tpms": {
+      "title": "Tire pressure",
+      "fl": "FL",
+      "fr": "FR",
+      "rl": "RL",
+      "rr": "RR"
+    },
     "vinCopy": "Copy VIN",
     "vinCopied": "VIN copied",
     "medianDist": "Median dist.",

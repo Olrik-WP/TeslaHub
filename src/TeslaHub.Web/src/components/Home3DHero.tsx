@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import HomeBatteryBar from './HomeBatteryBar';
+import TpmsSummaryRow from './TpmsSummaryRow';
 import type { VehicleStatus } from '../api/queries';
 
 const VehicleTopView3D = lazy(() => import('./VehicleTopView3D'));
@@ -55,6 +56,10 @@ export default function Home3DHero({ vehicle }: Props) {
       >
         <VehicleTopView3D vehicle={vehicle} height={height} />
       </Suspense>
+      {/* TPMS resumé strip — always-on chip-style fallback for users
+          who hide the 3D wheel pills (or who simply prefer reading
+          numbers in one place). Renders nothing for cars without TPMS. */}
+      <TpmsSummaryRow vehicle={vehicle} />
       <HomeBatteryBar vehicle={vehicle} isCharging={isCharging} />
     </div>
   );

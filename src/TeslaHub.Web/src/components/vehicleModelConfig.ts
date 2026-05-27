@@ -565,6 +565,21 @@ export interface VehicleModelConfig {
    *  callouts visible by default). The Showroom itself still renders
    *  hidden callouts in a barré state so the user can re-enable them. */
   calloutsHidden?: Partial<Record<CalloutKeyName, true>>;
+  /** Maps each semantic TPMS slot (front-left / front-right / rear-left
+   *  / rear-right) to the `WheelWrapper_<id>` runtime node it should
+   *  attach to.
+   *
+   *  WHY this exists: Tesla's GLB families use DIFFERENT internal
+   *  coordinate systems. Poppyseed (M3 Highland) uses +X = forward, so
+   *  `WheelWrapper_LF` (id "LF") really IS the front-left tyre — the
+   *  naming matches reality. Bayberry (Model Y Juniper) uses +Z =
+   *  forward, and the wheel IDs end up rotated 90°: `WheelWrapper_LF`
+   *  on Y is the front-RIGHT tyre. Without this remap the TPMS pills
+   *  would land on the wrong wheel.
+   *
+   *  Values are the `wheelFallbackPositions[].id` strings, looked up
+   *  via `WheelWrapper_<id>` at render time. */
+  tpmsAnchorMap: Record<'FL' | 'FR' | 'RL' | 'RR', 'LF' | 'RF' | 'LR' | 'RR'>;
 
   // ───────────────────────────────────────────────────────────────────
   // Opening animations — per-model (Tesla ships different keyframes per
@@ -735,6 +750,13 @@ export const PoppyseedConfig: VehicleModelConfig = {
   },
   bodyPaintColor: 0xf2f2f0,
   calloutHeight: 0.45,
+  // M3 (+X = forward) — wheel IDs match physical positions 1:1.
+  tpmsAnchorMap: {
+    FL: 'LF',
+    FR: 'RF',
+    RL: 'LR',
+    RR: 'RR',
+  },
   // User-calibrated wheel finish (2026-05) tuned for the Highland D50
   // plastic hubcaps. alloyRoughnessMin=0 keeps the alloy spokes as
   // mirror-polish; plasticClearcoat will be tuned live by the user
@@ -1223,6 +1245,19 @@ export const BayberryConfig: VehicleModelConfig = {
   bodyPaintColor: 0x450d59,
   calloutHeight: 0.50,        // +5 cm vs M3 — Y is taller, callouts need
                               // more lift to clear the higher roofline
+  // Y (+Z = forward) — wheel IDs are rotated 90° vs M3.
+  // Calibrated from user testing (2026-05): the slider you move and the
+  // pill that moves visibly were 90° off until this map landed.
+  //   - WheelWrapper_LF is actually on the front-right corner
+  //   - WheelWrapper_LR is actually on the front-left corner
+  //   - WheelWrapper_RR is actually on the rear-left  corner
+  //   - WheelWrapper_RF is actually on the rear-right corner
+  tpmsAnchorMap: {
+    FL: 'LR',
+    FR: 'LF',
+    RL: 'RR',
+    RR: 'RF',
+  },
 
   // Tesla shipped the Bayberry GLB with several interior materials left
   // as untextured placeholder colours that bleed through the windows:

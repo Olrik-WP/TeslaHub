@@ -350,17 +350,25 @@ export function VehicleCallouts({ vehicle, actions, showroomPreview }: VehicleCa
       )}
 
       {/* --- TPMS — 4 data callouts, one per wheel -----------------------
-          Anchored on the wheel wrappers added at runtime by the model
-          loader (`WheelWrapper_LF` / `RF` / `LR` / `RR`). Pressure is
-          rendered in the user's preferred unit (bar / psi). Variant
-          follows Tesla's own `tpmsSoftWarningXX` flag as authoritative:
-          warning=true → `danger` (red), otherwise → `secure` (green).
-          Pure data — the callout has no onClick. */}
-      {TPMS_DEFS.map(({ key, anchorName: wheelAnchor, pressure, warning }) => {
+          Each TPMS slot (FL/FR/RL/RR) is mapped to the underlying
+          WheelWrapper through `cfg.tpmsAnchorMap` because the wheel IDs
+          baked into `wheelFallbackPositions` don't always correspond
+          to physical positions — M3 uses +X = forward and the IDs line
+          up, but Bayberry (Y) uses +Z = forward and the IDs are rotated
+          90°. The map keeps the callout-to-tyre relationship correct
+          across families.
+          Pressure is rendered in the user's preferred unit (bar / psi).
+          Variant follows Tesla's own `tpmsSoftWarningXX` flag as
+          authoritative: warning=true → `danger` (red), otherwise →
+          `secure` (green). Rendered with `noLine` so the pill sits
+          DIRECTLY on the wheel (no leader line + dot crossing the
+          car body). Pure data — no onClick. */}
+      {TPMS_DEFS.map(({ key, slot, pressure, warning }) => {
         const p = pressure(vehicle);
         const w = warning(vehicle);
         if (p == null && !w) return null;
         if (!shouldRender(key)) return null;
+        const wheelId = cfg.tpmsAnchorMap[slot];
         const variant: CalloutVariant =
           w ? 'danger' : 'secure';
         const label = p != null
@@ -370,12 +378,13 @@ export function VehicleCallouts({ vehicle, actions, showroomPreview }: VehicleCa
           <Callout
             key={key}
             calloutKey={key}
-            anchorName={wheelAnchor}
+            anchorName={`WheelWrapper_${wheelId}`}
             label={label}
             icon={<TpmsIcon warn={w} />}
             variant={variant}
             action={NOOP_ACTION /* data callout — no command fired on click */}
             hidden={isHidden(key)}
+            noLine
           />
         );
       })}
@@ -421,36 +430,36 @@ export function VehicleCallouts({ vehicle, actions, showroomPreview }: VehicleCa
 }
 
 // TPMS definitions kept out of the render loop so the closures over
-// `pressure(v)` / `warning(v)` stay stable. `anchorName` matches the
-// runtime-named wheel wrappers added by the model loader (see
-// `WheelWrapper_*` in VehicleTopView3D.tsx).
+// `pressure(v)` / `warning(v)` stay stable. `slot` is the SEMANTIC
+// position (FL/FR/RL/RR) — the per-model `tpmsAnchorMap` resolves it
+// to the actual `WheelWrapper_<id>` node at render time.
 const TPMS_DEFS: ReadonlyArray<{
   key: CalloutKey;
-  anchorName: string;
+  slot: 'FL' | 'FR' | 'RL' | 'RR';
   pressure: (v: VehicleStatus) => number | null | undefined;
   warning: (v: VehicleStatus) => boolean | undefined;
 }> = [
   {
     key: 'tpmsFL',
-    anchorName: 'WheelWrapper_LF',
+    slot: 'FL',
     pressure: (v) => v.tpmsPressureFl,
     warning: (v) => v.tpmsSoftWarningFl ?? undefined,
   },
   {
     key: 'tpmsFR',
-    anchorName: 'WheelWrapper_RF',
+    slot: 'FR',
     pressure: (v) => v.tpmsPressureFr,
     warning: (v) => v.tpmsSoftWarningFr ?? undefined,
   },
   {
     key: 'tpmsRL',
-    anchorName: 'WheelWrapper_LR',
+    slot: 'RL',
     pressure: (v) => v.tpmsPressureRl,
     warning: (v) => v.tpmsSoftWarningRl ?? undefined,
   },
   {
     key: 'tpmsRR',
-    anchorName: 'WheelWrapper_RR',
+    slot: 'RR',
     pressure: (v) => v.tpmsPressureRr,
     warning: (v) => v.tpmsSoftWarningRr ?? undefined,
   },
@@ -669,9 +678,17 @@ interface CalloutProps {
    *  position it / toggle visibility back on) but in a dimmed
    *  "barré" treatment to make the hidden state obvious. */
   hidden?: boolean;
+  /** Render the pill DIRECTLY at the anchor position, without the
+   *  leader line and without the anchor dot. Used by TPMS pills that
+   *  sit on the wheel itself — a leader line crossing the car body to
+   *  reach a small dot under each wheel was visually busy and made
+   *  the wheel callouts hard to read. With `noLine` we keep the
+   *  per-callout XYZ calibration (the slider still nudges the pill)
+   *  but lose the visual umbilical. */
+  noLine?: boolean;
 }
 
-function Callout({ calloutKey, anchorName, anchorPosition, label, icon, variant, action, hidden }: CalloutProps) {
+function Callout({ calloutKey, anchorName, anchorPosition, label, icon, variant, action, hidden, noLine }: CalloutProps) {
   const { scene } = useThree();
   const cfg = useActiveModel();
 
@@ -785,7 +802,13 @@ function Callout({ calloutKey, anchorName, anchorPosition, label, icon, variant,
       tip.current.z += offset[2];
     }
     top.current.copy(tip.current);
-    top.current.y += cfg.calloutHeight;
+    // noLine callouts (TPMS) sit DIRECTLY on the anchor — no extra lift
+    // since there's no leader line to make visible. The user can still
+    // nudge the pill via the calloutOffsets slider if they want it
+    // slightly above / below the centre of the wheel.
+    if (!noLine) {
+      top.current.y += cfg.calloutHeight;
+    }
 
     groupRef.current.position.copy(top.current);
     if (tipGroupRef.current) {
@@ -837,27 +860,34 @@ function Callout({ calloutKey, anchorName, anchorPosition, label, icon, variant,
           the anchor (e.g. orbiting behind the car). Tinted with the
           variant colour so the line visually belongs to the button it
           serves (white for at-rest, green for "good state", red for
-          "danger", etc.). */}
-      <line>
-        <primitive object={lineGeom} attach="geometry" />
-        <lineBasicMaterial
-          color={lineColor}
-          transparent
-          opacity={lineOpacity}
-          depthTest={false}
-        />
-      </line>
+          "danger", etc.). Skipped entirely for `noLine` callouts
+          (TPMS) — they sit on the wheel directly with no umbilical. */}
+      {!noLine && (
+        <line>
+          <primitive object={lineGeom} attach="geometry" />
+          <lineBasicMaterial
+            color={lineColor}
+            transparent
+            opacity={lineOpacity}
+            depthTest={false}
+          />
+        </line>
+      )}
 
       {/* Anchor dot — a small flat ring rendered AT the tip in 3D so it
           sits on the car body surface. Same colour as the leader line.
           Tied to the same `groupRef.position` minus the lift would
           drift across frames, so we mount it on its own group whose
-          position is updated from `tip.current` every frame. */}
+          position is updated from `tip.current` every frame. Skipped
+          for `noLine` callouts since the pill itself sits on the
+          anchor and the dot would just be obscured underneath. */}
       <group ref={tipGroupRef}>
-        <mesh renderOrder={998}>
-          <sphereGeometry args={[0.025, 14, 14]} />
-          <meshBasicMaterial color={lineColor} transparent opacity={lineOpacity} depthTest={false} />
-        </mesh>
+        {!noLine && (
+          <mesh renderOrder={998}>
+            <sphereGeometry args={[0.025, 14, 14]} />
+            <meshBasicMaterial color={lineColor} transparent opacity={lineOpacity} depthTest={false} />
+          </mesh>
+        )}
       </group>
 
       <group ref={groupRef}>

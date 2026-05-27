@@ -278,6 +278,13 @@
       "userPresent": "Anwesend",
       "userAbsent": "Abwesend"
     },
+    "tpms": {
+      "title": "Reifendruck",
+      "fl": "VL",
+      "fr": "VR",
+      "rl": "HL",
+      "rr": "HR"
+    },
     "vinCopy": "VIN kopieren",
     "vinCopied": "VIN kopiert",
     "medianDist": "Medianstrecke",

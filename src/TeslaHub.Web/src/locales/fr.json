@@ -278,6 +278,13 @@
       "userPresent": "Présent",
       "userAbsent": "Absent"
     },
+    "tpms": {
+      "title": "Pression pneus",
+      "fl": "AvG",
+      "fr": "AvD",
+      "rl": "ArG",
+      "rr": "ArD"
+    },
     "vinCopy": "Copier le VIN",
     "vinCopied": "VIN copié",
     "medianDist": "Dist. médiane",
