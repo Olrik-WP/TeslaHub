@@ -117,39 +117,42 @@ const CABLE_FRAGMENT_SHADER = /* glsl */ `
   uniform float uFlowSpeed;
   uniform vec3  uBaseColor;
 
-  // Narrow Gaussian centred on \`centre\` along a periodic [0,1] V axis.
-  // \`tightness\` controls the pulse width — bigger = sharper bright band.
-  float ringPulse(float v, float centre, float tightness) {
-    float d = v - centre;
-    // Wrap d into the [-0.5, 0.5] range so the pulse near v=1 and v=0
-    // overlap visually (no dark spot at the seam).
+  // IMPORTANT: in three.js TubeGeometry, UV.x runs ALONG the length of
+  // the tube (0 = start = SC port, 1 = end = car port), and UV.y runs
+  // AROUND the radius. So flow direction lives on vUv.x.
+
+  // Narrow Gaussian centred on \`centre\` along a periodic [0,1] axis.
+  // \`tightness\` controls the pulse width — bigger = sharper band.
+  float pulseAt(float u, float centre, float tightness) {
+    float d = u - centre;
+    // Wrap d into [-0.5, 0.5] so the pulse crossing the u=1↔0 seam stays
+    // continuous (no dark spot).
     d -= floor(d + 0.5);
     return exp(-d * d * tightness);
   }
 
   void main() {
-    float v = vUv.y;
+    float u = vUv.x;
     float t = uTime * uFlowSpeed;
 
-    // Three pulses chasing each other from start (SC) → end (car port).
-    // \`t\` increases over time → pulses translate in the +V direction.
-    float p1 = ringPulse(v, fract(t),         140.0);
-    float p2 = ringPulse(v, fract(t + 0.333), 140.0);
-    float p3 = ringPulse(v, fract(t + 0.667), 140.0);
+    // Three thin pulses chasing each other from u=0 (SC) → u=1 (car port).
+    // Tightness 220 ≈ pulse width ~5% of the cable length.
+    float p1 = pulseAt(u, fract(t),         220.0);
+    float p2 = pulseAt(u, fract(t + 0.333), 220.0);
+    float p3 = pulseAt(u, fract(t + 0.667), 220.0);
     float pulse = p1 + p2 + p3;
 
-    // Rim darkening to give the tube a cylindrical feel.
-    float rim = pow(1.0 - abs(vUv.x * 2.0 - 1.0), 0.6);
+    // Cylinder rim darkening — vUv.y goes 0..1 around the tube.
+    float rim = pow(1.0 - abs(vUv.y * 2.0 - 1.0), 0.6);
 
-    // Permanent baseline glow — soft when idle, slightly brighter when
-    // charging (so the cable doesn't look completely dark between pulses).
-    float baseGlow = mix(0.35, 0.7, uIntensity);
-    vec3 base = uBaseColor * mix(0.55, 1.05, rim) * baseGlow;
+    // Permanent baseline glow — soft when idle, brighter when charging.
+    float baseGlow = mix(0.35, 0.75, uIntensity);
+    vec3 base = uBaseColor * mix(0.55, 1.1, rim) * baseGlow;
 
-    // Hot saturated bands on top.
-    vec3 hot = uBaseColor * pulse * uIntensity * 3.2;
-    // White-hot core for the "electric arc" feel — only when charging.
-    vec3 core = vec3(1.0, 1.0, 0.92) * pulse * uIntensity * 0.55;
+    // Hot saturated bands traveling along the length.
+    vec3 hot = uBaseColor * pulse * uIntensity * 3.4;
+    // White-hot core for the "electric arc" feel.
+    vec3 core = vec3(1.0, 1.0, 0.92) * pulse * uIntensity * 0.6;
 
     gl_FragColor = vec4(base + hot + core, 1.0);
   }
