@@ -178,6 +178,14 @@ export interface VehicleModelConfig {
    *  metres behind / outside the rear bumper). */
   cableGroundAnchor: [number, number, number];
 
+  /** Slack multipliers controlling the procedural cable shape.
+   *  `post` shapes the SC→ground arc, `car` shapes the ground→port arc.
+   *  1.0 = default drape, &lt;1 = taut, &gt;1 = more slack. */
+  cableSlack: {
+    post: number;
+    car: number;
+  };
+
   /** Tesla Supercharger V3/V4 post placement — shown when the car is
    *  plugged in or charging. The cable runs SC port → ground anchor →
    *  charge port. Calibrated per car in the Showroom. */
@@ -695,6 +703,8 @@ export const PoppyseedConfig: VehicleModelConfig = {
   // at the wider FOV the user set above.
   cableGroundAnchor: [-2.95, 0, -1.5],
 
+  cableSlack: { post: 1, car: 1 },
+
   supercharger: {
     modelUrl: '/models/supercharger_base.glb',
     position: [-4.2, 0, -1.6],
@@ -1153,6 +1163,8 @@ export const BayberryConfig: VehicleModelConfig = {
   // passenger side of the rear bumper so it stays clear of the orbit
   // camera's main viewing arcs.
   cableGroundAnchor: [-2.6, 0, 2.85],
+
+  cableSlack: { post: 1, car: 1 },
 
   supercharger: {
     modelUrl: '/models/supercharger_base.glb',

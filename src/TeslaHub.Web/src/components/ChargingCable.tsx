@@ -76,6 +76,14 @@ export interface ChargingCableProps {
   tubularSegments?: number;
   /** Pulsing speed of the flow when charging. */
   flowSpeed?: number;
+  /** Slack multiplier for the FIRST segment (start → via). 1.0 = default
+   *  drape, &lt;1 = taut/short cable, &gt;1 = more slack. Only used when
+   *  `viaWorld` is set. */
+  slackStart?: number;
+  /** Slack multiplier for the SECOND segment (via → end). Same scale as
+   *  `slackStart`. When `viaWorld` is absent, applied to the single
+   *  segment instead so the slider also tightens the standalone curve. */
+  slackEnd?: number;
 }
 
 const DEFAULT_PLUG_DIRECTION = new THREE.Vector3(0, 0, 1);
@@ -132,6 +140,8 @@ function buildViaCableCurve(
   via: THREE.Vector3,
   end: THREE.Vector3,
   plugDir: THREE.Vector3,
+  slackStart: number,
+  slackEnd: number,
 ): THREE.Curve<THREE.Vector3> {
   // Shared tangent at the ground point: horizontal direction toward the car
   // port. Both segments leave the junction along this vector, so the tube
@@ -147,11 +157,14 @@ function buildViaCableCurve(
   //   - p1 leaves the SC head pointing down + forward (cable falls naturally)
   //   - p2 approaches the ground OPPOSITE to `tangent` so the curve arrives
   //     tangent to it at `via`.
-  const downForward = tangent.clone().multiplyScalar(0.3 * dist1).add(
-    new THREE.Vector3(0, -Math.min(0.4, start.y * 0.4), 0),
+  const downForward = tangent.clone().multiplyScalar(0.3 * dist1 * slackStart).add(
+    new THREE.Vector3(0, -Math.min(0.4, start.y * 0.4) * slackStart, 0),
   );
   const seg1P1 = start.clone().add(downForward);
-  const seg1P2 = via.clone().addScaledVector(tangent, -Math.max(0.3, dist1 * 0.35));
+  const seg1P2 = via.clone().addScaledVector(
+    tangent,
+    -Math.max(0.3, dist1 * 0.35) * slackStart,
+  );
   const seg1 = new THREE.CubicBezierCurve3(
     start.clone(),
     seg1P1,
@@ -164,10 +177,13 @@ function buildViaCableCurve(
   //     so the slope is continuous through the junction.
   //   - p2 aligns the curve with `plugDir` at the port end (same logic as
   //     the legacy two-point curve).
-  const seg2P1 = via.clone().addScaledVector(tangent, Math.max(0.3, dist2 * 0.35));
+  const seg2P1 = via.clone().addScaledVector(
+    tangent,
+    Math.max(0.3, dist2 * 0.35) * slackEnd,
+  );
   const seg2P2 = end.clone().addScaledVector(
     plugDir,
-    -Math.max(0.4, dist2 * 0.45),
+    -Math.max(0.4, dist2 * 0.45) * slackEnd,
   );
   const seg2 = new THREE.CubicBezierCurve3(via.clone(), seg2P1, seg2P2, end.clone());
 
@@ -181,6 +197,7 @@ function buildCableCurve(
   start: THREE.Vector3,
   end: THREE.Vector3,
   plugDir: THREE.Vector3,
+  slack: number,
 ): THREE.CubicBezierCurve3 {
   // CubicBezier control points are TANGENT handles, not waypoints.
   //
@@ -207,13 +224,15 @@ function buildCableCurve(
   // the curve stays around 0 (floor level).
   const p1 = start
     .clone()
-    .addScaledVector(horizontalToEnd, totalDist * 0.60)
-    .add(new THREE.Vector3(0, -0.25, 0));
+    .addScaledVector(horizontalToEnd, totalDist * 0.60 * slack)
+    .add(new THREE.Vector3(0, -0.25 * slack, 0));
 
   // p2 is pushed AWAY from the port along the plug direction so that the
   // curve's final tangent aligns with plugDir. This is what makes the cable
   // arrive perpendicular to the car body instead of from a random angle.
-  const p2 = end.clone().addScaledVector(plugDir, -Math.max(0.4, totalDist * 0.45));
+  const p2 = end
+    .clone()
+    .addScaledVector(plugDir, -Math.max(0.4, totalDist * 0.45) * slack);
 
   return new THREE.CubicBezierCurve3(start.clone(), p1, p2, end.clone());
 }
@@ -243,6 +262,8 @@ export function ChargingCable({
   radialSegments = 12,
   tubularSegments = 48,
   flowSpeed = 0.7,
+  slackStart = 1,
+  slackEnd = 1,
 }: ChargingCableProps) {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
 
@@ -262,9 +283,16 @@ export function ChargingCable({
   const curve = useMemo(
     () =>
       viaWorld
-        ? buildViaCableCurve(startWorld, viaWorld, cableEndWorld, plugDir)
-        : buildCableCurve(startWorld, cableEndWorld, plugDir),
-    [startWorld, viaWorld, cableEndWorld, plugDir],
+        ? buildViaCableCurve(
+            startWorld,
+            viaWorld,
+            cableEndWorld,
+            plugDir,
+            slackStart,
+            slackEnd,
+          )
+        : buildCableCurve(startWorld, cableEndWorld, plugDir, slackEnd),
+    [startWorld, viaWorld, cableEndWorld, plugDir, slackStart, slackEnd],
   );
 
   // When a waypoint is present the tube is longer (two bezier segments) so

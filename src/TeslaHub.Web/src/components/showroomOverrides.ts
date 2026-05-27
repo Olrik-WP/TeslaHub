@@ -142,6 +142,12 @@ export interface ShowroomOverrides {
   // Charge port + cable
   chargePort?: Partial<VehicleModelConfig['chargePort']>;
   cableGroundAnchor?: [number, number, number];
+  /** Slack multiplier for the SC-side cable segment (start → ground).
+   *  1.0 = default drape, smaller = taut/short, larger = more loop. */
+  cableSlackPost?: number;
+  /** Slack multiplier for the car-side cable segment (ground → port).
+   *  Same scale as `cableSlackPost`. */
+  cableSlackCar?: number;
   /** Supercharger post placement — shallow-merged over model default. */
   supercharger?: Partial<VehicleModelConfig['supercharger']>;
 
@@ -335,6 +341,12 @@ export function mergeShowroomConfig(
 
     // Cable ground anchor (tuple → replace entirely)
     cableGroundAnchor: overrides.cableGroundAnchor ?? defaults.cableGroundAnchor,
+
+    // Cable slack (per-segment scalars → replace each independently)
+    cableSlack: {
+      post: overrides.cableSlackPost ?? defaults.cableSlack.post,
+      car: overrides.cableSlackCar ?? defaults.cableSlack.car,
+    },
 
     // Supercharger post (object → shallow merge)
     supercharger: overrides.supercharger

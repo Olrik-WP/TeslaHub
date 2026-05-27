@@ -523,6 +523,7 @@ function useModelConsts() {
       PORT_FROM_PIVOT_OFFSET: new THREE.Vector3(...cfg.chargePort.pivotToSocketOffset),
       PLUG_DIRECTION: new THREE.Vector3(...cfg.chargePort.plugDirection),
       CABLE_GROUND_WORLD: new THREE.Vector3(...cfg.cableGroundAnchor),
+      CABLE_SLACK: cfg.cableSlack,
       SUPERCHARGER_PORT_WORLD: superchargerCablePortWorld(cfg.supercharger),
       SUPERCHARGER_MODEL_URL: cfg.supercharger.modelUrl,
       FLOOR_NODE_NAMES: new Set(cfg.floorNodes),
@@ -1724,6 +1725,7 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
     PORT_FROM_PIVOT_OFFSET,
     PLUG_DIRECTION,
     CABLE_GROUND_WORLD,
+    CABLE_SLACK,
     SUPERCHARGER_PORT_WORLD,
   } = useModelConsts();
 
@@ -1844,6 +1846,8 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
         plugDirection={PLUG_DIRECTION}
         charging={charging}
         handleUrl={handleAvailable ? HANDLE_URL : undefined}
+        slackStart={CABLE_SLACK.post}
+        slackEnd={CABLE_SLACK.car}
       />
       {debugCable && (
         <>
@@ -3177,43 +3181,88 @@ function CameraPoseSync({ activeMode }: { activeMode: CableMode }) {
   const cfg = useActiveModel();
   const idlePose = cfg.cameraPose;
   const chargingPose = cfg.chargingCameraPose;
-  // Pick the pose that matches the current cable mode. Both `plugged`
-  // and `charging` reuse the SC framing when defined, so users see the
-  // wide rear-3/4 view as soon as the post + cable appear.
-  const pose =
+  // Pose dictated by the current cable mode. Off → idle, anything else
+  // → charging (when the model has one). The user can override via the
+  // `teslahub:set-camera-pose` event below.
+  const autoPose =
     activeMode !== 'off' && chargingPose ? chargingPose : idlePose;
 
+  const { gl } = useThree();
   const camera = useThree((s) => s.camera);
   const controls = useThree((s) => s.controls) as unknown as {
-    target?: { fromArray: (a: ArrayLike<number>) => void };
+    target?: THREE.Vector3;
     update?: () => void;
+    addEventListener?: (e: string, cb: () => void) => void;
+    removeEventListener?: (e: string, cb: () => void) => void;
   } | null;
 
-  // Lerp toward the target pose every frame so the swap between idle
-  // and charging poses is a smooth glide instead of a hard cut. Stops
-  // animating once we're within ~1mm of the target to avoid fighting
-  // OrbitControls when the user grabs the mouse.
+  // Optional override pose dispatched from the Showroom UI. While set,
+  // it wins over the cable-mode pose; cleared automatically when the
+  // user grabs the camera or when the cable mode changes.
+  const [forcedPose, setForcedPose] = useState<typeof idlePose | null>(null);
+  const pose = forcedPose ?? autoPose;
+
+  // We only animate to the target pose for a short budget after the
+  // pose changes — once the budget runs out (or the user starts
+  // orbiting), we leave the camera alone so it can be moved freely.
+  const animBudgetRef = useRef(0);
+  const userActiveRef = useRef(false);
+
+  // Reset the user-active flag and rearm the animation whenever the
+  // target pose changes (cable mode switch or a forced pose request).
+  useEffect(() => {
+    animBudgetRef.current = 1.0;
+    userActiveRef.current = false;
+  }, [pose.position, pose.target, pose.fov]);
+
+  // OrbitControls `start` event fires when the user grabs the camera
+  // (mouse-down). From that moment we stop pulling toward the target.
+  useEffect(() => {
+    if (!controls?.addEventListener) return;
+    const onStart = () => {
+      userActiveRef.current = true;
+      animBudgetRef.current = 0;
+    };
+    controls.addEventListener('start', onStart);
+    return () => controls.removeEventListener?.('start', onStart);
+  }, [controls]);
+
+  // External "set camera pose" requests (Showroom preview toggle, etc.)
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail as {
+        pose?: typeof idlePose | null;
+      } | undefined;
+      setForcedPose(detail?.pose ?? null);
+    };
+    canvas.addEventListener('teslahub:set-camera-pose', handler);
+    return () => canvas.removeEventListener('teslahub:set-camera-pose', handler);
+  }, [gl]);
+
+  // Clear forcedPose when the cable mode changes — the natural cable-
+  // mode-driven pose takes over again.
+  useEffect(() => {
+    setForcedPose(null);
+  }, [activeMode]);
+
   const targetPos = useMemo(() => new THREE.Vector3(...pose.position), [pose.position]);
   const targetTgt = useMemo(() => new THREE.Vector3(...pose.target), [pose.target]);
 
   useFrame((_, dt) => {
-    const speed = 3;
-    if (camera.position.distanceToSquared(targetPos) > 1e-6) {
-      camera.position.lerp(targetPos, Math.min(1, dt * speed));
-    }
+    if (userActiveRef.current || animBudgetRef.current <= 0) return;
+    animBudgetRef.current -= dt;
+    const k = Math.min(1, dt * 4);
+    camera.position.lerp(targetPos, k);
     if (controls?.target && controls.update) {
-      const t = controls.target as unknown as THREE.Vector3;
-      if (t.distanceToSquared(targetTgt) > 1e-6) {
-        t.lerp(targetTgt, Math.min(1, dt * speed));
-        controls.update();
-      }
+      const t = controls.target as THREE.Vector3;
+      t.lerp(targetTgt, k);
+      controls.update();
     }
-    if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
-      const pc = camera as THREE.PerspectiveCamera;
-      if (Math.abs(pc.fov - pose.fov) > 0.05) {
-        pc.fov = THREE.MathUtils.damp(pc.fov, pose.fov, speed, dt);
-        pc.updateProjectionMatrix();
-      }
+    const pc = camera as THREE.PerspectiveCamera;
+    if (pc.isPerspectiveCamera && Math.abs(pc.fov - pose.fov) > 0.05) {
+      pc.fov = THREE.MathUtils.damp(pc.fov, pose.fov, 4, dt);
+      pc.updateProjectionMatrix();
     }
   });
 

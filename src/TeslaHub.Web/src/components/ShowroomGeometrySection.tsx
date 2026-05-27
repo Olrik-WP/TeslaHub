@@ -528,6 +528,28 @@ function CableSection({ overrides, onChange, defaults }: Props) {
         Point intermédiaire au sol entre le Superchargeur et la voiture. Alignez-le
         sur la sphère orange (port SC) pour un branchement réaliste.
       </p>
+
+      <ShowroomSlider
+        label="Longueur câble côté Superchargeur"
+        value={overrides.cableSlackPost ?? defaults.cableSlack.post}
+        onChange={(v) => onChange({ ...overrides, cableSlackPost: v })}
+        defaultValue={defaults.cableSlack.post}
+        min={0.2}
+        max={2}
+        step={0.05}
+      />
+      <ShowroomSlider
+        label="Longueur câble côté voiture"
+        value={overrides.cableSlackCar ?? defaults.cableSlack.car}
+        onChange={(v) => onChange({ ...overrides, cableSlackCar: v })}
+        defaultValue={defaults.cableSlack.car}
+        min={0.2}
+        max={2}
+        step={0.05}
+      />
+      <p className="text-[10px] text-[#6b7280]">
+        1.0 = défaut. &lt;1 = câble tendu/court. &gt;1 = plus de mou.
+      </p>
     </SubSection>
   );
 }
@@ -1086,6 +1108,31 @@ function ChargingCameraSubFields({ overrides, onChange, defaults }: Props) {
   const overridden =
     !!overrides.chargingCameraPose && Object.keys(overrides.chargingCameraPose).length > 0;
 
+  const [previewing, setPreviewing] = useState(false);
+
+  const dispatchPose = (
+    pose: { position: [number, number, number]; target: [number, number, number]; fov: number } | null,
+  ) => {
+    const canvas = document.querySelector('canvas');
+    canvas?.dispatchEvent(
+      new CustomEvent('teslahub:set-camera-pose', { detail: { pose } }),
+    );
+  };
+
+  const togglePreview = () => {
+    if (previewing) {
+      // Back to normal: clear the forced pose, viewer resumes its
+      // cable-mode-driven pose (and the user can orbit freely).
+      dispatchPose(null);
+      setPreviewing(false);
+    } else {
+      // Force the charging pose live (using current sliders so the
+      // user can fine-tune while looking at the result).
+      dispatchPose({ position, target, fov });
+      setPreviewing(true);
+    }
+  };
+
   const captureCurrent = () => {
     const canvas = document.querySelector('canvas');
     const event = new CustomEvent<{
@@ -1109,11 +1156,28 @@ function ChargingCameraSubFields({ overrides, onChange, defaults }: Props) {
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onClick={togglePreview}
+            className={
+              'text-[10px] px-2 py-0.5 rounded-md border ' +
+              (previewing
+                ? 'bg-[#e31937] border-[#e31937] text-white'
+                : 'bg-[#1a1a1a] border-[#2a2a2a] hover:bg-[#202020] text-white')
+            }
+            title={
+              previewing
+                ? 'Repasse à la caméra normale et libère l\'orbite'
+                : 'Active la vue de charge pour voir le résultat des sliders'
+            }
+          >
+            {previewing ? '↩ Vue normale' : '👁 Aperçu vue de charge'}
+          </button>
+          <button
+            type="button"
             onClick={captureCurrent}
             className="text-[10px] px-2 py-0.5 rounded-md bg-[#1a1a1a] hover:bg-[#202020] border border-[#2a2a2a] text-white"
-            title="Capture la vue courante de l'orbite comme pose de charge"
+            title="Enregistre la vue actuelle (souris) comme pose de charge"
           >
-            ⟲ Vue courante
+            📸 Capturer
           </button>
           {overridden && (
             <button
@@ -1127,8 +1191,10 @@ function ChargingCameraSubFields({ overrides, onChange, defaults }: Props) {
         </div>
       </div>
       <p className="text-[10px] text-[#6b7280]">
-        Cadrage automatique pendant « Branché » / « Recharge » — pour mettre
-        en valeur la voiture et le Superchargeur ensemble.
+        Cadrage automatique pendant « Branché » / « Recharge » — bouge la
+        souris pour reprendre la main à tout moment. <b>👁 Aperçu</b> verrouille
+        la vue de charge pour calibrer. <b>📸 Capturer</b> enregistre la vue
+        actuelle.
       </p>
       <ShowroomVec3Slider
         label="Position caméra (charge)"
