@@ -2438,6 +2438,34 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
     })),
   });
 
+  // PR-4 mutations — lock/sentry/climate. Same endpoints as HomeQuickActions
+  // so the two surfaces share optimistic patches and rollback semantics.
+  // Lock + unlock are split into two endpoints (Tesla quirk: no
+  // `access/lock-toggle`) so we keep them as two hooks and pick the
+  // right one at click time based on the current `isLocked` state.
+  const lockMut = useControlMutation(vehicleId, 'access/lock', {
+    optimistic: vehiclePatch(carId, () => ({ isLocked: true })),
+  });
+  const unlockMut = useControlMutation(vehicleId, 'access/unlock', {
+    optimistic: vehiclePatch(carId, () => ({ isLocked: false })),
+  });
+  const sentryMut = useControlMutation<{ on: boolean }>(vehicleId, 'access/sentry', {
+    optimistic: vehiclePatch<{ on: boolean }>(carId, (_prev, body) => ({
+      sentryMode: body.on,
+    })),
+  });
+  // Climate uses two endpoints; the path string is picked from the live
+  // `isClimateOn` snapshot at hook-build time. When that flips, the hook
+  // rebuilds on the next render — mirrors ClimateCard / HomeQuickActions.
+  const isClimateOn = vehicle.isClimateOn ?? false;
+  const climateMut = useControlMutation(
+    vehicleId,
+    isClimateOn ? 'climate/stop' : 'climate/start',
+    {
+      optimistic: vehiclePatch(carId, () => ({ isClimateOn: !isClimateOn })),
+    },
+  );
+
   // Callouts gated on the same trinity HomeQuickActions uses. When any
   // condition is missing we pass null → callouts render nothing at all.
   // We deliberately MIRROR HomeQuickActions' gating exactly so the two
@@ -2549,6 +2577,24 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
         onClick: () => windowCmd.mutate({ command: 'close' }),
         loading: windowClosing,
       },
+      // PR-4 — lock/sentry/climate. Same endpoint behaviour as
+      // HomeQuickActions so the two surfaces stay perfectly in sync.
+      lockVehicle: {
+        onClick: () => lockMut.mutate(undefined as never),
+        loading: lockMut.isPending,
+      },
+      unlockVehicle: {
+        onClick: () => unlockMut.mutate(undefined as never),
+        loading: unlockMut.isPending,
+      },
+      sentryToggle: {
+        onClick: () => sentryMut.mutate({ on: !(vehicle.sentryMode ?? false) }),
+        loading: sentryMut.isPending,
+      },
+      climateToggle: {
+        onClick: () => climateMut.mutate(undefined as never),
+        loading: climateMut.isPending,
+      },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -2563,6 +2609,11 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
     portOpening,
     windowVenting,
     windowClosing,
+    lockMut.isPending,
+    unlockMut.isPending,
+    sentryMut.isPending,
+    climateMut.isPending,
+    vehicle.sentryMode,
   ]);
 
   // Strip individual actions when capabilities tell us they don't apply.

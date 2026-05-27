@@ -153,7 +153,11 @@ export interface VehicleModelConfig {
   // ───────────────────────────────────────────────────────────────────
   // Action anchors — pivots used by callouts to attach floating buttons
   // ───────────────────────────────────────────────────────────────────
-  /** Node names where each interactive callout button anchors. */
+  /** Node names where each interactive callout button anchors.
+   *  All entries must resolve to a node present in the GLB. The Showroom
+   *  editor (PR-6) will later let users override these positions on a
+   *  per-car basis via `showroomOverrides.calloutPositions`, but the
+   *  defaults here are what every car sees out of the box. */
   actionAnchors: {
     frunk: string;
     trunk: string;
@@ -161,6 +165,17 @@ export interface VehicleModelConfig {
     /** Representative window node — chosen for left-front for camera
      *  framing (closest to default orbit pose). */
     window: string;
+    /** Lock/unlock callout — driver door is the conventional Tesla
+     *  touch-to-unlock zone. */
+    lock: string;
+    /** Sentry-mode toggle. Anchored near a B-pillar camera when the
+     *  model exposes mirror nodes (Poppyseed/M3), else fall back to
+     *  the rear-left door (Bayberry/Y has mirrors fused into door
+     *  meshes — no separate anchor available). */
+    sentry: string;
+    /** Climate ON/OFF — passenger-side anchor so it doesn't visually
+     *  conflict with lock (driver-side). */
+    climate: string;
   };
 
   // ───────────────────────────────────────────────────────────────────
@@ -598,6 +613,13 @@ export const PoppyseedConfig: VehicleModelConfig = {
     trunk: 'Trunk_Spatial',
     chargePort: 'Charge_Cap_Spatial',
     window: 'Window_LF_Spatial',
+    // M3 has mirror anchor nodes — sentry sits near the driver-side
+    // B-pillar camera (closest hardware), climate on the passenger
+    // mirror so the two new callouts don't overlap the lock callout
+    // on the driver door.
+    lock: 'Door_LF_Spatial',
+    sentry: 'Door_LF_Mirror_Spatial',
+    climate: 'Door_RF_Mirror_Spatial',
   },
 
   // User-calibrated Sentry camera positions (2026-05) — same 7-camera
@@ -1030,6 +1052,12 @@ export const BayberryConfig: VehicleModelConfig = {
     trunk: 'Trunk_Spatial',        // identical to M3
     chargePort: 'Charge_Port_Spatial',  // RENAMED on Y
     window: 'Window_FL',           // RENAMED on Y (FL vs LF, no _Spatial)
+    // Y has no separate mirror anchor (the mirrors are fused into the
+    // door meshes — see bayberryOpenings comment header). We fall back
+    // to door anchors for sentry/climate. Same lock anchor as M3.
+    lock: 'Door_LF_Spatial',
+    sentry: 'Door_LR_Spatial',
+    climate: 'Door_RF_Spatial',
   },
 
   // User-calibrated Sentry pulse-dot positions (2026-05) — 7 hardware

@@ -71,6 +71,13 @@ export interface CalloutsActions {
   unlockCable: CalloutAction;
   ventWindows: CalloutAction;
   closeWindows: CalloutAction;
+  // Phase 2 actions (PR-4) — body-state toggles. Each one is rendered
+  // when the corresponding capability is supported by the car AND the
+  // live state is known (null = render nothing rather than guess).
+  lockVehicle: CalloutAction;
+  unlockVehicle: CalloutAction;
+  sentryToggle: CalloutAction;
+  climateToggle: CalloutAction;
 }
 
 interface VehicleCalloutsProps {
@@ -161,6 +168,49 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
         variant={windowsOpen ? 'open' : 'closed'}
         action={windowsOpen ? actions.closeWindows : actions.ventWindows}
       />
+
+      {/* --- LOCK / UNLOCK -----------------------------------------------
+          Driver-door anchor. Green pill when locked (safe state, tap
+          to unlock), red pill when unlocked (urgent, tap to re-lock).
+          Tesla's mobile app mirrors this exact colour logic. */}
+      {vehicle.isLocked != null && (
+        <Callout
+          anchorName={ANCHORS.lock}
+          label={vehicle.isLocked ? 'Déverrouiller' : 'Verrouiller'}
+          icon={<LockIcon open={!vehicle.isLocked} />}
+          variant={vehicle.isLocked ? 'secure' : 'danger'}
+          action={vehicle.isLocked ? actions.unlockVehicle : actions.lockVehicle}
+        />
+      )}
+
+      {/* --- SENTRY MODE -------------------------------------------------
+          Toggle the surveillance mode. Blue pill when active, discreet
+          white when off. Live state already pulses red sentry-camera
+          dots via VehicleLightEffects, so the callout primarily serves
+          as the control surface (not the indicator). */}
+      {vehicle.sentryMode != null && (
+        <Callout
+          anchorName={ANCHORS.sentry}
+          label={vehicle.sentryMode ? 'Sentinelle ON' : 'Sentinelle'}
+          icon={<EyeIcon />}
+          variant={vehicle.sentryMode ? 'info' : 'closed'}
+          action={actions.sentryToggle}
+        />
+      )}
+
+      {/* --- CLIMATE ON / OFF --------------------------------------------
+          Passenger-side anchor so it doesn't pile up on the driver
+          door. Green pill when active. Toggles `climate/start` /
+          `climate/stop` via the parent — same endpoint as ClimateCard. */}
+      {vehicle.isClimateOn != null && (
+        <Callout
+          anchorName={ANCHORS.climate}
+          label={vehicle.isClimateOn ? 'Clim ON' : 'Démarrer clim'}
+          icon={<SnowflakeIcon />}
+          variant={vehicle.isClimateOn ? 'secure' : 'closed'}
+          action={actions.climateToggle}
+        />
+      )}
     </>
   );
 }
@@ -317,7 +367,7 @@ export function LiveChargeInfoCallout({ info }: LiveChargeInfoCalloutProps) {
 // Single callout — leader line + Html button that follow the anchor.
 // ---------------------------------------------------------------------------
 
-type CalloutVariant = 'closed' | 'open' | 'plug';
+type CalloutVariant = 'closed' | 'open' | 'plug' | 'secure' | 'danger' | 'info';
 
 interface CalloutProps {
   anchorName: string;
@@ -414,12 +464,21 @@ function Callout({ anchorName, label, icon, variant, action }: CalloutProps) {
   //   closed = "at rest, want to open" → small, discreet, white
   //   open   = "currently open, want to close" → orange, prominent
   //   plug   = "cable latched, want to release" → blue, prominent
+  //   secure = "locked / climate on / good state"             → green
+  //   danger = "unlocked / urgent attention needed"           → Tesla red
+  //   info   = "sentry on / passive informational good state" → blue
   const variantClass =
     variant === 'open'
       ? 'bg-[#f59e0b] hover:bg-[#d97706] text-black opacity-100 border-white/50'
       : variant === 'plug'
         ? 'bg-[#3b82f6] hover:bg-[#2563eb] text-white opacity-100 border-white/40'
-        : 'bg-white/85 hover:bg-white text-black opacity-55 hover:opacity-100 border-white/25';
+        : variant === 'secure'
+          ? 'bg-[#22c55e]/85 hover:bg-[#16a34a] text-white opacity-95 border-white/40'
+          : variant === 'danger'
+            ? 'bg-[#e31937]/85 hover:bg-[#c01530] text-white opacity-100 border-white/40'
+            : variant === 'info'
+              ? 'bg-[#3b82f6]/80 hover:bg-[#2563eb] text-white opacity-95 border-white/40'
+              : 'bg-white/85 hover:bg-white text-black opacity-55 hover:opacity-100 border-white/25';
   // Line opacity follows the same logic — bright when there's something
   // important to act on, dim when at rest.
   const lineOpacity = variant === 'closed' ? 0.35 : 0.65;
@@ -512,6 +571,32 @@ function VentIcon() {
       <path d="M2 8h8" />
       <path d="M4 2v8" />
       <path d="M8 2v8" />
+    </svg>
+  );
+}
+
+function LockIcon({ open }: { open?: boolean }) {
+  return (
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2.5" y="5.5" width="7" height="5" rx="1" />
+      {open ? <path d="M4 5.5V3.5a2 2 0 0 1 3.5-1" /> : <path d="M4 5.5V3.5a2 2 0 0 1 4 0v2" />}
+    </svg>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 6s2-3.5 5-3.5S11 6 11 6 9 9.5 6 9.5 1 6 1 6z" />
+      <circle cx="6" cy="6" r="1.5" />
+    </svg>
+  );
+}
+
+function SnowflakeIcon() {
+  return (
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <path d="M6 1v10M1 6h10M2.5 2.5l7 7M9.5 2.5l-7 7" />
     </svg>
   );
 }
