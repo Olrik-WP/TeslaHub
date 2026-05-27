@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useUnits } from '../hooks/useUnits';
@@ -43,6 +44,36 @@ export default function HomeMetaStrip({
   const navigate = useNavigate();
   const { t } = useTranslation();
   const u = useUnits();
+  // VIN copy-to-clipboard feedback. Resets after 1.6s so the button
+  // doesn't permanently say "Copied".
+  const [vinCopied, setVinCopied] = useState(false);
+
+  const copyVin = async () => {
+    if (!vehicle.vin) return;
+    try {
+      // navigator.clipboard requires HTTPS + permission grant. Fall
+      // back to the legacy textarea-select trick on environments
+      // where it's not available (some in-car browsers).
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(vehicle.vin);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = vehicle.vin;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setVinCopied(true);
+      setTimeout(() => setVinCopied(false), 1600);
+    } catch {
+      // Silent — user can long-press the VIN to system-copy as a
+      // last resort. select-all + cursor-text on the text element
+      // makes that possible.
+    }
+  };
 
   const maxSpeedKmh = driveStats?.maxSpeedKmh;
   const speedUserUnit =
@@ -62,9 +93,56 @@ export default function HomeMetaStrip({
         <div className="text-sm font-bold truncate">
           {vehicle.marketingName || vehicle.model || vehicle.name}
         </div>
+        {/* Exterior colour + VIN. VIN is rendered on its own line so it
+            doesn't get truncated on narrow phones, with cursor-text +
+            select-all so the user can long-press to copy on touch
+            devices that block our clipboard API. The little button
+            on the right offers the explicit copy path with feedback. */}
         <div className="text-[10px] text-[#9ca3af] truncate">
-          {[vehicle.exteriorColor, vehicle.vin].filter(Boolean).join(' · ')}
+          {vehicle.exteriorColor || ''}
         </div>
+        {vehicle.vin && (
+          <button
+            type="button"
+            onClick={copyVin}
+            title={vinCopied ? t('home.vinCopied', 'VIN copié') : t('home.vinCopy', 'Copier le VIN')}
+            className="mt-0.5 inline-flex items-center gap-1 max-w-full text-[10px] text-[#9ca3af] hover:text-white active:text-[#22c55e] transition-colors group"
+          >
+            <span className="font-mono tabular-nums tracking-tight select-all break-all text-left">
+              {vehicle.vin}
+            </span>
+            {vinCopied ? (
+              <svg
+                className="shrink-0 text-[#22c55e]"
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg
+                className="shrink-0 opacity-60 group-hover:opacity-100"
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="9" y="9" width="11" height="11" rx="2" />
+                <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+              </svg>
+            )}
+          </button>
+        )}
       </div>
 
       <div className="text-center border-x border-[#2a2a2a]">

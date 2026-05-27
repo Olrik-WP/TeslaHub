@@ -534,6 +534,15 @@ export interface VehicleModelConfig {
     'frunk' | 'trunk' | 'chargePort' | 'window' | 'lock' | 'sentry' | 'climate',
     readonly [number, number, number]
   >>;
+  /** Per-callout visibility flag — `true` means the callout is HIDDEN
+   *  from the viewer. Set per car in the Showroom (Boutons flottants
+   *  section). Defaults to undefined for every shipped model (all
+   *  callouts visible by default). The Showroom itself still renders
+   *  hidden callouts in a barré state so the user can re-enable them. */
+  calloutsHidden?: Partial<Record<
+    'frunk' | 'trunk' | 'chargePort' | 'window' | 'lock' | 'sentry' | 'climate',
+    true
+  >>;
 
   // ───────────────────────────────────────────────────────────────────
   // Opening animations — per-model (Tesla ships different keyframes per

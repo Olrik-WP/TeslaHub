@@ -35,6 +35,7 @@
  */
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -83,21 +84,74 @@ export interface CalloutsActions {
 interface VehicleCalloutsProps {
   vehicle: VehicleStatus | undefined;
   actions: CalloutsActions | null;
+  /** Showroom preview mode — when true:
+   *   - if `actions` is null we substitute no-op handlers so every
+   *     callout still renders (positions are visible in the Showroom
+   *     even when the Fleet API is intentionally disabled there).
+   *   - callouts hidden via `showroomOverrides.calloutsHidden` still
+   *     render with a "barré" visual so the user can toggle them
+   *     back on / drag them around.
+   *
+   *  Out of preview (Home, Charging cards…) the click pipeline is
+   *  identical to before; hidden callouts skip rendering entirely so
+   *  they don't appear on the live page. */
+  showroomPreview?: boolean;
 }
+
+// No-op action stub used in Showroom preview mode. Keeps the click
+// pipeline alive (so React doesn't unmount the leader line / anchor
+// dot on hover) but ignores every actual command.
+const NOOP_ACTION: CalloutAction = {
+  onClick: () => {},
+  loading: false,
+};
+const NOOP_ACTIONS: CalloutsActions = {
+  openFrunk: NOOP_ACTION,
+  openTrunk: NOOP_ACTION,
+  closeTrunk: NOOP_ACTION,
+  openChargePort: NOOP_ACTION,
+  closeChargePort: NOOP_ACTION,
+  unlockCable: NOOP_ACTION,
+  ventWindows: NOOP_ACTION,
+  closeWindows: NOOP_ACTION,
+  lockVehicle: NOOP_ACTION,
+  unlockVehicle: NOOP_ACTION,
+  sentryToggle: NOOP_ACTION,
+  climateToggle: NOOP_ACTION,
+};
 
 /**
  * Reads the live state and renders the appropriate set of callouts. If
- * `actions` is null (Fleet API not configured / virtual key not paired)
- * we render NOTHING — the 3D animation alone communicates the state.
+ * `actions` is null and we're not in Showroom preview, we render
+ * NOTHING — the 3D animation alone communicates the state. In Showroom
+ * preview every callout renders (with no-op handlers) so the user can
+ * see and calibrate them.
  */
-export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
+export function VehicleCallouts({ vehicle, actions, showroomPreview }: VehicleCalloutsProps) {
   const cfg = useActiveModel();
   const ANCHORS = cfg.actionAnchors;
+  const { t } = useTranslation();
   // Every <Callout> needs a stable "model identity" to know when to drop
   // its cached anchor Object3D. We use the config reference itself — it
   // changes ONLY on VIN-driven model swap, so refs survive cosmetic
   // re-renders but reset cleanly when the GLB swaps.
-  if (!vehicle || !actions) return null;
+  if (!vehicle) return null;
+  // Showroom preview: subst no-op handlers so callouts always render.
+  const effectiveActions: CalloutsActions | null =
+    actions ?? (showroomPreview ? NOOP_ACTIONS : null);
+  if (!effectiveActions) return null;
+
+  // Per-callout visibility filter — `calloutsHidden[key] === true` hides
+  // the callout from the live viewer (Home, Charging…), but the Showroom
+  // preview still renders them (with a `hidden` styling) so the user can
+  // toggle visibility back on without losing them off-screen.
+  const isHidden = (key: CalloutKey): boolean =>
+    !!cfg.calloutsHidden?.[key];
+  /** Whether this callout should render at all. Out of preview, hidden
+   *  callouts are skipped entirely; in preview every callout renders
+   *  (hidden ones get a `hidden` visual treatment via `Callout.hidden`). */
+  const shouldRender = (key: CalloutKey): boolean =>
+    showroomPreview || !isHidden(key);
 
   const frunkOpen = !!vehicle.frunkOpen;
   const trunkOpen = !!vehicle.trunkOpen;
@@ -112,28 +166,32 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           sensor on the bonnet). We surface the open button only when the
           frunk is already closed; once it's open the callout disappears
           and the user pops it shut by hand. */}
-      {!frunkOpen && (
+      {!frunkOpen && shouldRender('frunk') && (
         <Callout
           calloutKey="frunk"
           anchorName={ANCHORS.frunk}
-          label="Ouvrir frunk"
+          label={t('home.callouts.frunkOpen')}
           icon={<PlusIcon />}
           variant="closed"
-          action={actions.openFrunk}
+          action={effectiveActions.openFrunk}
+          hidden={isHidden('frunk')}
         />
       )}
 
       {/* --- TRUNK -------------------------------------------------------
           Motorised actuator both ways. Single endpoint `actuate_trunk`
           toggles it. */}
-      <Callout
-        calloutKey="trunk"
-        anchorName={ANCHORS.trunk}
-        label={trunkOpen ? 'Fermer coffre' : 'Ouvrir coffre'}
-        icon={trunkOpen ? <XIcon /> : <PlusIcon />}
-        variant={trunkOpen ? 'open' : 'closed'}
-        action={trunkOpen ? actions.closeTrunk : actions.openTrunk}
-      />
+      {shouldRender('trunk') && (
+        <Callout
+          calloutKey="trunk"
+          anchorName={ANCHORS.trunk}
+          label={trunkOpen ? t('home.callouts.trunkClose') : t('home.callouts.trunkOpen')}
+          icon={trunkOpen ? <XIcon /> : <PlusIcon />}
+          variant={trunkOpen ? 'open' : 'closed'}
+          action={trunkOpen ? effectiveActions.closeTrunk : effectiveActions.openTrunk}
+          hidden={isHidden('trunk')}
+        />
+      )}
 
       {/* --- CHARGE PORT + CABLE -----------------------------------------
           The single `charge_port_door_open` endpoint is overloaded:
@@ -142,50 +200,56 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
             - on:true  + plugged     → releases cable latch
           We split into two mutually-exclusive callouts based on
           pluggedIn so each click has unambiguous semantics. */}
-      {pluggedIn ? (
+      {shouldRender('chargePort') && (pluggedIn ? (
         <Callout
           calloutKey="chargePort"
           anchorName={ANCHORS.chargePort}
-          label="Déverrouiller câble"
+          label={t('home.callouts.cableUnlock')}
           icon={<UnlockIcon />}
           variant="plug"
-          action={actions.unlockCable}
+          action={effectiveActions.unlockCable}
+          hidden={isHidden('chargePort')}
         />
       ) : (
         <Callout
           calloutKey="chargePort"
           anchorName={ANCHORS.chargePort}
-          label={portOpen ? 'Fermer trappe' : 'Ouvrir trappe'}
+          label={portOpen ? t('home.callouts.chargePortClose') : t('home.callouts.chargePortOpen')}
           icon={portOpen ? <XIcon /> : <PlusIcon />}
           variant={portOpen ? 'open' : 'closed'}
-          action={portOpen ? actions.closeChargePort : actions.openChargePort}
+          action={portOpen ? effectiveActions.closeChargePort : effectiveActions.openChargePort}
+          hidden={isHidden('chargePort')}
         />
-      )}
+      ))}
 
       {/* --- WINDOWS -----------------------------------------------------
           TeslaMate exposes only an aggregate boolean. The `vent` Tesla
           command cracks all four 1cm and `close` closes them all. */}
-      <Callout
-        calloutKey="window"
-        anchorName={ANCHORS.window}
-        label={windowsOpen ? 'Fermer vitres' : 'Aérer vitres'}
-        icon={windowsOpen ? <XIcon /> : <VentIcon />}
-        variant={windowsOpen ? 'open' : 'closed'}
-        action={windowsOpen ? actions.closeWindows : actions.ventWindows}
-      />
+      {shouldRender('window') && (
+        <Callout
+          calloutKey="window"
+          anchorName={ANCHORS.window}
+          label={windowsOpen ? t('home.callouts.windowClose') : t('home.callouts.windowVent')}
+          icon={windowsOpen ? <XIcon /> : <VentIcon />}
+          variant={windowsOpen ? 'open' : 'closed'}
+          action={windowsOpen ? effectiveActions.closeWindows : effectiveActions.ventWindows}
+          hidden={isHidden('window')}
+        />
+      )}
 
       {/* --- LOCK / UNLOCK -----------------------------------------------
           Driver-door anchor. Green pill when locked (safe state, tap
           to unlock), red pill when unlocked (urgent, tap to re-lock).
           Tesla's mobile app mirrors this exact colour logic. */}
-      {vehicle.isLocked != null && (
+      {vehicle.isLocked != null && shouldRender('lock') && (
         <Callout
           calloutKey="lock"
           anchorName={ANCHORS.lock}
-          label={vehicle.isLocked ? 'Déverrouiller' : 'Verrouiller'}
+          label={vehicle.isLocked ? t('home.callouts.unlock') : t('home.callouts.lock')}
           icon={<LockIcon open={!vehicle.isLocked} />}
           variant={vehicle.isLocked ? 'secure' : 'danger'}
-          action={vehicle.isLocked ? actions.unlockVehicle : actions.lockVehicle}
+          action={vehicle.isLocked ? effectiveActions.unlockVehicle : effectiveActions.lockVehicle}
+          hidden={isHidden('lock')}
         />
       )}
 
@@ -194,14 +258,15 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           white when off. Live state already pulses red sentry-camera
           dots via VehicleLightEffects, so the callout primarily serves
           as the control surface (not the indicator). */}
-      {vehicle.sentryMode != null && (
+      {vehicle.sentryMode != null && shouldRender('sentry') && (
         <Callout
           calloutKey="sentry"
           anchorName={ANCHORS.sentry}
-          label={vehicle.sentryMode ? 'Sentinelle ON' : 'Sentinelle'}
+          label={vehicle.sentryMode ? t('home.callouts.sentryOn') : t('home.callouts.sentryOff')}
           icon={<EyeIcon />}
           variant={vehicle.sentryMode ? 'info' : 'closed'}
-          action={actions.sentryToggle}
+          action={effectiveActions.sentryToggle}
+          hidden={isHidden('sentry')}
         />
       )}
 
@@ -209,14 +274,15 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
           Passenger-side anchor so it doesn't pile up on the driver
           door. Green pill when active. Toggles `climate/start` /
           `climate/stop` via the parent — same endpoint as ClimateCard. */}
-      {vehicle.isClimateOn != null && (
+      {vehicle.isClimateOn != null && shouldRender('climate') && (
         <Callout
           calloutKey="climate"
           anchorName={ANCHORS.climate}
-          label={vehicle.isClimateOn ? 'Clim ON' : 'Démarrer clim'}
+          label={vehicle.isClimateOn ? t('home.callouts.climateOn') : t('home.callouts.climateOff')}
           icon={<SnowflakeIcon />}
           variant={vehicle.isClimateOn ? 'secure' : 'closed'}
-          action={actions.climateToggle}
+          action={effectiveActions.climateToggle}
+          hidden={isHidden('climate')}
         />
       )}
     </>
@@ -412,9 +478,13 @@ interface CalloutProps {
   icon: ReactNode;
   variant: CalloutVariant;
   action: CalloutAction;
+  /** Showroom-only flag: the callout is rendered (so the user can
+   *  position it / toggle visibility back on) but in a dimmed
+   *  "barré" treatment to make the hidden state obvious. */
+  hidden?: boolean;
 }
 
-function Callout({ calloutKey, anchorName, label, icon, variant, action }: CalloutProps) {
+function Callout({ calloutKey, anchorName, label, icon, variant, action, hidden }: CalloutProps) {
   const { scene } = useThree();
   const cfg = useActiveModel();
 
@@ -603,7 +673,11 @@ function Callout({ calloutKey, anchorName, label, icon, variant, action }: Callo
               'flex items-center gap-1 h-5 px-1.5 rounded-full text-[8px] font-medium leading-none ' +
               'shadow-[0_2px_6px_rgba(0,0,0,0.45)] border backdrop-blur-md ' +
               'transition-all hover:scale-110 active:scale-95 disabled:opacity-60 ' +
-              variantClass
+              variantClass +
+              // Showroom-only "hidden" treatment: dim + strike-through so
+              // the user sees at a glance which callouts are off, while
+              // still being able to drag them with the XYZ sliders.
+              (hidden ? ' opacity-40 line-through' : '')
             }
           >
             <span className="w-2 h-2 flex items-center justify-center">{icon}</span>

@@ -313,17 +313,20 @@ export default function Home({ carId }: Props) {
         <SecurityAlertsTeaser />
       </div>
 
-      {/* Hero — premium 3D viewer when the GLB asset + WebGL are both
-          available, else the legacy PNG card. The legacy card is kept
-          strictly intact so users without 3D see the exact same home
-          page as before this refactor (no data lost, no layout shift).
-          When 3D IS available we replace the PNG-with-overlays hero
-          with a clean 3D viewer + minimal battery bar, and surface
-          the overlay contents (name/VIN/max-speed/last charge/drive
-          stats) as cards just below the hero. */}
+      {/* Hero stack — premium 3D viewer when the GLB asset + WebGL are
+          both available, else the legacy PNG card. The legacy card is
+          kept strictly intact so users without 3D see the exact same
+          home page as before this refactor (no data lost, no layout
+          shift). When 3D IS available the layout is:
+            1. Meta strip (name + VIN copyable + max speed + last charge)
+            2. Drive stats (median dist, monthly est, annual est, …)
+            3. 3D hero (with floating callouts + viewport action bar)
+            4. Quick actions strip (rendered below by HomeQuickActions)
+          The user explicitly asked for the meta + stats ABOVE the 3D
+          so the headline numbers stay above the fold on mobile, with
+          the 3D as the visual focal point right below. */}
       {view3DAvailable && (
         <>
-          <Home3DHero vehicle={vehicle} />
           <HomeMetaStrip
             vehicle={vehicle}
             driveStats={driveStats}
@@ -344,6 +347,7 @@ export default function Home({ carId }: Props) {
             monthlyCost={monthlyCost}
             currencySymbol={u.currencySymbol}
           />
+          <Home3DHero vehicle={vehicle} />
         </>
       )}
 
@@ -723,7 +727,10 @@ export default function Home({ carId }: Props) {
             onClick={() => navigate('/map')}
           >
             <div className="px-3 pt-2 pb-1 flex items-center justify-between">
-              <span className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.position')}</span>
+              <span className="flex items-center gap-2 text-xs uppercase tracking-wider text-[#9ca3af] font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#e31937]" />
+                {t('home.position')}
+              </span>
               {liveActive && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#22c55e] uppercase tracking-wider">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
@@ -974,7 +981,10 @@ export default function Home({ carId }: Props) {
               className="flex-1 bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 sm:p-4 flex flex-col cursor-pointer active:bg-[#1a1a1a] transition-colors overflow-hidden"
               onClick={() => tripDisplay && navigate(`/map?driveId=${tripDisplay.id}`)}
             >
-              <div className="text-xs text-[#9ca3af] uppercase tracking-wider mb-2">{t('home.latestTrip')}</div>
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-[#9ca3af] font-semibold mb-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#e31937]" />
+                {t('home.latestTrip')}
+              </div>
               {tripDisplay ? (
                 <div className="flex-1 flex flex-col justify-center min-w-0">
                   <div className="text-sm font-medium truncate">

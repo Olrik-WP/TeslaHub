@@ -662,6 +662,7 @@ const CALLOUT_DEFS: Array<{ key: CalloutKey; label: string; hint: string }> = [
 
 function CalloutsSection({ overrides, onChange, defaults }: Props) {
   const offsets = overrides.calloutOffsets ?? {};
+  const hidden = overrides.calloutsHidden ?? {};
 
   const eq = (a: readonly [number, number, number]) =>
     Math.abs(a[0]) < 1e-6 && Math.abs(a[1]) < 1e-6 && Math.abs(a[2]) < 1e-6;
@@ -686,13 +687,28 @@ function CalloutsSection({ overrides, onChange, defaults }: Props) {
     });
   };
 
+  // Per-callout visibility — `true` in overrides.calloutsHidden means
+  // the callout is HIDDEN on Home / Charging cards. The Showroom still
+  // renders it (barré) so the user can drag it / re-enable it.
+  const toggleVisible = (key: CalloutKey) => {
+    const next = { ...hidden };
+    if (next[key]) delete next[key];
+    else next[key] = true;
+    onChange({
+      ...overrides,
+      calloutsHidden: Object.keys(next).length > 0 ? next : undefined,
+    });
+  };
+
   const resetAll = () => {
-    const { calloutOffsets: _, ...rest } = overrides;
-    void _;
+    const { calloutOffsets: _o, calloutsHidden: _h, ...rest } = overrides;
+    void _o;
+    void _h;
     onChange(rest);
   };
 
-  const overridden = Object.keys(offsets).length > 0;
+  const overridden =
+    Object.keys(offsets).length > 0 || Object.keys(hidden).length > 0;
   const defaultOffsets = defaults.calloutOffsets ?? {};
 
   return (
@@ -715,8 +731,9 @@ function CalloutsSection({ overrides, onChange, defaults }: Props) {
     >
       <p className="text-[10px] text-[#6b7280] -mt-1">
         Décale chaque bouton flottant (frunk, lock, sentinelle, clim…)
-        par rapport à son ancrage. +X = vers l'avant · +Y = vers le haut ·
-        +Z = vers la droite. Garde l'écart à 0 pour la position par défaut.
+        par rapport à son ancrage. +X = avant · +Y = haut · +Z = droite.
+        Bascule l'œil pour masquer/afficher un bouton sur l'app sans
+        perdre sa position calibrée.
       </p>
       {CALLOUT_DEFS.map(({ key, label, hint }) => {
         const value: [number, number, number] = [
@@ -725,28 +742,54 @@ function CalloutsSection({ overrides, onChange, defaults }: Props) {
           offsets[key]?.[2] ?? defaultOffsets[key]?.[2] ?? 0,
         ];
         const isOverridden = !!offsets[key] && !eq(value);
+        const isHidden = !!hidden[key];
         return (
           <div
             key={key}
-            className="border border-[#1a1a1a] rounded-md p-2 space-y-1"
+            className={
+              'border border-[#1a1a1a] rounded-md p-2 space-y-1 ' +
+              (isHidden ? 'bg-[#0e0e0e] opacity-60' : '')
+            }
           >
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-[10px] uppercase tracking-wider text-[#d4d4d4] font-medium truncate">
                   {label}
+                  {isHidden && (
+                    <span className="ml-1.5 text-[9px] text-[#6b7280] normal-case tracking-normal">
+                      (masqué)
+                    </span>
+                  )}
                 </p>
                 <p className="text-[9px] text-[#6b7280] truncate">{hint}</p>
               </div>
-              {isOverridden && (
+              <div className="flex items-center gap-1 shrink-0">
+                {/* Visibility toggle — eye-on / eye-off. */}
                 <button
                   type="button"
-                  onClick={() => resetOffset(key)}
-                  title="Réinitialiser ce bouton"
-                  className="text-[10px] text-[#6b7280] hover:text-white shrink-0"
+                  onClick={() => toggleVisible(key)}
+                  title={isHidden ? "Afficher ce bouton sur l'app" : "Masquer ce bouton sur l'app"}
+                  className={
+                    'w-6 h-6 flex items-center justify-center rounded ' +
+                    'border text-[10px] transition-colors ' +
+                    (isHidden
+                      ? 'border-[#2a2a2a] bg-[#1a1a1a] text-[#6b7280] hover:text-white'
+                      : 'border-[#22c55e]/40 bg-[#0a1f0a] text-[#86efac] hover:bg-[#102b10]')
+                  }
                 >
-                  ↺
+                  {isHidden ? <EyeOffGlyph /> : <EyeOnGlyph />}
                 </button>
-              )}
+                {isOverridden && (
+                  <button
+                    type="button"
+                    onClick={() => resetOffset(key)}
+                    title="Réinitialiser la position de ce bouton"
+                    className="text-[10px] text-[#6b7280] hover:text-white px-1"
+                  >
+                    ↺
+                  </button>
+                )}
+              </div>
             </div>
             <ShowroomVec3Slider
               label=""
@@ -762,6 +805,27 @@ function CalloutsSection({ overrides, onChange, defaults }: Props) {
         );
       })}
     </SubSection>
+  );
+}
+
+// Inline eye glyphs for the visibility toggle. Same line weight as the
+// other tiny icons in the Showroom panel (kept dependency-free).
+function EyeOnGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+function EyeOffGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3l18 18" />
+      <path d="M10.6 6.1A10.1 10.1 0 0 1 12 6c6.5 0 10 6 10 6s-1.5 2.5-4 4.4" />
+      <path d="M6.6 7.4C3.7 9.4 2 12 2 12s3.5 7 10 7c1.7 0 3.2-.4 4.5-1.1" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </svg>
   );
 }
 

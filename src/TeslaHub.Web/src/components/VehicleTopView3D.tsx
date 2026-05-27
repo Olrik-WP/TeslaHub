@@ -2691,7 +2691,11 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
               {/* Callouts mounted inside Canvas so they can read the scene
                   graph (anchor positions) via useThree.scene. They render
                   nothing when actions=null (Fleet API not ready). */}
-              <VehicleCallouts vehicle={vehicle} actions={filteredActions} />
+              <VehicleCallouts
+                vehicle={vehicle}
+                actions={filteredActions}
+                showroomPreview={showroomMode}
+              />
               {/* Live charge info — anchored on the chargePort, only
                   while a session is active. Independent from the Fleet
                   API gating: even a user without virtual key paired
@@ -2747,10 +2751,18 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
           />
         </Canvas>
 
-        {/* Top-right overlay: status badges + auto-rotate toggle. */}
+        {/* Top-right overlay: floating action bar + auto-rotate toggle.
+            The action bar mirrors the 3D callouts (Lock, Sentry,
+            Climate, Frunk, Vent) but stays anchored to the viewport
+            so it remains reachable regardless of zoom level / car
+            size on screen — fixes the old static "SENTINELLE" badge
+            that looked clickable but wasn't.
+            Hidden in Showroom mode (Showroom has its own control
+            surfaces in the right panel). */}
         <div className="absolute top-2 right-2 flex items-center gap-1.5">
-          {vehicle.sentryMode && <SentryBadge />}
-          {vehicle.isLocked != null && <LockBadge locked={vehicle.isLocked} />}
+          {!showroomMode && filteredActions && (
+            <TopRightActionBar vehicle={vehicle} actions={filteredActions} />
+          )}
           <button
             type="button"
             onClick={() => setAutoRotate((v) => !v)}
@@ -2771,45 +2783,159 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
   );
 }
 
-// Small DOM badges that mirror the live vehicle state. Kept out of the
-// Canvas so they render at full resolution (no distanceFactor scaling)
-// and aren't subject to the 3D depth buffer.
+// ─────────────────────────────────────────────────────────────────────
+// Top-right action bar — clickable, viewport-anchored shortcuts that
+// duplicate the most-used 3D callouts (Lock, Sentry, Climate, Frunk,
+// Vent). Always visible, regardless of zoom level — solves the case
+// where the in-3D callouts shrink too small to tap when the car is
+// rendered small on screen. Uses the SAME mutations as VehicleCallouts
+// (filteredActions) so optimistic patches and toast feedback work
+// identically.
+// ─────────────────────────────────────────────────────────────────────
 
-function SentryBadge() {
+function TopRightActionBar({
+  vehicle,
+  actions,
+}: {
+  vehicle: VehicleStatus;
+  actions: CalloutsActions;
+}) {
   return (
-    <div
-      title="Mode Sentinelle actif"
-      className={
-        'h-8 px-2.5 flex items-center gap-1.5 rounded-full backdrop-blur-md ' +
-        'bg-red-500/80 border border-red-300/40 text-white text-[10px] font-semibold ' +
-        'animate-pulse'
-      }
-    >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-        <circle cx="12" cy="12" r="3" />
-      </svg>
-      <span>SENTINELLE</span>
+    <div className="flex items-center gap-1 sm:gap-1.5">
+      {/* Lock — green when locked (good), red when unlocked (urgent). */}
+      {vehicle.isLocked != null && (
+        <TopRightActionButton
+          title={vehicle.isLocked ? 'Verrouillée — toucher pour déverrouiller' : 'Déverrouillée — toucher pour verrouiller'}
+          state={vehicle.isLocked ? 'secure' : 'danger'}
+          onClick={
+            vehicle.isLocked
+              ? actions.unlockVehicle.onClick
+              : actions.lockVehicle.onClick
+          }
+          loading={actions.lockVehicle.loading || actions.unlockVehicle.loading}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="5" y="11" width="14" height="10" rx="2" />
+            {vehicle.isLocked
+              ? <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+              : <path d="M8 11V7a4 4 0 0 1 7-1" />}
+          </svg>
+        </TopRightActionButton>
+      )}
+      {/* Sentry — blue pulsing when ON, neutral when OFF. */}
+      {vehicle.sentryMode != null && (
+        <TopRightActionButton
+          title={vehicle.sentryMode ? 'Sentinelle active — toucher pour désactiver' : 'Sentinelle inactive — toucher pour activer'}
+          state={vehicle.sentryMode ? 'info' : 'neutral'}
+          onClick={actions.sentryToggle.onClick}
+          loading={actions.sentryToggle.loading}
+          pulse={vehicle.sentryMode === true}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </TopRightActionButton>
+      )}
+      {/* Climate — green when active, neutral otherwise. */}
+      {vehicle.isClimateOn != null && (
+        <TopRightActionButton
+          title={vehicle.isClimateOn ? 'Climatisation active — toucher pour arrêter' : 'Toucher pour démarrer la clim'}
+          state={vehicle.isClimateOn ? 'secure' : 'neutral'}
+          onClick={actions.climateToggle.onClick}
+          loading={actions.climateToggle.loading}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3v18M5 7l14 10M5 17 19 7" />
+            <path d="M12 3l-2 2M12 3l2 2M12 21l-2-2M12 21l2-2" />
+          </svg>
+        </TopRightActionButton>
+      )}
+      {/* Frunk — orange when open (Tesla can't close it). Only show
+          the open-button when the frunk is currently closed, matching
+          the 3D callout logic. */}
+      {!vehicle.frunkOpen && (
+        <TopRightActionButton
+          title="Ouvrir le coffre avant"
+          state="neutral"
+          onClick={actions.openFrunk.onClick}
+          loading={actions.openFrunk.loading}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 13l2-6h14l2 6" />
+            <rect x="2" y="13" width="20" height="6" rx="2" />
+            <path d="M9 7l-1-2" />
+          </svg>
+        </TopRightActionButton>
+      )}
+      {/* Vent — orange when open (toggle to close), neutral when shut. */}
+      <TopRightActionButton
+        title={vehicle.windowsOpen ? 'Vitres ouvertes — toucher pour fermer' : 'Toucher pour entrouvrir les vitres'}
+        state={vehicle.windowsOpen ? 'warning' : 'neutral'}
+        onClick={
+          vehicle.windowsOpen
+            ? actions.closeWindows.onClick
+            : actions.ventWindows.onClick
+        }
+        loading={actions.ventWindows.loading || actions.closeWindows.loading}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="4" y="4" width="16" height="16" rx="2" />
+          {!vehicle.windowsOpen && <path d="M4 12h16" />}
+        </svg>
+      </TopRightActionButton>
     </div>
   );
 }
 
-function LockBadge({ locked }: { locked: boolean }) {
+type TopRightActionState = 'neutral' | 'secure' | 'danger' | 'info' | 'warning';
+
+function TopRightActionButton({
+  title,
+  state,
+  onClick,
+  loading,
+  pulse,
+  children,
+}: {
+  title: string;
+  state: TopRightActionState;
+  onClick: () => void;
+  loading: boolean;
+  pulse?: boolean;
+  children: React.ReactNode;
+}) {
+  // Same colour vocabulary as `ControlButton.tsx` so the language is
+  // consistent across the app — green = "secure / on", red = "danger",
+  // blue = "info", amber = "warning / open", neutral grey otherwise.
+  const stateClass =
+    state === 'secure'
+      ? 'bg-emerald-500/75 border-emerald-300/40 text-white hover:bg-emerald-500/90'
+      : state === 'danger'
+        ? 'bg-red-500/80 border-red-300/40 text-white hover:bg-red-500/95'
+        : state === 'info'
+          ? 'bg-blue-500/80 border-blue-300/40 text-white hover:bg-blue-500/95'
+          : state === 'warning'
+            ? 'bg-amber-500/85 border-amber-300/40 text-black hover:bg-amber-500/95'
+            : 'bg-black/55 border-white/15 text-white/80 hover:text-white hover:bg-black/75';
+
   return (
-    <div
-      title={locked ? 'Voiture verrouillée' : 'Voiture déverrouillée'}
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      title={title}
+      aria-label={title}
       className={
-        'w-8 h-8 flex items-center justify-center rounded-full backdrop-blur-md border ' +
-        (locked
-          ? 'bg-emerald-500/70 border-emerald-300/40 text-white'
-          : 'bg-amber-500/70 border-amber-300/40 text-black')
+        'w-8 h-8 flex items-center justify-center rounded-full ' +
+        'border backdrop-blur-md transition-all ' +
+        'active:scale-95 disabled:opacity-50 ' +
+        (pulse ? 'animate-pulse ' : '') +
+        stateClass
       }
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="5" y="11" width="14" height="10" rx="2" />
-        {locked ? <path d="M8 11V7a4 4 0 0 1 8 0v4" /> : <path d="M8 11V7a4 4 0 0 1 7-1" />}
-      </svg>
-    </div>
+      {children}
+    </button>
   );
 }
 

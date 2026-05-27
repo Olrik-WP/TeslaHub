@@ -164,6 +164,15 @@ export interface ShowroomOverrides {
     'frunk' | 'trunk' | 'chargePort' | 'window' | 'lock' | 'sentry' | 'climate',
     readonly [number, number, number]
   >>;
+  /** Per-callout visibility flag — when `true`, the corresponding
+   *  floating button is hidden from the 3D viewer (Home, Charging
+   *  cards, etc.). The Showroom keeps every hidden callout visible
+   *  with a "barré" indicator so the user can still position it and
+   *  toggle visibility back on. Missing keys default to "shown". */
+  calloutsHidden?: Partial<Record<
+    'frunk' | 'trunk' | 'chargePort' | 'window' | 'lock' | 'sentry' | 'climate',
+    true
+  >>;
   /** Per-slot interior colour overrides. Keys match the `key` field
    *  on each `interiorOverrides` entry in the model's config
    *  (`Interior2`, `Decor`, `cupholder`, `Wing`). Values are RGB hex.
@@ -331,6 +340,13 @@ export function mergeShowroomConfig(
     calloutOffsets: overrides.calloutOffsets
       ? { ...(defaults.calloutOffsets ?? {}), ...overrides.calloutOffsets }
       : defaults.calloutOffsets,
+    // Per-callout visibility — same shallow-merge pattern. Stored on
+    // the resolved config so the viewer can filter callouts without
+    // re-resolving the override blob at every render. Defaults absent
+    // for every shipped model (all 7 callouts visible by default).
+    calloutsHidden: overrides.calloutsHidden
+      ? { ...(defaults.calloutsHidden ?? {}), ...overrides.calloutsHidden }
+      : defaults.calloutsHidden,
 
     // Interior colours — per-slot override keyed on the entry's `key`.
     // Each entry keeps its matchName/roughness/metalness from the
