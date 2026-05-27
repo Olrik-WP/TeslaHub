@@ -283,7 +283,9 @@
       "fl": "FL",
       "fr": "FR",
       "rl": "RL",
-      "rr": "RR"
+      "rr": "RR",
+      "hide3d": "Hide 3D TPMS",
+      "show3d": "Show 3D TPMS"
     },
     "vinCopy": "Copy VIN",
     "vinCopied": "VIN copied",

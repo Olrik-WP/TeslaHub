@@ -76,9 +76,9 @@ export interface ChargingCableProps {
   tubularSegments?: number;
   /** Speed of the electrical flow when charging. The three traveling
    *  pulses complete one full pass of the cable every `1/flowSpeed`
-   *  seconds — so `1.0` makes a pulse arrive at the car port every
-   *  ~0.33 s, which reads as "active fast-charging" without feeling
-   *  frantic. */
+   *  seconds — `0.45` (default) makes one pulse arrive at the car port
+   *  every ~0.75 s, which reads as "energy flowing in" without feeling
+   *  frantic. Bump higher for fast-charging vibes. */
   flowSpeed?: number;
   /** Slack multiplier for the FIRST segment (start → via). 1.0 = default
    *  drape, &lt;1 = taut/short cable, &gt;1 = more slack. Only used when
@@ -151,8 +151,10 @@ const CABLE_FRAGMENT_SHADER = /* glsl */ `
 
     // Hot saturated bands traveling along the length.
     vec3 hot = uBaseColor * pulse * uIntensity * 3.4;
-    // White-hot core for the "electric arc" feel.
-    vec3 core = vec3(1.0, 1.0, 0.92) * pulse * uIntensity * 0.6;
+    // VERY subtle warm core — barely tints the brightest band so the
+    // pulse reads as "more energetic green" rather than "white flash".
+    // Tint with the base colour itself plus a touch of warm white.
+    vec3 core = mix(uBaseColor, vec3(1.0, 1.0, 0.85), 0.2) * pulse * uIntensity * 0.18;
 
     gl_FragColor = vec4(base + hot + core, 1.0);
   }
@@ -292,7 +294,7 @@ export function ChargingCable({
   radius = 0.012,
   radialSegments = 12,
   tubularSegments = 48,
-  flowSpeed = 1.0,
+  flowSpeed = 0.45,
   slackStart = 1,
   slackEnd = 1,
 }: ChargingCableProps) {

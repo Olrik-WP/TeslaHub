@@ -283,7 +283,9 @@
       "fl": "VL",
       "fr": "VR",
       "rl": "HL",
-      "rr": "HR"
+      "rr": "HR",
+      "hide3d": "3D TPMS ausblenden",
+      "show3d": "3D TPMS anzeigen"
     },
     "vinCopy": "VIN kopieren",
     "vinCopied": "VIN kopiert",

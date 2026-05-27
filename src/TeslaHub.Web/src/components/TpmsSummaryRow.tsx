@@ -1,10 +1,21 @@
 import { useTranslation } from 'react-i18next';
 import { useUnits } from '../hooks/useUnits';
 import type { VehicleStatus } from '../api/queries';
+import {
+  useResolvedModelConfig,
+  useSaveShowroom,
+} from './useResolvedModelConfig';
+import type { ShowroomOverrides } from './showroomOverrides';
 
 interface Props {
   vehicle: VehicleStatus;
 }
+
+// The 4 callout keys controlled by the "hide 3D TPMS" toggle. These mirror
+// the keys defined in `VehicleCallouts.tsx` / `vehicleModelConfig.ts` so
+// flipping the toggle is equivalent to ticking all 4 TPMS visibility
+// checkboxes in the Showroom calibration panel.
+const TPMS_CALLOUT_KEYS = ['tpmsFL', 'tpmsFR', 'tpmsRL', 'tpmsRR'] as const;
 
 /**
  * Compact 1-row TPMS summary rendered above the `HomeBatteryBar`.
@@ -22,10 +33,25 @@ interface Props {
  *
  * Rendered ONLY when at least one pressure or warning signal is fresh —
  * older cars without TPMS publish nothing so the row stays hidden.
+ *
+ * The eye-toggle button next to the title hides/shows the 3D TPMS pills
+ * on top of each wheel. The preference is persisted server-side as part
+ * of the showroom override blob (same place the Showroom UI writes to),
+ * keyed per-car. We deliberately AVOID localStorage so the toggle
+ * follows the user across browsers / devices.
  */
 export default function TpmsSummaryRow({ vehicle }: Props) {
   const { t } = useTranslation();
   const u = useUnits();
+
+  // Pull the resolved showroom config so we know whether the 4 TPMS
+  // callouts are currently hidden in the 3D viewer. We persist via
+  // `useSaveShowroom` on toggle — same backend the Showroom uses.
+  const { config: cfg, savedOverrides } = useResolvedModelConfig(
+    vehicle.carId,
+    vehicle.vin,
+  );
+  const saveShowroom = useSaveShowroom(vehicle.carId);
 
   const hasAnyPressure =
     vehicle.tpmsPressureFl != null ||
@@ -68,6 +94,36 @@ export default function TpmsSummaryRow({ vehicle }: Props) {
 
   const anyWarning = slots.some((s) => s.warning === true);
 
+  // "3D pills hidden" is true when ALL 4 TPMS keys are flagged hidden.
+  // We treat partial states (3 hidden / 1 visible) as "visible" so the
+  // single button always converges to a clear binary on next click.
+  const tpms3dHidden = TPMS_CALLOUT_KEYS.every(
+    (k) => cfg.calloutsHidden?.[k] === true,
+  );
+
+  const toggle3dTpms = () => {
+    if (!vehicle.carId || saveShowroom.isPending) return;
+    const prev: ShowroomOverrides = savedOverrides ?? {};
+    const prevHidden = { ...(prev.calloutsHidden ?? {}) };
+    if (tpms3dHidden) {
+      // Currently all 4 hidden → reveal them: drop the 4 keys.
+      for (const k of TPMS_CALLOUT_KEYS) delete prevHidden[k];
+    } else {
+      // Hide all 4 in one go.
+      for (const k of TPMS_CALLOUT_KEYS) prevHidden[k] = true;
+    }
+    const next: ShowroomOverrides = {
+      ...prev,
+      calloutsHidden:
+        Object.keys(prevHidden).length > 0 ? prevHidden : undefined,
+    };
+    saveShowroom.mutate(next);
+  };
+
+  const toggleLabel = tpms3dHidden
+    ? t('home.tpms.show3d')
+    : t('home.tpms.hide3d');
+
   return (
     <div className="px-3 sm:px-4 pt-2 pb-1">
       <div className="flex items-center justify-between gap-2 text-[10px]">
@@ -79,6 +135,24 @@ export default function TpmsSummaryRow({ vehicle }: Props) {
             }
           />
           {t('home.tpms.title')}
+          <button
+            type="button"
+            onClick={toggle3dTpms}
+            disabled={!vehicle.carId || saveShowroom.isPending}
+            title={toggleLabel}
+            aria-label={toggleLabel}
+            aria-pressed={tpms3dHidden}
+            className={
+              'ml-1 inline-flex items-center justify-center w-4 h-4 rounded ' +
+              'border transition-colors ' +
+              (tpms3dHidden
+                ? 'border-[#374151] bg-[#1f2937] text-[#6b7280] hover:text-[#9ca3af] hover:border-[#4b5563]'
+                : 'border-[#22c55e]/40 bg-[#0a1f0a] text-[#22c55e] hover:bg-[#0f2a0f] hover:border-[#22c55e]/70') +
+              ' disabled:opacity-50 disabled:cursor-not-allowed'
+            }
+          >
+            {tpms3dHidden ? <EyeOffIcon /> : <EyeIcon />}
+          </button>
         </span>
         <div className="flex items-center gap-1 sm:gap-1.5 flex-1 justify-end">
           {slots.map(({ labelKey, pressure, warning }) => {
@@ -109,5 +183,47 @@ export default function TpmsSummaryRow({ vehicle }: Props) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Inline SVG icons — kept tiny (10×10) so the button stays the same
+// visual weight as the title text it sits next to.
+function EyeIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="10"
+      height="10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M1.5 12s4-7.5 10.5-7.5S22.5 12 22.5 12s-4 7.5-10.5 7.5S1.5 12 1.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="10"
+      height="10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 3l18 18" />
+      <path d="M10.5 6.5A10.6 10.6 0 0 1 12 4.5c6.5 0 10.5 7.5 10.5 7.5a17.7 17.7 0 0 1-3.2 4.1" />
+      <path d="M6.6 6.6A17.4 17.4 0 0 0 1.5 12s4 7.5 10.5 7.5a10.4 10.4 0 0 0 4.4-1" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </svg>
   );
 }

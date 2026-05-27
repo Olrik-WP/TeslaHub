@@ -283,7 +283,9 @@
       "fl": "AvG",
       "fr": "AvD",
       "rl": "ArG",
-      "rr": "ArD"
+      "rr": "ArD",
+      "hide3d": "Masquer TPMS 3D",
+      "show3d": "Afficher TPMS 3D"
     },
     "vinCopy": "Copier le VIN",
     "vinCopied": "VIN copié",
