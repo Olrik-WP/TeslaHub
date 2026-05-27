@@ -233,6 +233,10 @@
   },
   "home": {
     "loadingVehicle": "Chargement des données...",
+    "batteryBar": {
+      "noData": "Aucune donnée batterie",
+      "chargeLimit": "Limite de charge"
+    },
     "quickActions": {
       "title": "Actions rapides",
       "more": "Plus",

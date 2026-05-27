@@ -171,20 +171,24 @@ export default function HomeQuickActions({ vehicle }: Props) {
   const showChargePort = presumeSupported(caps, caps.motorizedChargePort);
 
   return (
-    <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3 mt-3">
+    <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-3">
       {/* Post-command countdown / refreshing indicator. Invisible when
           no command is pending. Lets the user know fresh state is
           inbound rather than thinking the page is frozen. */}
       <RefreshIndicator vehicleId={vehicleId} compact className="mb-2" />
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] uppercase tracking-wide text-[#6b7280]">
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="flex items-center gap-2 text-xs uppercase tracking-wider text-[#9ca3af] font-semibold">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#e31937]" />
           {t('home.quickActions.title')}
         </span>
-        <Link to="/control" className="text-[11px] text-[#9ca3af] active:text-[#e0e0e0]">
+        <Link
+          to="/control"
+          className="text-[11px] text-[#9ca3af] hover:text-white active:text-[#e0e0e0] transition-colors"
+        >
           {t('home.quickActions.more')} →
         </Link>
       </div>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
         {/* Lock toggles dynamically: green when secure, red when open. */}
         <ControlButton
           label={isLocked ? t('home.quickActions.locked') : t('home.quickActions.unlocked')}

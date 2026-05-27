@@ -166,6 +166,154 @@ export function VehicleCallouts({ vehicle, actions }: VehicleCalloutsProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Live charge info callout — non-clickable, anchored on the charge port,
+// displayed while a session is active. Mirrors the visual language of the
+// action callouts (leader line + floating pill) but with a wider info
+// panel showing kW / SOC% / time-to-full. Mounted by VehicleTopView3D
+// independently from VehicleCallouts so the Fleet API gating doesn't
+// apply — a user without virtual key can still see "what their car is
+// doing" while it charges.
+// ---------------------------------------------------------------------------
+
+export interface LiveChargeInfo {
+  /** Live charger power in kW (positive while charging). */
+  powerKw: number | null;
+  /** Current battery percentage 0-100. */
+  socPct: number | null;
+  /** Target SOC (used as " → 80%" suffix). */
+  targetSocPct: number | null;
+  /** Minutes left until full. */
+  minutesRemaining: number | null;
+}
+
+interface LiveChargeInfoCalloutProps {
+  info: LiveChargeInfo;
+}
+
+/**
+ * Floating "EN CHARGE — 12.4 kW · 67% → 80% · ~25min" panel anchored on
+ * the charge-port flap. Updates with the live MQTT/Fleet snapshot, no
+ * extra polling. Hidden if no charge data is available.
+ */
+export function LiveChargeInfoCallout({ info }: LiveChargeInfoCalloutProps) {
+  const cfg = useActiveModel();
+  const anchorName = cfg.actionAnchors.chargePort;
+
+  const { scene } = useThree();
+  const anchorRef = useRef<THREE.Object3D | null>(null);
+  const missingLoggedRef = useRef(false);
+
+  useEffect(() => {
+    anchorRef.current = null;
+    missingLoggedRef.current = false;
+  }, [anchorName, cfg]);
+
+  const lineGeom = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    return g;
+  }, []);
+  const groupRef = useRef<THREE.Group>(null);
+  const tip = useRef(new THREE.Vector3());
+  const top = useRef(new THREE.Vector3());
+
+  useFrame(({ clock }) => {
+    if (!anchorRef.current) {
+      anchorRef.current = scene.getObjectByName(anchorName) ?? null;
+      if (!anchorRef.current) {
+        if (!missingLoggedRef.current && clock.getElapsedTime() > 2) {
+          missingLoggedRef.current = true;
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[LiveChargeInfoCallout] anchor "${anchorName}" not found after 2s`,
+          );
+        }
+        return;
+      }
+    }
+    if (!groupRef.current) return;
+    anchorRef.current.getWorldPosition(tip.current);
+    top.current.copy(tip.current);
+    // Lift slightly higher than action callouts to avoid stacking with
+    // the chargePort action callout when both are visible.
+    top.current.y += cfg.calloutHeight + 0.15;
+
+    groupRef.current.position.copy(top.current);
+
+    const pos = lineGeom.attributes.position as THREE.BufferAttribute;
+    pos.setXYZ(0, tip.current.x, tip.current.y, tip.current.z);
+    pos.setXYZ(1, top.current.x, top.current.y, top.current.z);
+    pos.needsUpdate = true;
+  });
+
+  const power = info.powerKw != null && info.powerKw > 0
+    ? `${info.powerKw.toFixed(1)} kW`
+    : null;
+  const socLine = info.socPct != null
+    ? info.targetSocPct != null
+      ? `${Math.round(info.socPct)}% → ${Math.round(info.targetSocPct)}%`
+      : `${Math.round(info.socPct)}%`
+    : null;
+  const eta = info.minutesRemaining != null && info.minutesRemaining > 0
+    ? info.minutesRemaining < 60
+      ? `~${Math.round(info.minutesRemaining)} min`
+      : `~${(info.minutesRemaining / 60).toFixed(1)} h`
+    : null;
+
+  // If absolutely nothing to show, render nothing (still keep the hook
+  // chain intact above so positions stay registered).
+  if (!power && !socLine && !eta) return null;
+
+  return (
+    <>
+      <line>
+        <primitive object={lineGeom} attach="geometry" />
+        <lineBasicMaterial
+          color="#3b82f6"
+          transparent
+          opacity={0.55}
+          depthTest={false}
+        />
+      </line>
+
+      <group ref={groupRef}>
+        <Html
+          center
+          distanceFactor={CALLOUT_DISTANCE_FACTOR}
+          zIndexRange={[18, 0]}
+          occlude={false}
+        >
+          <div
+            className={
+              'flex items-center gap-1 h-5 px-1.5 rounded-full text-[8px] font-semibold leading-none ' +
+              'shadow-[0_2px_6px_rgba(0,0,0,0.45)] border backdrop-blur-md ' +
+              'bg-[#3b82f6]/85 border-white/40 text-white'
+            }
+          >
+            <svg viewBox="0 0 12 12" width="7" height="7" fill="currentColor">
+              <path d="M7 1 L3 7 L5.5 7 L4.5 11 L9 5 L6.5 5 Z" />
+            </svg>
+            {power && <span className="whitespace-nowrap">{power}</span>}
+            {socLine && (
+              <>
+                <span className="opacity-50">·</span>
+                <span className="whitespace-nowrap tabular-nums">{socLine}</span>
+              </>
+            )}
+            {eta && (
+              <>
+                <span className="opacity-50">·</span>
+                <span className="whitespace-nowrap tabular-nums">{eta}</span>
+              </>
+            )}
+          </div>
+        </Html>
+      </group>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Single callout — leader line + Html button that follow the anchor.
 // ---------------------------------------------------------------------------
 

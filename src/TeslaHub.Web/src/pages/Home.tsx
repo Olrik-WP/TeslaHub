@@ -15,8 +15,12 @@ import VehicleTopView from '../components/VehicleTopView';
 import GoToCarSheet from '../components/GoToCarSheet';
 import SecurityAlertsTeaser from '../components/SecurityAlertsTeaser';
 import HomeQuickActions from '../components/HomeQuickActions';
+import Home3DHero from '../components/Home3DHero';
+import HomeMetaStrip from '../components/HomeMetaStrip';
+import HomeDriveStatsCard from '../components/HomeDriveStatsCard';
 import PullToRefreshIndicator from '../components/PullToRefreshIndicator';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import { useView3DAvailable } from '../hooks/useView3DAvailable';
 import { useFleetMergedVehicleStatus } from '../hooks/useFleetMergedVehicleStatus';
 import {
   useControlAvailability,
@@ -172,6 +176,13 @@ export default function Home({ carId }: Props) {
   const [address, setAddress] = useState<string | null>(null);
   const [showCostInfo, setShowCostInfo] = useState(false);
   const [goToCarOpen, setGoToCarOpen] = useState(false);
+  // 3D viewer availability — WebGL + GLB probe. null while the HEAD
+  // request is still in flight; we treat null as "not yet available"
+  // and render the legacy hero (PNG) until the probe resolves, then
+  // swap to the 3D hero once true. This avoids a flash of the legacy
+  // hero immediately followed by the 3D hero, but doesn't block the
+  // first paint if the probe is slow.
+  const view3DAvailable = useView3DAvailable() === true;
 
   // Hide the "go to my car" feature inside the Tesla in-car browser:
   // there is no public way to deep-link to native Tesla nav, and the user is
@@ -302,7 +313,44 @@ export default function Home({ carId }: Props) {
         <SecurityAlertsTeaser />
       </div>
 
-      {/* Hero: Vehicle image with drive stats */}
+      {/* Hero — premium 3D viewer when the GLB asset + WebGL are both
+          available, else the legacy PNG card. The legacy card is kept
+          strictly intact so users without 3D see the exact same home
+          page as before this refactor (no data lost, no layout shift).
+          When 3D IS available we replace the PNG-with-overlays hero
+          with a clean 3D viewer + minimal battery bar, and surface
+          the overlay contents (name/VIN/max-speed/last charge/drive
+          stats) as cards just below the hero. */}
+      {view3DAvailable && (
+        <>
+          <Home3DHero vehicle={vehicle} />
+          <HomeMetaStrip
+            vehicle={vehicle}
+            driveStats={driveStats}
+            kmSinceCharge={kmSinceCharge}
+            costStack={costStack}
+            onShowCostInfo={() => setShowCostInfo(!showCostInfo)}
+          />
+          {showCostInfo && lastChargeCost != null && (
+            <div
+              className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-xs text-[#9ca3af] leading-relaxed cursor-pointer"
+              onClick={() => setShowCostInfo(false)}
+            >
+              {t('home.costExplain', { total: `${lastChargeCost.toFixed(2)} ${u.currencySymbol}` })}
+            </div>
+          )}
+          <HomeDriveStatsCard
+            driveStats={driveStats}
+            monthlyCost={monthlyCost}
+            currencySymbol={u.currencySymbol}
+          />
+        </>
+      )}
+
+      {/* Legacy hero (PNG + overlays + 2 drive stat rows). Strictly
+          identical to the pre-PR-3 markup — only conditional gating
+          was added. Rendered when 3D is NOT available. */}
+      {!view3DAvailable && (
       <div className="bg-[#141414] rounded-xl overflow-hidden">
         {/* Top row: drive averages */}
         {driveStats && driveStats.driveCount > 0 && (
@@ -480,6 +528,7 @@ export default function Home({ carId }: Props) {
           </div>
         )}
       </div>
+      )}
 
       {/* Fleet API quick actions — placed between the headline stats card
           and the live vehicle status panel so the most-tapped controls
@@ -491,10 +540,14 @@ export default function Home({ carId }: Props) {
       {isCharging && lastCharge && (
         <div className="bg-[#141414] border border-[#3b82f6]/30 rounded-xl p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-[#3b82f6] text-lg">⚡</span>
-            <span className="font-medium">{t('home.chargingInProgress')}</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#3b82f6] animate-pulse" />
+            <span className="text-xs uppercase tracking-wider text-[#3b82f6] font-semibold">
+              {t('home.chargingInProgress')}
+            </span>
             {vehicle.chargingState && (
-              <span className="ml-auto text-xs text-[#9ca3af] bg-[#2a2a2a] px-2 py-0.5 rounded">{vehicle.chargingState}</span>
+              <span className="ml-auto text-[10px] text-[#9ca3af] bg-[#2a2a2a] px-2 py-0.5 rounded-full">
+                {vehicle.chargingState}
+              </span>
             )}
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -547,8 +600,12 @@ export default function Home({ carId }: Props) {
         </div>
       )}
 
-      {/* Vehicle status: TPMS, Body, Climate */}
-      <VehicleTopView vehicle={vehicle} />
+      {/* Vehicle status: TPMS, Body, Climate. When 3D is showing the
+          car in the hero, we hide the redundant SVG/3D-toggle here and
+          keep only the data pills (the 3D doesn't yet surface every
+          per-door / TPMS value — that migration is planned for a
+          future PR). */}
+      <VehicleTopView vehicle={vehicle} hideVisual={view3DAvailable} />
 
       {/* Stats grid */}
       <div className="grid grid-cols-3 gap-3">
@@ -753,9 +810,11 @@ export default function Home({ carId }: Props) {
             return (
               <div className="flex-1 bg-[#141414] border border-[#22c55e]/40 rounded-xl p-3 sm:p-4 flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="text-xs text-[#9ca3af] uppercase tracking-wider">{t('home.tripInProgress')}</div>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#22c55e] uppercase tracking-wider">
+                  <span className="flex items-center gap-2 text-xs uppercase tracking-wider text-[#22c55e] font-semibold">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#22c55e] animate-pulse" />
+                    {t('home.tripInProgress')}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#9ca3af] uppercase tracking-wider">
                     {liveConnected ? t('home.live') : t('home.mqttOffline')}
                   </span>
                 </div>

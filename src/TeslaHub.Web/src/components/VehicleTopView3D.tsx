@@ -16,7 +16,13 @@ import {
 } from './useVehicleOpenings';
 import { ChargingCable } from './ChargingCable';
 import { useVehicleVisualSync } from './VehicleVisualSync';
-import { VehicleCallouts, type CalloutAction, type CalloutsActions } from './VehicleCallouts';
+import {
+  VehicleCallouts,
+  LiveChargeInfoCallout,
+  type CalloutAction,
+  type CalloutsActions,
+  type LiveChargeInfo,
+} from './VehicleCallouts';
 import { VehicleLightEffects } from './VehicleLightEffects';
 import type { CableMode } from './ShowroomControls';
 import {
@@ -2273,6 +2279,10 @@ interface Props {
    *  Not persisted in the override blob — passed straight through the
    *  Provider to the scene-processing code. */
   debugMode?: ShowroomDebugFlags;
+  /** Canvas pixel height. Defaults to 360 (legacy VehicleTopView pane).
+   *  The Home hero pushes this to 380/480 so the 3D car becomes the
+   *  visual centrepiece. Width is always 100% of the parent. */
+  height?: number;
 }
 
 /**
@@ -2292,7 +2302,7 @@ function vehiclePatch<TBody = void>(
   };
 }
 
-export default function VehicleTopView3D({ vehicle, localOverrides, showroomMode, debugMode }: Props) {
+export default function VehicleTopView3D({ vehicle, localOverrides, showroomMode, debugMode, height = 360 }: Props) {
   // Resolve the per-model config from the live carId + VIN. This is the
   // SINGLE place where the picker fires — every descendant reads the
   // result via `useActiveModel()` (or `useModelConsts()`) through the
@@ -2367,14 +2377,14 @@ export default function VehicleTopView3D({ vehicle, localOverrides, showroomMode
     <VehicleModelContext.Provider value={modelConfig}>
       <WrapUrlContext.Provider value={wrapValue}>
         <ShowroomDebugContext.Provider value={debugMode ?? DEFAULT_DEBUG_FLAGS}>
-          <VehicleTopView3DInner vehicle={vehicle} showroomMode={!!showroomMode} />
+          <VehicleTopView3DInner vehicle={vehicle} showroomMode={!!showroomMode} height={height} />
         </ShowroomDebugContext.Provider>
       </WrapUrlContext.Provider>
     </VehicleModelContext.Provider>
   );
 }
 
-function VehicleTopView3DInner({ vehicle, showroomMode }: Props) {
+function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null!);
   const cfg = useActiveModel();
   const wheelsAvailable = useAssetAvailable(cfg.wheelUrl);
@@ -2575,7 +2585,7 @@ function VehicleTopView3DInner({ vehicle, showroomMode }: Props) {
 
   return (
     <OpeningsProvider>
-      <div className="relative w-full" style={{ height: 360 }}>
+      <div className="relative w-full" style={{ height }}>
         <ModelAvailabilityBanner vin={vehicle.vin} />
         <Canvas
           ref={canvasRef}
@@ -2631,6 +2641,23 @@ function VehicleTopView3DInner({ vehicle, showroomMode }: Props) {
                   graph (anchor positions) via useThree.scene. They render
                   nothing when actions=null (Fleet API not ready). */}
               <VehicleCallouts vehicle={vehicle} actions={filteredActions} />
+              {/* Live charge info — anchored on the chargePort, only
+                  while a session is active. Independent from the Fleet
+                  API gating: even a user without virtual key paired
+                  can still see kW / SOC / ETA while the car charges. */}
+              {cableMode === 'charging' && !showroomMode && (
+                <LiveChargeInfoCallout
+                  info={{
+                    powerKw: vehicle.chargerPower ?? null,
+                    socPct: vehicle.batteryLevel ?? null,
+                    targetSocPct: vehicle.chargeLimitSoc ?? null,
+                    minutesRemaining:
+                      vehicle.timeToFullCharge != null && vehicle.timeToFullCharge > 0
+                        ? vehicle.timeToFullCharge * 60
+                        : null,
+                  } satisfies LiveChargeInfo}
+                />
+              )}
               {/* Phase 7 light effects: lock flash, brake/reverse lights,
                   sentry-mode camera pulses. Reads vehicle.* live state
                   and mutates scene nodes directly (no React props/state
