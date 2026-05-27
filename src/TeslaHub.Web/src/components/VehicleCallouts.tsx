@@ -40,7 +40,8 @@ import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { VehicleStatus } from '../api/queries';
-import { useActiveModel } from './vehicleModelConfig';
+import { useActiveModel, type CalloutKeyName } from './vehicleModelConfig';
+import { useUnits } from '../hooks/useUnits';
 
 // Anchor names live in the model config so a future Y/S/X swap is just
 // a config update (vehicleModelConfig.ts). The active config is picked
@@ -79,6 +80,15 @@ export interface CalloutsActions {
   unlockVehicle: CalloutAction;
   sentryToggle: CalloutAction;
   climateToggle: CalloutAction;
+  // Phase 3 actions (PR-9) — extra one-shot or toggleable actions
+  // surfaced from the SVG fallback. `defrost` toggles
+  // set_preconditioning_max (same endpoint Control's "Précondition"
+  // and HomeQuickActions' "Dégivrage" use). `flash` and `honk` are
+  // one-shots — the variant stays `closed` (white discreet pill)
+  // since there's no "currently flashing" state to reflect.
+  defrostToggle: CalloutAction;
+  flashLights: CalloutAction;
+  honkHorn: CalloutAction;
 }
 
 interface VehicleCalloutsProps {
@@ -118,6 +128,9 @@ const NOOP_ACTIONS: CalloutsActions = {
   unlockVehicle: NOOP_ACTION,
   sentryToggle: NOOP_ACTION,
   climateToggle: NOOP_ACTION,
+  defrostToggle: NOOP_ACTION,
+  flashLights: NOOP_ACTION,
+  honkHorn: NOOP_ACTION,
 };
 
 /**
@@ -131,6 +144,7 @@ export function VehicleCallouts({ vehicle, actions, showroomPreview }: VehicleCa
   const cfg = useActiveModel();
   const ANCHORS = cfg.actionAnchors;
   const { t } = useTranslation();
+  const u = useUnits();
   // Every <Callout> needs a stable "model identity" to know when to drop
   // its cached anchor Object3D. We use the config reference itself — it
   // changes ONLY on VIN-driven model swap, so refs survive cosmetic
@@ -285,9 +299,162 @@ export function VehicleCallouts({ vehicle, actions, showroomPreview }: VehicleCa
           hidden={isHidden('climate')}
         />
       )}
+
+      {/* --- DEFROST -----------------------------------------------------
+          Toggle the windshield + rear-window defroster
+          (`set_preconditioning_max`). Tesla's mobile app surfaces this
+          as a separate button from regular climate, so we mirror that.
+          Re-uses the climate anchor as default — user calibrates the
+          XYZ offset to move it onto the windshield. */}
+      {shouldRender('defrost') && (
+        <Callout
+          calloutKey="defrost"
+          anchorName={ANCHORS.climate}
+          label={t('home.callouts.defrost')}
+          icon={<DefrostIcon />}
+          variant={vehicle.defrostMode === 2 ? 'warning' : 'closed'}
+          action={effectiveActions.defrostToggle}
+          hidden={isHidden('defrost')}
+        />
+      )}
+
+      {/* --- FLASH LIGHTS ------------------------------------------------
+          One-shot honk-of-headlights. Default anchor = frunk (front
+          of the car). User calibrates onto a headlight via the
+          Showroom XYZ sliders. */}
+      {shouldRender('flash') && (
+        <Callout
+          calloutKey="flash"
+          anchorName={ANCHORS.frunk}
+          label={t('home.callouts.flash')}
+          icon={<HeadlightIcon />}
+          variant="closed"
+          action={effectiveActions.flashLights}
+          hidden={isHidden('flash')}
+        />
+      )}
+
+      {/* --- HONK HORN ---------------------------------------------------
+          One-shot horn beep. Default anchor = frunk; user calibrates
+          onto the grille / hood centre. */}
+      {shouldRender('honk') && (
+        <Callout
+          calloutKey="honk"
+          anchorName={ANCHORS.frunk}
+          label={t('home.callouts.honk')}
+          icon={<HornIcon />}
+          variant="closed"
+          action={effectiveActions.honkHorn}
+          hidden={isHidden('honk')}
+        />
+      )}
+
+      {/* --- TPMS — 4 data callouts, one per wheel -----------------------
+          Anchored on the wheel wrappers added at runtime by the model
+          loader (`WheelWrapper_LF` / `RF` / `LR` / `RR`). Pressure is
+          rendered in the user's preferred unit (bar / psi). Variant
+          follows Tesla's own `tpmsSoftWarningXX` flag as authoritative:
+          warning=true → `danger` (red), otherwise → `secure` (green).
+          Pure data — the callout has no onClick. */}
+      {TPMS_DEFS.map(({ key, anchorName: wheelAnchor, pressure, warning }) => {
+        const p = pressure(vehicle);
+        const w = warning(vehicle);
+        if (p == null && !w) return null;
+        if (!shouldRender(key)) return null;
+        const variant: CalloutVariant =
+          w ? 'danger' : 'secure';
+        const label = p != null
+          ? `${u.fmtPressure(p)} ${u.pressureUnit}`
+          : '⚠';
+        return (
+          <Callout
+            key={key}
+            calloutKey={key}
+            anchorName={wheelAnchor}
+            label={label}
+            icon={<TpmsIcon warn={w} />}
+            variant={variant}
+            action={NOOP_ACTION /* data callout — no command fired on click */}
+            hidden={isHidden(key)}
+          />
+        );
+      })}
+
+      {/* --- USER PRESENCE -----------------------------------------------
+          Icon-only data callout showing whether the driver/occupant is
+          in the cabin. Anchor defaults to the driver door (lock
+          anchor); user nudges it inside the cabin in the Showroom. */}
+      {vehicle.isUserPresent != null && shouldRender('userPresent') && (
+        <Callout
+          calloutKey="userPresent"
+          anchorName={ANCHORS.lock}
+          label={vehicle.isUserPresent ? t('home.callouts.userPresent') : t('home.callouts.userAbsent')}
+          icon={<PersonIcon />}
+          variant={vehicle.isUserPresent ? 'secure' : 'closed'}
+          action={NOOP_ACTION /* data callout — no command fired on click */}
+          hidden={isHidden('userPresent')}
+        />
+      )}
+
+      {/* --- CLIMATE INFO (interior + exterior temps) --------------------
+          Pure data — interior temp / exterior temp as a single pill.
+          Default anchor = frunk; user moves it onto the windshield via
+          the Showroom XYZ sliders. Renders only when at least one
+          temp signal is fresh. */}
+      {(vehicle.insideTemp != null || vehicle.outsideTemp != null) && shouldRender('climateInfo') && (
+        <Callout
+          calloutKey="climateInfo"
+          anchorName={ANCHORS.frunk}
+          label={
+            (vehicle.insideTemp != null ? `${u.fmtTemp(vehicle.insideTemp)}${u.tempUnit}` : '—') +
+            ' / ' +
+            (vehicle.outsideTemp != null ? `${u.fmtTemp(vehicle.outsideTemp)}${u.tempUnit}` : '—')
+          }
+          icon={<ThermometerIcon />}
+          variant="info"
+          action={NOOP_ACTION /* data callout — no command fired on click */}
+          hidden={isHidden('climateInfo')}
+        />
+      )}
     </>
   );
 }
+
+// TPMS definitions kept out of the render loop so the closures over
+// `pressure(v)` / `warning(v)` stay stable. `anchorName` matches the
+// runtime-named wheel wrappers added by the model loader (see
+// `WheelWrapper_*` in VehicleTopView3D.tsx).
+const TPMS_DEFS: ReadonlyArray<{
+  key: CalloutKey;
+  anchorName: string;
+  pressure: (v: VehicleStatus) => number | null | undefined;
+  warning: (v: VehicleStatus) => boolean | undefined;
+}> = [
+  {
+    key: 'tpmsFL',
+    anchorName: 'WheelWrapper_LF',
+    pressure: (v) => v.tpmsPressureFl,
+    warning: (v) => v.tpmsSoftWarningFl ?? undefined,
+  },
+  {
+    key: 'tpmsFR',
+    anchorName: 'WheelWrapper_RF',
+    pressure: (v) => v.tpmsPressureFr,
+    warning: (v) => v.tpmsSoftWarningFr ?? undefined,
+  },
+  {
+    key: 'tpmsRL',
+    anchorName: 'WheelWrapper_LR',
+    pressure: (v) => v.tpmsPressureRl,
+    warning: (v) => v.tpmsSoftWarningRl ?? undefined,
+  },
+  {
+    key: 'tpmsRR',
+    anchorName: 'WheelWrapper_RR',
+    pressure: (v) => v.tpmsPressureRr,
+    warning: (v) => v.tpmsSoftWarningRr ?? undefined,
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Live charge info callout — non-clickable, anchored on the charge port,
@@ -441,7 +608,7 @@ export function LiveChargeInfoCallout({ info }: LiveChargeInfoCalloutProps) {
 // Single callout — leader line + Html button that follow the anchor.
 // ---------------------------------------------------------------------------
 
-type CalloutVariant = 'closed' | 'open' | 'plug' | 'secure' | 'danger' | 'info';
+type CalloutVariant = 'closed' | 'open' | 'plug' | 'secure' | 'danger' | 'info' | 'warning';
 
 /**
  * Stable identifier for each callout — keyed by SEMANTIC purpose (not
@@ -449,31 +616,51 @@ type CalloutVariant = 'closed' | 'open' | 'plug' | 'secure' | 'danger' | 'info';
  * stored in `showroomOverrides.calloutOffsets` survive future anchor
  * renames or per-model anchor swaps. New callouts must add a key here
  * and the matching position in `calloutOffsets`.
+ *
+ * Action callouts (clickable, fire a Tesla command):
+ *   frunk, trunk, chargePort, window, lock, sentry, climate, defrost,
+ *   flash, honk.
+ *
+ * Data callouts (non-clickable, just surface live state):
+ *   tpmsFL, tpmsFR, tpmsRL, tpmsRR (tyre pressure per wheel),
+ *   userPresent (driver in cabin),
+ *   climateInfo (interior + exterior temps).
  */
-export type CalloutKey =
-  | 'frunk'
-  | 'trunk'
-  | 'chargePort'
-  | 'window'
-  | 'lock'
-  | 'sentry'
-  | 'climate';
+// Re-exported from `vehicleModelConfig.ts` so existing call sites that
+// `import { CalloutKey } from './VehicleCallouts'` keep working. The
+// two type names point to the SAME string-literal union — see the
+// `CalloutKeyName` definition in vehicleModelConfig for the docs.
+export type CalloutKey = CalloutKeyName;
 
 // Hex colour used by the leader line + anchor dot for each variant.
 // Hex form so we can feed both `<lineBasicMaterial color>` (THREE.Color)
 // and inline CSS for the dot ring without juggling formats.
 const VARIANT_LINE_COLOR: Record<CalloutVariant, string> = {
-  closed: '#ffffff',
-  open:   '#f59e0b',
-  plug:   '#3b82f6',
-  secure: '#22c55e',
-  danger: '#e31937',
-  info:   '#3b82f6',
+  closed:  '#ffffff',
+  open:    '#f59e0b',
+  plug:    '#3b82f6',
+  secure:  '#22c55e',
+  danger:  '#e31937',
+  info:    '#3b82f6',
+  // Warning = TPMS borderline (slightly low pressure). Same hue as
+  // `open` but kept separate so we can tune them independently later
+  // (e.g. open could become more saturated, warning more muted).
+  warning: '#f59e0b',
 };
 
 interface CalloutProps {
   calloutKey: CalloutKey;
-  anchorName: string;
+  /** Named scene node to follow. The frame loop calls
+   *  `scene.getObjectByName(anchorName)` and copies its world position
+   *  every frame, so the callout sticks to the anchor even during
+   *  opening animations / variant swaps. */
+  anchorName?: string;
+  /** Alternative to `anchorName`: a fixed model-space position (in the
+   *  same coordinate frame as `wheelFallbackPositions`). Used by TPMS
+   *  and any other callout whose anchor doesn't have a stable scene-
+   *  node name in the GLB (e.g. user-positioned defrost/flash/honk).
+   *  Exactly one of `anchorName` or `anchorPosition` must be set. */
+  anchorPosition?: readonly [number, number, number];
   label: string;
   icon: ReactNode;
   variant: CalloutVariant;
@@ -484,7 +671,7 @@ interface CalloutProps {
   hidden?: boolean;
 }
 
-function Callout({ calloutKey, anchorName, label, icon, variant, action, hidden }: CalloutProps) {
+function Callout({ calloutKey, anchorName, anchorPosition, label, icon, variant, action, hidden }: CalloutProps) {
   const { scene } = useThree();
   const cfg = useActiveModel();
 
@@ -542,42 +729,63 @@ function Callout({ calloutKey, anchorName, label, icon, variant, action, hidden 
   const offset = cfg.calloutOffsets?.[calloutKey] ?? null;
 
   useFrame(({ clock }) => {
-    if (!anchorRef.current) {
-      anchorRef.current = scene.getObjectByName(anchorName) ?? null;
+    // Two anchor modes coexist. NAMED anchor (the original mode) does
+    // a one-shot scene.getObjectByName() lookup and then tracks the
+    // node's live world position (= follows opening animations). FIXED
+    // anchor (anchorPosition prop) skips the lookup entirely — used by
+    // TPMS (wheel centres are positioned via wheelFallbackPositions,
+    // not via named GLB nodes) and any user-positioned callout
+    // (defrost / flash / honk) whose location is purely a Showroom
+    // calibration in model-local coordinates.
+    if (anchorPosition) {
+      tip.current.set(anchorPosition[0], anchorPosition[1], anchorPosition[2]);
+    } else if (anchorName) {
       if (!anchorRef.current) {
-        // Log once after ~2s if still unresolved — helps spot a real
-        // missing anchor (renamed/removed in a GLB rebuild) vs a normal
-        // pre-load delay.
-        if (!missingLoggedRef.current && clock.getElapsedTime() > 2) {
-          missingLoggedRef.current = true;
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[VehicleCallouts] anchor "${anchorName}" not found in scene after 2s ` +
-              '(check the GLB export — node may have been stripped).',
-          );
+        anchorRef.current = scene.getObjectByName(anchorName) ?? null;
+        if (!anchorRef.current) {
+          // Log once after ~2s if still unresolved — helps spot a real
+          // missing anchor (renamed/removed in a GLB rebuild) vs a normal
+          // pre-load delay.
+          if (!missingLoggedRef.current && clock.getElapsedTime() > 2) {
+            missingLoggedRef.current = true;
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[VehicleCallouts] anchor "${anchorName}" not found in scene after 2s ` +
+                '(check the GLB export — node may have been stripped).',
+            );
+          }
+          return;
         }
-        return;
+        // eslint-disable-next-line no-console
+        console.log(`[VehicleCallouts] anchor "${anchorName}" resolved`);
       }
-      // eslint-disable-next-line no-console
-      console.log(`[VehicleCallouts] anchor "${anchorName}" resolved`);
+      // matrixWorld is updated by R3F before frame callbacks fire, so we
+      // can read the live world position even during opening animations.
+      anchorRef.current.getWorldPosition(tip.current);
+    } else {
+      // Caller forgot both props — render nothing.
+      return;
     }
     if (!groupRef.current) return;
-    const anchor = anchorRef.current;
-    // matrixWorld is updated by R3F before frame callbacks fire, so we
-    // can read the live world position even during opening animations.
-    anchor.getWorldPosition(tip.current);
+    // Apply the user-calibrated XYZ offset to the TIP itself (not just
+    // the pill). That way the leader line keeps reading as "this pill
+    // points at THAT spot on the body" — when the user moves the
+    // slider, the anchor dot AND the pill slide together, the line
+    // between them stays short and local. Tesla's GLB ships anchors
+    // sometimes ~1m off where the visible part actually is (e.g.
+    // Hood_Spatial floats above the windshield on the Y); the old
+    // pill-only offset meant the line dangled across the whole car
+    // even after calibration.
+    //
+    // Offset axes match the rest of showroomOverrides:
+    //   +X = forward · +Y = up · +Z = right.
+    if (offset) {
+      tip.current.x += offset[0];
+      tip.current.y += offset[1];
+      tip.current.z += offset[2];
+    }
     top.current.copy(tip.current);
     top.current.y += cfg.calloutHeight;
-    // Apply user-calibrated per-callout offset on top of the default
-    // lift. Stored as a plain [x, y, z] tuple in world space so the
-    // calibration is intuitive in the Showroom (positive X = forward,
-    // positive Y = up, positive Z = right — matches the rest of the
-    // overrides).
-    if (offset) {
-      top.current.x += offset[0];
-      top.current.y += offset[1];
-      top.current.z += offset[2];
-    }
 
     groupRef.current.position.copy(top.current);
     if (tipGroupRef.current) {
@@ -591,12 +799,13 @@ function Callout({ calloutKey, anchorName, label, icon, variant, action, hidden 
   });
 
   // Visual variants:
-  //   closed = "at rest, want to open" → small, discreet, white
-  //   open   = "currently open, want to close" → orange, prominent
-  //   plug   = "cable latched, want to release" → blue, prominent
-  //   secure = "locked / climate on / good state"             → green
-  //   danger = "unlocked / urgent attention needed"           → Tesla red
-  //   info   = "sentry on / passive informational good state" → blue
+  //   closed  = "at rest, want to open" → small, discreet, white
+  //   open    = "currently open, want to close" → orange, prominent
+  //   plug    = "cable latched, want to release" → blue, prominent
+  //   secure  = "locked / climate on / good state"             → green
+  //   danger  = "unlocked / TPMS critical / urgent"            → Tesla red
+  //   info    = "sentry on / climate info / passive good"      → blue
+  //   warning = "TPMS borderline / soft alert"                 → amber
   const variantClass =
     variant === 'open'
       ? 'bg-[#f59e0b] hover:bg-[#d97706] text-black opacity-100 border-white/50'
@@ -608,7 +817,9 @@ function Callout({ calloutKey, anchorName, label, icon, variant, action, hidden 
             ? 'bg-[#e31937]/85 hover:bg-[#c01530] text-white opacity-100 border-white/40'
             : variant === 'info'
               ? 'bg-[#3b82f6]/80 hover:bg-[#2563eb] text-white opacity-95 border-white/40'
-              : 'bg-white/85 hover:bg-white text-black opacity-55 hover:opacity-100 border-white/25';
+              : variant === 'warning'
+                ? 'bg-[#f59e0b]/85 hover:bg-[#d97706] text-black opacity-100 border-white/40'
+                : 'bg-white/85 hover:bg-white text-black opacity-55 hover:opacity-100 border-white/25';
 
   // Leader line + anchor dot colour, picked to match the pill so the
   // "this button controls THIS spot" relationship reads instantly.
@@ -751,6 +962,77 @@ function SnowflakeIcon() {
   return (
     <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
       <path d="M6 1v10M1 6h10M2.5 2.5l7 7M9.5 2.5l-7 7" />
+    </svg>
+  );
+}
+
+// Wavy heat-lines rising from a horizontal bar = "defrost / demist".
+// Matches Tesla's own in-car icon family.
+function DefrostIcon() {
+  return (
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1.5 10.5h9" />
+      <path d="M3 8c0-1 1-1 1-2s-1-1-1-2" />
+      <path d="M6 8c0-1 1-1 1-2s-1-1-1-2" />
+      <path d="M9 8c0-1 1-1 1-2s-1-1-1-2" />
+    </svg>
+  );
+}
+
+// Half-circle headlight with light beams.
+function HeadlightIcon() {
+  return (
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 3h4a3 3 0 0 1 0 6H2z" />
+      <path d="M8 4h2M8 6h3M8 8h2" />
+    </svg>
+  );
+}
+
+// Megaphone-style horn glyph.
+function HornIcon() {
+  return (
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 7V5l4-1.5v5L2 7z" />
+      <path d="M6 4.2v3.6c1.5-.3 1.5-3.3 0-3.6z" />
+      <path d="M9 4l1.5-1M9 6h2M9 8l1.5 1" />
+    </svg>
+  );
+}
+
+// Tire silhouette with optional warning dot. The dot is part of the
+// callout label colour anyway, but this glyph reinforces "this pill is
+// about a tyre" at a glance even when the callout is partially
+// occluded by the wheel.
+function TpmsIcon({ warn }: { warn?: boolean }) {
+  return (
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="6" r="4.5" />
+      <circle cx="6" cy="6" r="1.6" />
+      {warn && <circle cx="6" cy="6" r="0.6" fill="currentColor" stroke="none" />}
+    </svg>
+  );
+}
+
+// Driver silhouette — used for the presence callout. Deliberately
+// generic (no gender, no clothing) since this is a data marker, not a
+// character avatar.
+function PersonIcon() {
+  return (
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="3.5" r="1.8" />
+      <path d="M2.5 10.5c.5-2.5 2-3.5 3.5-3.5s3 1 3.5 3.5" />
+    </svg>
+  );
+}
+
+// Classic mercury thermometer — used for the climate info data
+// callout (interior / exterior temp).
+function ThermometerIcon() {
+  return (
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 1.5a1.5 1.5 0 0 1 1.5 1.5v4.2a2.3 2.3 0 1 1-3 0V3A1.5 1.5 0 0 1 6 1.5z" />
+      <circle cx="6" cy="9" r="1.2" fill="currentColor" stroke="none" />
     </svg>
   );
 }

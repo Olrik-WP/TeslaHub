@@ -13,7 +13,7 @@ interface Props {
  * The premium 3D vehicle hero for Home, replacing the legacy PNG card
  * when the 3D viewer is available. Two visual blocks stacked:
  *
- *   1. The full interactive 3D viewer — large (380px mobile / 480px
+ *   1. The full interactive 3D viewer — large (340px mobile / 440px
  *      desktop), with the existing live callouts, animated cable, and
  *      lock/sentry badges all still active.
  *   2. A minimal battery bar — percentage, range, optional live kW,
@@ -61,9 +61,11 @@ export default function Home3DHero({ vehicle }: Props) {
 }
 
 function getResponsiveHeight(): number {
-  if (typeof window === 'undefined') return 380;
-  // Mobile/portrait: 380px keeps the car as the focal block while
+  if (typeof window === 'undefined') return 340;
+  // Mobile/portrait: 340px keeps the car as the focal block while
   // letting the meta strip + drive stats sit above the fold on most
-  // 6"+ phones. Desktop bumps to 480px — vitrine territory.
-  return window.innerWidth >= 1024 ? 480 : 380;
+  // 6"+ phones AND giving the HomeQuickActions row a fighting chance
+  // to stay visible without scrolling. Desktop bumps to 440px —
+  // vitrine territory but slightly tighter than the original 480.
+  return window.innerWidth >= 1024 ? 440 : 340;
 }

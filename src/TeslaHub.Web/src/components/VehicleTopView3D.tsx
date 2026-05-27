@@ -2465,6 +2465,25 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
       optimistic: vehiclePatch(carId, () => ({ isClimateOn: !isClimateOn })),
     },
   );
+  // PR-9 extras — defrost / flash / honk. Endpoints match HomeQuickActions
+  // exactly so the two surfaces stay perfectly in sync.
+  //  - defrost  = climate/precondition (Tesla "set_preconditioning_max")
+  //  - flash    = access/flash-lights (one-shot)
+  //  - honk     = access/honk-horn    (one-shot)
+  // Defrost is the only one with persistent state worth optimistic patching:
+  // we mirror HomeQuickActions' triple-write (defrostMode + front+rear
+  // defroster) so the variant flag flips immediately and survives the
+  // post-command 5s refresh.
+  const defrostActive = (vehicle.defrostMode ?? 0) === 2;
+  const defrostMut = useControlMutation<{ on: boolean }>(vehicleId, 'climate/precondition', {
+    optimistic: vehiclePatch<{ on: boolean }>(carId, (_prev, body) => ({
+      defrostMode: body.on ? 2 : 0,
+      isFrontDefrosterOn: body.on,
+      isRearDefrosterOn: body.on,
+    })),
+  });
+  const flashMut = useControlMutation(vehicleId, 'access/flash-lights');
+  const honkMut = useControlMutation(vehicleId, 'access/honk-horn');
 
   // Callouts gated on the same trinity HomeQuickActions uses. When any
   // condition is missing we pass null → callouts render nothing at all.
@@ -2595,6 +2614,19 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
         onClick: () => climateMut.mutate(undefined as never),
         loading: climateMut.isPending,
       },
+      // PR-9 extras — defrost / flash / honk.
+      defrostToggle: {
+        onClick: () => defrostMut.mutate({ on: !defrostActive }),
+        loading: defrostMut.isPending,
+      },
+      flashLights: {
+        onClick: () => flashMut.mutate(undefined as never),
+        loading: flashMut.isPending,
+      },
+      honkHorn: {
+        onClick: () => honkMut.mutate(undefined as never),
+        loading: honkMut.isPending,
+      },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -2613,6 +2645,10 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
     unlockMut.isPending,
     sentryMut.isPending,
     climateMut.isPending,
+    defrostMut.isPending,
+    flashMut.isPending,
+    honkMut.isPending,
+    defrostActive,
     vehicle.sentryMode,
   ]);
 

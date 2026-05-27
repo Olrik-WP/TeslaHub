@@ -605,11 +605,14 @@ export default function Home({ carId }: Props) {
       )}
 
       {/* Vehicle status: TPMS, Body, Climate. When 3D is showing the
-          car in the hero, we hide the redundant SVG/3D-toggle here and
-          keep only the data pills (the 3D doesn't yet surface every
-          per-door / TPMS value — that migration is planned for a
-          future PR). */}
-      <VehicleTopView vehicle={vehicle} hideVisual={view3DAvailable} />
+          car in the hero, EVERY pill surfaced here is now available
+          as a 3D floating callout (TPMS per wheel, user presence,
+          interior/exterior temperature) AND the door / frunk / trunk
+          state is animated directly on the model — so the SVG fallback
+          card becomes pure redundancy. We drop it entirely in 3D mode
+          to keep Home tight. When the user has no 3D (Tesla browser,
+          slow device), the SVG view stays exactly as before. */}
+      {!view3DAvailable && <VehicleTopView vehicle={vehicle} />}
 
       {/* Stats grid */}
       <div className="grid grid-cols-3 gap-3">

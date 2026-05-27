@@ -32,14 +32,6 @@ function detectWebGL(): boolean {
 
 interface Props {
   vehicle: VehicleStatus;
-  /** Hide the visual representation (SVG + 2D/3D toggle) and render
-   *  only the pills (Security / Climate / TPMS). Used by the Home page
-   *  when the 3D viewer is already showing the vehicle in the hero —
-   *  the SVG would be visually redundant and waste vertical space, but
-   *  the pills carry data the 3D doesn't yet (lock state, door states,
-   *  TPMS pressures, climate temps). Phased out by future PRs that
-   *  migrate the data into 3D callouts. */
-  hideVisual?: boolean;
 }
 
 const TIRE_POSITIONS = [
@@ -61,7 +53,7 @@ function getWarning(v: VehicleStatus, k: TireKey) {
   return map[k] === true;
 }
 
-export default function VehicleTopView({ vehicle, hideVisual }: Props) {
+export default function VehicleTopView({ vehicle }: Props) {
   const { t } = useTranslation();
   const u = useUnits();
   const [hintDismissed, setHintDismissed] = useState(() => localStorage.getItem(MQTT_HINT_KEY) === '1');
@@ -139,11 +131,10 @@ export default function VehicleTopView({ vehicle, hideVisual }: Props) {
         {/* Vehicle visualization — SVG top-down view or interactive 3D model.
             Defaults to SVG; user can opt into 3D via the toggle if WebGL is
             supported. The 3D component is lazy-loaded so it doesn't impact
-            initial bundle size for users who stay on SVG.
-            When `hideVisual` is set (e.g. the Home hero already shows the
-            3D car), we skip the entire visual block and keep only the
-            pills column so the data stays surfaced without duplication. */}
-        {!hideVisual && (hasTpms || hasBody || isCharging || hasChargePort) && (
+            initial bundle size for users who stay on SVG. The Home page
+            renders <VehicleTopView> only when the GLB is unavailable, so
+            this whole block is the "no-3D" fallback path. */}
+        {(hasTpms || hasBody || isCharging || hasChargePort) && (
           <div className="flex-shrink-0 flex flex-col items-center gap-2 w-full lg:w-auto">
             {view3DAvailable && (
               <div className="inline-flex rounded-lg bg-[#0a0a0a] border border-[#2a2a2a] p-0.5 text-[10px]">

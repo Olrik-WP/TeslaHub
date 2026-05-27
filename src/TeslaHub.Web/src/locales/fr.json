@@ -271,7 +271,12 @@
       "sentryOn": "Sentinelle ON",
       "sentryOff": "Sentinelle",
       "climateOn": "Clim ON",
-      "climateOff": "Démarrer clim"
+      "climateOff": "Démarrer clim",
+      "defrost": "Dégivrage",
+      "flash": "Appels phares",
+      "honk": "Klaxon",
+      "userPresent": "Présent",
+      "userAbsent": "Absent"
     },
     "vinCopy": "Copier le VIN",
     "vinCopied": "VIN copié",

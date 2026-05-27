@@ -17,7 +17,7 @@
  */
 import { useState } from 'react';
 import type { ShowroomOverrides, WheelCorner } from './showroomOverrides';
-import type { VehicleModelConfig } from './vehicleModelConfig';
+import type { CalloutKeyName, VehicleModelConfig } from './vehicleModelConfig';
 import type { ShowroomVisualState } from './showroomVisualState';
 import {
   ShowroomSlider,
@@ -641,23 +641,33 @@ function SentryCamerasSection({
 // +Y up, +Z right. Defaults to [0,0,0] = unchanged.
 // ────────────────────────────────────────────────────────────────────
 
-type CalloutKey =
-  | 'frunk'
-  | 'trunk'
-  | 'chargePort'
-  | 'window'
-  | 'lock'
-  | 'sentry'
-  | 'climate';
+// Single source of truth lives in `vehicleModelConfig.ts` to keep
+// Showroom / VehicleCallouts perfectly in sync. The Showroom only
+// needs to expose calibration UI for callouts the viewer actually
+// renders, so any new key added there shows up here automatically
+// via the type check.
+type CalloutKey = CalloutKeyName;
 
-const CALLOUT_DEFS: Array<{ key: CalloutKey; label: string; hint: string }> = [
-  { key: 'frunk',      label: 'Frunk',         hint: 'Coffre avant — au-dessus du capot' },
-  { key: 'trunk',      label: 'Coffre',        hint: 'Coffre arrière — au-dessus du hayon' },
-  { key: 'chargePort', label: 'Trappe charge', hint: 'Trappe / câble — flanc arrière gauche' },
-  { key: 'window',     label: 'Vitres',        hint: 'Vitres — vitre avant gauche' },
-  { key: 'lock',       label: 'Verrouillage',  hint: 'Verrouillage — poignée conducteur' },
-  { key: 'sentry',     label: 'Sentinelle',    hint: 'Sentinelle — caméra de toit ou B-pilier' },
-  { key: 'climate',    label: 'Clim',          hint: 'Climatisation — côté passager' },
+const CALLOUT_DEFS: Array<{ key: CalloutKey; label: string; hint: string; group: 'action' | 'tpms' | 'data' }> = [
+  // Action callouts — clickable, trigger Tesla commands.
+  { key: 'frunk',       label: 'Frunk',         hint: 'Coffre avant — au-dessus du capot',                  group: 'action' },
+  { key: 'trunk',       label: 'Coffre',        hint: 'Coffre arrière — au-dessus du hayon',                group: 'action' },
+  { key: 'chargePort',  label: 'Trappe charge', hint: 'Trappe / câble — flanc arrière gauche',              group: 'action' },
+  { key: 'window',      label: 'Vitres',        hint: 'Vitres — vitre avant gauche',                        group: 'action' },
+  { key: 'lock',        label: 'Verrouillage',  hint: 'Verrouillage — poignée conducteur',                  group: 'action' },
+  { key: 'sentry',      label: 'Sentinelle',    hint: 'Sentinelle — caméra de toit ou B-pilier',            group: 'action' },
+  { key: 'climate',     label: 'Clim',          hint: 'Climatisation — côté passager',                      group: 'action' },
+  { key: 'defrost',     label: 'Dégivrage',     hint: 'Dégivrage — pare-brise (calibrer XYZ)',              group: 'action' },
+  { key: 'flash',       label: 'Appels phares', hint: 'Appels phares — au niveau des phares avant',         group: 'action' },
+  { key: 'honk',        label: 'Klaxon',        hint: 'Klaxon — capot / calandre',                          group: 'action' },
+  // TPMS data callouts — anchored on each wheel wrapper.
+  { key: 'tpmsFL',      label: 'TPMS avant G',  hint: 'Pression pneu avant gauche',                         group: 'tpms' },
+  { key: 'tpmsFR',      label: 'TPMS avant D',  hint: 'Pression pneu avant droit',                          group: 'tpms' },
+  { key: 'tpmsRL',      label: 'TPMS arrière G',hint: 'Pression pneu arrière gauche',                       group: 'tpms' },
+  { key: 'tpmsRR',      label: 'TPMS arrière D',hint: 'Pression pneu arrière droit',                        group: 'tpms' },
+  // Other data callouts — pure info, no action.
+  { key: 'userPresent', label: 'Présence',      hint: 'Conducteur à bord — placer dans l\'habitacle',       group: 'data' },
+  { key: 'climateInfo', label: 'Temp. int./ext.',hint: 'Info climat — pare-brise ou toit',                  group: 'data' },
 ];
 
 function CalloutsSection({ overrides, onChange, defaults }: Props) {
@@ -730,77 +740,93 @@ function CalloutsSection({ overrides, onChange, defaults }: Props) {
       }
     >
       <p className="text-[10px] text-[#6b7280] -mt-1">
-        Décale chaque bouton flottant (frunk, lock, sentinelle, clim…)
-        par rapport à son ancrage. +X = avant · +Y = haut · +Z = droite.
-        Bascule l'œil pour masquer/afficher un bouton sur l'app sans
-        perdre sa position calibrée.
+        Déplace chaque bouton flottant ET son point d'ancrage sur la
+        carrosserie. +X = avant · +Y = haut · +Z = droite. La ligne
+        relie toujours le bouton à son ancre — bouge les sliders pour
+        coller au bon endroit (poignée, capot, vitre…). L'œil
+        masque/affiche le bouton sur l'app sans perdre la calibration.
       </p>
-      {CALLOUT_DEFS.map(({ key, label, hint }) => {
-        const value: [number, number, number] = [
-          offsets[key]?.[0] ?? defaultOffsets[key]?.[0] ?? 0,
-          offsets[key]?.[1] ?? defaultOffsets[key]?.[1] ?? 0,
-          offsets[key]?.[2] ?? defaultOffsets[key]?.[2] ?? 0,
-        ];
-        const isOverridden = !!offsets[key] && !eq(value);
-        const isHidden = !!hidden[key];
+      {(['action', 'tpms', 'data'] as const).map((group) => {
+        const items = CALLOUT_DEFS.filter((c) => c.group === group);
+        if (items.length === 0) return null;
+        const groupLabel =
+          group === 'action' ? 'Actions' :
+          group === 'tpms'   ? 'Pressions pneus' :
+          /* data */           'Données';
         return (
-          <div
-            key={key}
-            className={
-              'border border-[#1a1a1a] rounded-md p-2 space-y-1 ' +
-              (isHidden ? 'bg-[#0e0e0e] opacity-60' : '')
-            }
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] uppercase tracking-wider text-[#d4d4d4] font-medium truncate">
-                  {label}
-                  {isHidden && (
-                    <span className="ml-1.5 text-[9px] text-[#6b7280] normal-case tracking-normal">
-                      (masqué)
-                    </span>
-                  )}
-                </p>
-                <p className="text-[9px] text-[#6b7280] truncate">{hint}</p>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                {/* Visibility toggle — eye-on / eye-off. */}
-                <button
-                  type="button"
-                  onClick={() => toggleVisible(key)}
-                  title={isHidden ? "Afficher ce bouton sur l'app" : "Masquer ce bouton sur l'app"}
+          <div key={group} className="space-y-1.5">
+            <p className="text-[9px] uppercase tracking-wider text-[#6b7280] pt-1 pl-0.5 font-semibold">
+              {groupLabel}
+            </p>
+            {items.map(({ key, label, hint }) => {
+              const value: [number, number, number] = [
+                offsets[key]?.[0] ?? defaultOffsets[key]?.[0] ?? 0,
+                offsets[key]?.[1] ?? defaultOffsets[key]?.[1] ?? 0,
+                offsets[key]?.[2] ?? defaultOffsets[key]?.[2] ?? 0,
+              ];
+              const isOverridden = !!offsets[key] && !eq(value);
+              const isHidden = !!hidden[key];
+              return (
+                <div
+                  key={key}
                   className={
-                    'w-6 h-6 flex items-center justify-center rounded ' +
-                    'border text-[10px] transition-colors ' +
-                    (isHidden
-                      ? 'border-[#2a2a2a] bg-[#1a1a1a] text-[#6b7280] hover:text-white'
-                      : 'border-[#22c55e]/40 bg-[#0a1f0a] text-[#86efac] hover:bg-[#102b10]')
+                    'border border-[#1a1a1a] rounded-md p-2 space-y-1 ' +
+                    (isHidden ? 'bg-[#0e0e0e] opacity-60' : '')
                   }
                 >
-                  {isHidden ? <EyeOffGlyph /> : <EyeOnGlyph />}
-                </button>
-                {isOverridden && (
-                  <button
-                    type="button"
-                    onClick={() => resetOffset(key)}
-                    title="Réinitialiser la position de ce bouton"
-                    className="text-[10px] text-[#6b7280] hover:text-white px-1"
-                  >
-                    ↺
-                  </button>
-                )}
-              </div>
-            </div>
-            <ShowroomVec3Slider
-              label=""
-              value={value}
-              onChange={(v) => setOffset(key, v)}
-              defaultValue={[0, 0, 0]}
-              min={-1.5}
-              max={1.5}
-              step={0.01}
-              unit="m"
-            />
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] uppercase tracking-wider text-[#d4d4d4] font-medium truncate">
+                        {label}
+                        {isHidden && (
+                          <span className="ml-1.5 text-[9px] text-[#6b7280] normal-case tracking-normal">
+                            (masqué)
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[9px] text-[#6b7280] truncate">{hint}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {/* Visibility toggle — eye-on / eye-off. */}
+                      <button
+                        type="button"
+                        onClick={() => toggleVisible(key)}
+                        title={isHidden ? "Afficher ce bouton sur l'app" : "Masquer ce bouton sur l'app"}
+                        className={
+                          'w-6 h-6 flex items-center justify-center rounded ' +
+                          'border text-[10px] transition-colors ' +
+                          (isHidden
+                            ? 'border-[#2a2a2a] bg-[#1a1a1a] text-[#6b7280] hover:text-white'
+                            : 'border-[#22c55e]/40 bg-[#0a1f0a] text-[#86efac] hover:bg-[#102b10]')
+                        }
+                      >
+                        {isHidden ? <EyeOffGlyph /> : <EyeOnGlyph />}
+                      </button>
+                      {isOverridden && (
+                        <button
+                          type="button"
+                          onClick={() => resetOffset(key)}
+                          title="Réinitialiser la position de ce bouton"
+                          className="text-[10px] text-[#6b7280] hover:text-white px-1"
+                        >
+                          ↺
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <ShowroomVec3Slider
+                    label=""
+                    value={value}
+                    onChange={(v) => setOffset(key, v)}
+                    defaultValue={[0, 0, 0]}
+                    min={-1.5}
+                    max={1.5}
+                    step={0.01}
+                    unit="m"
+                  />
+                </div>
+              );
+            })}
           </div>
         );
       })}

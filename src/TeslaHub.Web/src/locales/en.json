@@ -271,7 +271,12 @@
       "sentryOn": "Sentry ON",
       "sentryOff": "Sentry",
       "climateOn": "Climate ON",
-      "climateOff": "Start climate"
+      "climateOff": "Start climate",
+      "defrost": "Defrost",
+      "flash": "Flash lights",
+      "honk": "Honk horn",
+      "userPresent": "Present",
+      "userAbsent": "Absent"
     },
     "vinCopy": "Copy VIN",
     "vinCopied": "VIN copied",

@@ -271,7 +271,12 @@
       "sentryOn": "Wächter EIN",
       "sentryOff": "Wächter",
       "climateOn": "Klima EIN",
-      "climateOff": "Klima starten"
+      "climateOff": "Klima starten",
+      "defrost": "Enteisen",
+      "flash": "Lichthupe",
+      "honk": "Hupen",
+      "userPresent": "Anwesend",
+      "userAbsent": "Abwesend"
     },
     "vinCopy": "VIN kopieren",
     "vinCopied": "VIN kopiert",

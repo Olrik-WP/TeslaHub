@@ -38,6 +38,34 @@ import { OPENINGS_POPPYSEED } from './poppyseedOpenings';
 import { MIRROR_TRACKS_POPPYSEED } from './poppyseedOpenings';
 import { OPENINGS_BAYBERRY } from './bayberryOpenings';
 
+/**
+ * Every floating callout key the viewer knows about. Used to type
+ * `calloutOffsets` and `calloutsHidden` so the compiler catches a
+ * typo'd key at every override site. The canonical source of truth
+ * is `CalloutKey` in `VehicleCallouts.tsx` — this duplicate exists
+ * here to avoid a circular import (vehicleModelConfig → VehicleCallouts
+ * → vehicleModelConfig). Keep the two in sync when adding callouts.
+ */
+export type CalloutKeyName =
+  // Action callouts (clickable)
+  | 'frunk'
+  | 'trunk'
+  | 'chargePort'
+  | 'window'
+  | 'lock'
+  | 'sentry'
+  | 'climate'
+  | 'defrost'
+  | 'flash'
+  | 'honk'
+  // Data callouts (read-only)
+  | 'tpmsFL'
+  | 'tpmsFR'
+  | 'tpmsRL'
+  | 'tpmsRR'
+  | 'userPresent'
+  | 'climateInfo';
+
 /** Tesla internal codename for each car family. */
 export type VehicleModelKey = 'poppyseed' | 'bayberry';
 
@@ -530,19 +558,13 @@ export interface VehicleModelConfig {
    *  position, unchanged. Keyed by the SEMANTIC callout id (not the
    *  underlying GLB node name) so per-model anchor renames don't
    *  invalidate user calibration. */
-  calloutOffsets?: Partial<Record<
-    'frunk' | 'trunk' | 'chargePort' | 'window' | 'lock' | 'sentry' | 'climate',
-    readonly [number, number, number]
-  >>;
+  calloutOffsets?: Partial<Record<CalloutKeyName, readonly [number, number, number]>>;
   /** Per-callout visibility flag — `true` means the callout is HIDDEN
    *  from the viewer. Set per car in the Showroom (Boutons flottants
    *  section). Defaults to undefined for every shipped model (all
    *  callouts visible by default). The Showroom itself still renders
    *  hidden callouts in a barré state so the user can re-enable them. */
-  calloutsHidden?: Partial<Record<
-    'frunk' | 'trunk' | 'chargePort' | 'window' | 'lock' | 'sentry' | 'climate',
-    true
-  >>;
+  calloutsHidden?: Partial<Record<CalloutKeyName, true>>;
 
   // ───────────────────────────────────────────────────────────────────
   // Opening animations — per-model (Tesla ships different keyframes per

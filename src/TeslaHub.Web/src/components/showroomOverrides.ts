@@ -34,6 +34,7 @@
 import {
   PoppyseedConfig,
   VEHICLE_MODELS,
+  type CalloutKeyName,
   type VehicleModelConfig,
   type VehicleModelKey,
   type WheelFallbackPosition,
@@ -160,19 +161,13 @@ export interface ShowroomOverrides {
    *  Convention: +X forward, +Y up, +Z right. Missing keys → default
    *  position (just above the anchor). Keyed by SEMANTIC callout id
    *  so M3-vs-Y anchor renames don't void calibration. */
-  calloutOffsets?: Partial<Record<
-    'frunk' | 'trunk' | 'chargePort' | 'window' | 'lock' | 'sentry' | 'climate',
-    readonly [number, number, number]
-  >>;
+  calloutOffsets?: Partial<Record<CalloutKeyName, readonly [number, number, number]>>;
   /** Per-callout visibility flag — when `true`, the corresponding
    *  floating button is hidden from the 3D viewer (Home, Charging
    *  cards, etc.). The Showroom keeps every hidden callout visible
    *  with a "barré" indicator so the user can still position it and
    *  toggle visibility back on. Missing keys default to "shown". */
-  calloutsHidden?: Partial<Record<
-    'frunk' | 'trunk' | 'chargePort' | 'window' | 'lock' | 'sentry' | 'climate',
-    true
-  >>;
+  calloutsHidden?: Partial<Record<CalloutKeyName, true>>;
   /** Per-slot interior colour overrides. Keys match the `key` field
    *  on each `interiorOverrides` entry in the model's config
    *  (`Interior2`, `Decor`, `cupholder`, `Wing`). Values are RGB hex.
