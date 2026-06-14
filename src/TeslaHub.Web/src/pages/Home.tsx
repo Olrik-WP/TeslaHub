@@ -94,6 +94,36 @@ const DOT_STYLE: React.CSSProperties = {
   boxShadow: '0 0 6px rgba(0,0,0,.4)',
 };
 
+// Progressive placeholder shown only on the very first cold load (before the
+// vehicle status arrives). It mirrors the real Home layout — meta strip, stat
+// row, hero, stat grid, quick actions — so the page feels instant and there's
+// no jarring layout shift once data lands. With the persisted query cache a
+// reopen rehydrates the vehicle immediately, so this is rarely seen.
+function HomeSkeleton() {
+  const block = 'bg-[#1a1a1a] rounded-xl animate-pulse';
+  return (
+    <div className="space-y-4" aria-hidden="true">
+      <div className={`${block} h-12`} />
+      <div className="grid grid-cols-4 gap-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className={`${block} h-16`} />
+        ))}
+      </div>
+      <div className={`${block} h-64`} />
+      <div className="grid grid-cols-2 gap-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className={`${block} h-20`} />
+        ))}
+      </div>
+      <div className="grid grid-cols-4 gap-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className={`${block} h-14`} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Home({ carId }: Props) {
   const navigate = useNavigate();
   const { data: rawVehicle } = useVehicleStatus(carId);
@@ -299,9 +329,9 @@ export default function Home({ carId }: Props) {
 
   if (!vehicle) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
+      <div className="p-4 space-y-4">
         <PullToRefreshIndicator state={ptr} />
-        <div className="text-[#9ca3af] text-lg">{t('home.loadingVehicle')}</div>
+        <HomeSkeleton />
       </div>
     );
   }

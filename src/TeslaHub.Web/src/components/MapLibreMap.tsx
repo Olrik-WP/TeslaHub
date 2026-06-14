@@ -668,6 +668,18 @@ export default function MapLibreMap({
     // which now correctly waits for `mapReady`.
     const map = mapRef.current?.getMap();
     if (!map) return;
+
+    // Some POI icons referenced by the vector tiles (e.g. "office",
+    // "swimming_pool", "gate") are absent from the basemap sprite, which
+    // makes MapLibre spam "Image … could not be loaded" warnings. Register a
+    // 1x1 transparent placeholder for any missing image so the console stays
+    // clean — these POIs simply render without an icon (same visual result
+    // as before, minus the warnings).
+    map.on('styleimagemissing', (e: { id: string }) => {
+      if (map.hasImage(e.id)) return;
+      map.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+    });
+
     if (followLive && livePosition?.latitude != null && livePosition?.longitude != null) {
       map.jumpTo({
         center: [livePosition.longitude, livePosition.latitude],

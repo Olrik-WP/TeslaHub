@@ -1,6 +1,8 @@
 import { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { QueryClient, useQuery, defaultShouldDehydrateQuery } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
 import { isAuthenticated, tryInitialRefresh, setAuthExpiredHandler } from './api/client';
@@ -34,17 +36,42 @@ const Trip = lazy(() => import('./pages/Trip'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Control = lazy(() => import('./pages/Control'));
 
+// Persisted cache lifetime. Restored entries older than this are dropped on
+// boot, so the user never sees badly outdated numbers — they just refetch.
+const PERSIST_MAX_AGE = 24 * 60 * 60 * 1000;
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       refetchOnWindowFocus: true,
       refetchIntervalInBackground: false,
-      gcTime: 10 * 60 * 1000,
+      // gcTime must be >= the persistence maxAge, otherwise restored queries
+      // would be evicted from memory before the persister can rehydrate them.
+      gcTime: PERSIST_MAX_AGE,
       staleTime: STALE_TIME.live,
     },
   },
 });
+
+// Snapshot the React Query cache to localStorage so a reopen paints the
+// previous session's data instantly (stale-while-revalidate) instead of a
+// cold spinner. Only successful queries are persisted (RQ default); tokens
+// live in cookies/memory and are never written here. `buster` invalidates
+// the whole snapshot on incompatible deploys.
+const persister = createSyncStoragePersister({
+  storage: window.localStorage,
+  key: 'teslahub-query-cache',
+});
+
+// Real-time queries that must NEVER be restored from disk: the live vehicle
+// status and the Fleet control state (doors / trunk / lock / charging). These
+// always start fresh on boot (refetch + live SSE stream) so the UI can never
+// briefly show a stale "trunk open" / "unlocked" state from a previous
+// session. Only the slow historical/aggregate data (stats, costs, charts,
+// drives) is persisted — that's where the perceived-speed win actually is, and
+// historical data doesn't change after the fact.
+const VOLATILE_QUERY_PREFIXES = new Set(['vehicle', 'vehicleControlState']);
 
 function AuthExpiredBridge() {
   const navigate = useNavigate();
@@ -204,7 +231,19 @@ function AppLayout() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{
+          persister,
+          maxAge: PERSIST_MAX_AGE,
+          buster: 'th-1',
+          dehydrateOptions: {
+            shouldDehydrateQuery: (query) =>
+              defaultShouldDehydrateQuery(query) &&
+              !VOLATILE_QUERY_PREFIXES.has(query.queryKey[0] as string),
+          },
+        }}
+      >
         <BrowserRouter>
           <AuthExpiredBridge />
           <Suspense fallback={<div className="flex items-center justify-center h-dvh text-[#9ca3af]">{i18n.t('app.loading')}</div>}>
@@ -216,7 +255,7 @@ export default function App() {
             </Routes>
           </Suspense>
         </BrowserRouter>
-      </QueryClientProvider>
+      </PersistQueryClientProvider>
     </ErrorBoundary>
   );
 }
