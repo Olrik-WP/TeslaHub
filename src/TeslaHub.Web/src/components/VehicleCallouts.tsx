@@ -502,10 +502,16 @@ export function LiveChargeInfoCallout({ info }: LiveChargeInfoCalloutProps) {
   const { scene } = useThree();
   const anchorRef = useRef<THREE.Object3D | null>(null);
   const missingLoggedRef = useRef(false);
+  // Per-component grace timer: timestamp of the first failed lookup. We can't
+  // use the R3F clock for this — it's a global monotonic timer that never
+  // resets, so after the app has run a few seconds it would flag every
+  // transient miss during a model swap. This resets on every model/anchor swap.
+  const lookupStartRef = useRef<number | null>(null);
 
   useEffect(() => {
     anchorRef.current = null;
     missingLoggedRef.current = false;
+    lookupStartRef.current = null;
   }, [anchorName, cfg]);
 
   const lineGeom = useMemo(() => {
@@ -517,15 +523,20 @@ export function LiveChargeInfoCallout({ info }: LiveChargeInfoCalloutProps) {
   const tip = useRef(new THREE.Vector3());
   const top = useRef(new THREE.Vector3());
 
-  useFrame(({ clock }) => {
+  useFrame(() => {
     if (!anchorRef.current) {
       anchorRef.current = scene.getObjectByName(anchorName) ?? null;
       if (!anchorRef.current) {
-        if (!missingLoggedRef.current && clock.getElapsedTime() > 2) {
+        if (lookupStartRef.current == null) lookupStartRef.current = performance.now();
+        if (
+          !missingLoggedRef.current &&
+          import.meta.env.DEV &&
+          performance.now() - lookupStartRef.current > 5000
+        ) {
           missingLoggedRef.current = true;
           // eslint-disable-next-line no-console
           console.warn(
-            `[LiveChargeInfoCallout] anchor "${anchorName}" not found after 2s`,
+            `[LiveChargeInfoCallout] anchor "${anchorName}" not found after 5s`,
           );
         }
         return;
@@ -721,9 +732,15 @@ function Callout({ calloutKey, anchorName, anchorPosition, label, icon, variant,
   // So the previous "if (!anchorRef.current.parent) reset" was useless —
   // it never tripped. Hooking onto cfg here gives a bulletproof signal
   // that "everything in the scene has just been swapped, drop caches".
+  // Per-component grace timer (see LiveChargeInfoCallout for the rationale):
+  // the R3F clock is global and never resets, so it can't be used to gauge how
+  // long THIS callout has been waiting for its anchor across model swaps.
+  const lookupStartRef = useRef<number | null>(null);
+
   useEffect(() => {
     anchorRef.current = null;
     missingLoggedRef.current = false;
+    lookupStartRef.current = null;
   }, [anchorName, cfg]);
 
   const lineGeom = useMemo(() => {
@@ -745,7 +762,7 @@ function Callout({ calloutKey, anchorName, anchorPosition, label, icon, variant,
   // invalidate user calibration.
   const offset = cfg.calloutOffsets?.[calloutKey] ?? null;
 
-  useFrame(({ clock }) => {
+  useFrame(() => {
     // Two anchor modes coexist. NAMED anchor (the original mode) does
     // a one-shot scene.getObjectByName() lookup and then tracks the
     // node's live world position (= follows opening animations). FIXED
@@ -760,14 +777,20 @@ function Callout({ calloutKey, anchorName, anchorPosition, label, icon, variant,
       if (!anchorRef.current) {
         anchorRef.current = scene.getObjectByName(anchorName) ?? null;
         if (!anchorRef.current) {
-          // Log once after ~2s if still unresolved — helps spot a real
-          // missing anchor (renamed/removed in a GLB rebuild) vs a normal
-          // pre-load delay.
-          if (!missingLoggedRef.current && clock.getElapsedTime() > 2) {
+          // Log once (dev only) if still unresolved 5s after THIS callout
+          // started looking — helps spot a genuinely missing anchor
+          // (renamed/removed in a GLB rebuild) without false-positives
+          // during the heavy GLB load/parse or a model swap.
+          if (lookupStartRef.current == null) lookupStartRef.current = performance.now();
+          if (
+            !missingLoggedRef.current &&
+            import.meta.env.DEV &&
+            performance.now() - lookupStartRef.current > 5000
+          ) {
             missingLoggedRef.current = true;
             // eslint-disable-next-line no-console
             console.warn(
-              `[VehicleCallouts] anchor "${anchorName}" not found in scene after 2s ` +
+              `[VehicleCallouts] anchor "${anchorName}" not found in scene after 5s ` +
                 '(check the GLB export — node may have been stripped).',
             );
           }
