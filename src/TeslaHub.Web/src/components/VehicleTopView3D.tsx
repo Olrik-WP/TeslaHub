@@ -44,6 +44,11 @@ import {
 import { useResolvedModelConfig, wrapPngUrl } from './useResolvedModelConfig';
 import type { ShowroomOverrides } from './showroomOverrides';
 
+// Verbose showroom / 3D diagnostics. Kept for calibration work but silenced
+// in production builds so the browser console stays clean.
+// eslint-disable-next-line no-console
+const dbg3d: typeof console.log = (...args) => { if (import.meta.env.DEV) console.info(...args); };
+
 // Charging handle is universal across Tesla models — same physical part
 // regardless of which car it's plugged into. Not in the per-model config.
 const HANDLE_URL = '/models/charger_handle.glb';
@@ -658,7 +663,7 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
           }
         });
         // eslint-disable-next-line no-console
-        console.log(
+        dbg3d(
           `[Poppyseed3D] wheel polish: alloy=${alloyCount} plastic=${plasticCount} | ` +
             `materials seen: ${seenMats.join(', ')} | ` +
             `clearcoat alloy=${finish.alloyClearcoat.toFixed(2)} ` +
@@ -760,7 +765,7 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     }
 
     // eslint-disable-next-line no-console
-    console.log(
+    dbg3d(
       `[Poppyseed3D] found ${wheelCandidates.length} node(s) matching /wheel/i:`,
       wheelCandidates,
     );
@@ -1412,15 +1417,15 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     });
     if (roofFixed + windowFixed > 0) {
       // eslint-disable-next-line no-console
-      console.log('[Poppyseed3D] glass meshes:', glassDebug);
+      dbg3d('[Poppyseed3D] glass meshes:', glassDebug);
     }
     if (paintFixed > 0) {
       // eslint-disable-next-line no-console
-      console.log('[Poppyseed3D] painted meshes:', paintDebug);
+      dbg3d('[Poppyseed3D] painted meshes:', paintDebug);
     }
     if (floorFixed > 0) {
       // eslint-disable-next-line no-console
-      console.log(`[Poppyseed3D] floor shadow meshes fixed: ${floorFixed}`);
+      dbg3d(`[Poppyseed3D] floor shadow meshes fixed: ${floorFixed}`);
     }
 
     let wheelsAttached = 0;
@@ -1481,7 +1486,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
             stash.set(pos.id, wrapper);
             if (stash.size === 1) {
               // eslint-disable-next-line no-console
-              console.log(
+              dbg3d(
                 `[Poppyseed3D] wheel native: ` +
                   `size=(${wheelSize.x.toFixed(3)}, ${wheelSize.y.toFixed(3)}, ` +
                   `${wheelSize.z.toFixed(3)}) ` +
@@ -1506,7 +1511,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
     // eslint-disable-next-line no-console
-    console.log(
+    dbg3d(
       `[Poppyseed3D] removed=${toRemove.length} | wheelsAvailable=${wheelsAvailable} | ` +
         `wheelsMode=${wheelMode} | wheelsAttached=${wheelsAttached}/4 | ` +
         `transparentFixed=${transparentFixed} | roofFixed=${roofFixed} | windowFixed=${windowFixed} | ` +
@@ -1577,14 +1582,14 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       for (const mesh of paintMeshesWithoutUv1) {
         if (mesh.geometry) ensureZeroUv1(mesh.geometry);
       }
-      console.log(
+      dbg3d(
         `[Wrap] Patched ${paintMeshesWithoutUv1.length} Paint mesh(es) lacking ` +
         `TEXCOORD_1 with zero-uv1 fallback (Tesla skybox parity): ` +
         paintMeshesWithoutUv1.map((m) => m.name || '(unnamed)').join(', '),
       );
     }
 
-    console.log(
+    dbg3d(
       `[Wrap] Loading wrap → ${targets.length} Paint mat(s), ` +
       `${paintMeshes.length} mesh(es) total ` +
       `(${paintMeshes.length - paintMeshesWithoutUv1.length} native uv1, ` +
@@ -1613,7 +1618,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         mat.color.setHex(cfg.bodyPaintColor);
         installTeslaWrapShader(mat, tex, wrapFinish);
       }
-      console.log(
+      dbg3d(
         `[Wrap] Applied opaque_skybox.shader port on ${uniqueTargets.length} ` +
         `unique Paint material(s) (channel=1, brightness=${(wrapFinish?.brightness ?? DEFAULT_WRAP_BRIGHTNESS).toFixed(2)}, ` +
         `rough→${(wrapFinish?.roughness ?? DEFAULT_WRAP_ROUGHNESS_TARGET).toFixed(2)}, ` +
@@ -1789,7 +1794,7 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
         if (w) {
           setEndWorld(w);
           // eslint-disable-next-line no-console
-          console.log(
+          dbg3d(
             `[Vehicle3D] charge port anchor "${name}" resolved at world ` +
               `(${w.x.toFixed(3)}, ${w.y.toFixed(3)}, ${w.z.toFixed(3)}) ` +
               `after ${retriesRef.current} frame(s).`,
@@ -2342,7 +2347,7 @@ function useAssetAvailable(url: string): boolean | null {
       .then((ok) => {
         if (cancelled) return;
         // eslint-disable-next-line no-console
-        console.log(`[Poppyseed3D] probe ${url} → available=${ok}`);
+        dbg3d(`[Poppyseed3D] probe ${url} → available=${ok}`);
         setState({ url, available: ok });
       })
       .catch((err) => {
@@ -2466,10 +2471,6 @@ export default function VehicleTopView3D({ vehicle, localOverrides, showroomMode
     wrapMetalness,
     wrapEnvMapIntensity,
   ]);
-  // eslint-disable-next-line no-console
-  console.log(
-    `[Wrap] outer resolved — override=${wrapOverride ? wrapOverride.slice(0, 40) + '…' : 'none'} | wrapExists=${wrapExists} | rotation=${wrapRotation}° | wrapUrl=${wrapValue.url ? wrapValue.url.slice(0, 60) + '…' : 'null'}`,
-  );
 
   return (
     <VehicleModelContext.Provider value={modelConfig}>
@@ -2600,7 +2601,7 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
   // paired, MQTT disconnected, VIN mismatch between TeslaMate and Fleet).
   useEffect(() => {
     // eslint-disable-next-line no-console
-    console.log('[VehicleTopView3D] callouts gating:', {
+    dbg3d('[VehicleTopView3D] callouts gating:', {
       vin: vehicle.vin,
       vehicleId,
       fleetReady,

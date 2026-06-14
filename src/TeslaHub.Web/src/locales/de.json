@@ -651,6 +651,10 @@
     "usableLevelPct": "Nutzbarer Stand (%)",
     "moduleTemp": "Batteriemodul-Temp.",
     "moduleTempAvg": "Ø",
+    "moduleTempAvgLong": "Durchschnitt",
+    "moduleTempMin": "Min",
+    "moduleTempMax": "Max",
+    "moduleTempHint": "Batteriemodul-Temperaturen aus Fleet Telemetry. Der Verlauf wird nur aufgezeichnet, während das Fahrzeug Telemetrie sendet.",
     "notAvailable": "Nicht verfügbar",
     "noData": "Keine Daten für diesen Zeitraum."
   },

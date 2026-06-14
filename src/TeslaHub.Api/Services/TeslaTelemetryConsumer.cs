@@ -1,9 +1,12 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
 using MQTTnet;
 using MQTTnet.Packets;
 using MQTTnet.Protocol;
+using TeslaHub.Api.Data;
+using TeslaHub.Api.Models;
 using TeslaHub.Api.TeslaMate;
 
 namespace TeslaHub.Api.Services;
@@ -42,6 +45,19 @@ public sealed class TeslaTelemetryConsumer : BackgroundService
     // lifetime of the install, so we only hit Postgres once per VIN to bridge
     // Fleet Telemetry battery temps into the carId-keyed live data cache.
     private readonly ConcurrentDictionary<string, int?> _carIdByVin = new(StringComparer.OrdinalIgnoreCase);
+
+    // Throttling for battery module temperature persistence: keep the history
+    // table small. We store a row at most every PersistMinInterval, plus on a
+    // meaningful change (>= PersistChangeThresholdC) but no faster than
+    // PersistMinIntervalOnChange. Old rows are pruned on a retention window.
+    private static readonly TimeSpan PersistMinInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan PersistMinIntervalOnChange = TimeSpan.FromSeconds(60);
+    private const double PersistChangeThresholdC = 0.5;
+    private static readonly TimeSpan RetentionWindow = TimeSpan.FromDays(365);
+    private static readonly TimeSpan PruneInterval = TimeSpan.FromHours(24);
+
+    private readonly ConcurrentDictionary<int, (DateTime At, double Min, double Max)> _lastPersisted = new();
+    private DateTime _lastPruneAt = DateTime.MinValue;
 
     public TeslaTelemetryConsumer(
         IServiceScopeFactory scopeFactory,
@@ -252,6 +268,67 @@ public sealed class TeslaTelemetryConsumer : BackgroundService
             state.ModuleTempMaxC,
             state.NumModuleTempMin,
             state.NumModuleTempMax);
+
+        await PersistBatteryTempsAsync(carId.Value, state.ModuleTempMinC, state.ModuleTempMaxC, cancellationToken);
+    }
+
+    private async Task PersistBatteryTempsAsync(int carId, double? minC, double? maxC, CancellationToken cancellationToken)
+    {
+        // Need both ends to store a meaningful sample.
+        if (minC is not double min || maxC is not double max)
+            return;
+
+        var now = DateTime.UtcNow;
+        if (_lastPersisted.TryGetValue(carId, out var last))
+        {
+            var elapsed = now - last.At;
+            var changed = Math.Abs(min - last.Min) >= PersistChangeThresholdC
+                       || Math.Abs(max - last.Max) >= PersistChangeThresholdC;
+            var due = elapsed >= PersistMinInterval
+                   || (changed && elapsed >= PersistMinIntervalOnChange);
+            if (!due)
+                return;
+        }
+
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Set<BatteryModuleTempSample>().Add(new BatteryModuleTempSample
+            {
+                CarId = carId,
+                MinC = min,
+                MaxC = max,
+                RecordedAt = now,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+            _lastPersisted[carId] = (now, min, max);
+
+            await PruneIfDueAsync(db, now, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to persist battery module temps for car {CarId}", carId);
+        }
+    }
+
+    private async Task PruneIfDueAsync(AppDbContext db, DateTime now, CancellationToken cancellationToken)
+    {
+        if (now - _lastPruneAt < PruneInterval)
+            return;
+        _lastPruneAt = now;
+
+        var cutoff = now - RetentionWindow;
+        try
+        {
+            await db.Set<BatteryModuleTempSample>()
+                .Where(s => s.RecordedAt < cutoff)
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to prune old battery module temp samples");
+        }
     }
 
     private async Task<int?> ResolveCarIdAsync(string vin, CancellationToken cancellationToken)

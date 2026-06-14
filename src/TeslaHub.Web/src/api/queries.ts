@@ -487,12 +487,21 @@ export interface ProjectedRangePoint {
   batteryLevel: number | null;
 }
 
+export interface BatteryTempPoint {
+  bucket: string;
+  minC: number;
+  maxC: number;
+  avgC: number;
+}
+
 export const getBatteryHealth = (carId: number) =>
   api<BatteryHealthData>(`/battery/${carId}/health`);
 export const getChargeLevelTimeSeries = (carId: number, days: number) =>
   api<ChargeLevelPoint[]>(`/battery/${carId}/charge-level?days=${days}`);
 export const getProjectedRange = (carId: number, days: number) =>
   api<ProjectedRangePoint[]>(`/battery/${carId}/projected-range?days=${days}`);
+export const getBatteryTempHistory = (carId: number, days: number) =>
+  api<BatteryTempPoint[]>(`/vehicle/${carId}/battery-temp-history?days=${days}`);
 
 // ─── Efficiency ──────────────────────────────────────────────────
 export interface EfficiencySummary {

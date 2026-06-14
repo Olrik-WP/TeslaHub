@@ -651,6 +651,10 @@
     "usableLevelPct": "Niveau utilisable (%)",
     "moduleTemp": "Temp. modules batterie",
     "moduleTempAvg": "Moy.",
+    "moduleTempAvgLong": "Moyenne",
+    "moduleTempMin": "Min",
+    "moduleTempMax": "Max",
+    "moduleTempHint": "Températures des modules batterie via Fleet Telemetry. L'historique n'est enregistré que lorsque le véhicule diffuse la télémétrie.",
     "notAvailable": "Non disponible",
     "noData": "Aucune donnée pour cette période."
   },

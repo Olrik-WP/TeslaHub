@@ -24,6 +24,7 @@ public class AppDbContext : DbContext
     public DbSet<FleetApiUsage> FleetApiUsages => Set<FleetApiUsage>();
     public DbSet<LoadSheddingProfile> LoadSheddingProfiles => Set<LoadSheddingProfile>();
     public DbSet<LoadSheddingEvent> LoadSheddingEvents => Set<LoadSheddingEvent>();
+    public DbSet<BatteryModuleTempSample> BatteryModuleTempSamples => Set<BatteryModuleTempSample>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -101,6 +102,9 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<LoadSheddingEvent>()
             .HasIndex(e => new { e.TeslaVehicleId, e.At });
+
+        modelBuilder.Entity<BatteryModuleTempSample>()
+            .HasIndex(s => new { s.CarId, s.RecordedAt });
 
         modelBuilder.Entity<GlobalSettings>().HasData(new GlobalSettings
         {

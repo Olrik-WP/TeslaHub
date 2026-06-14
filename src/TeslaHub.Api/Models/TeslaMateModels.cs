@@ -369,6 +369,17 @@ public record ChargeLevelPointDto
     public double? UsableBatteryLevel { get; init; }
 }
 
+// Battery module temperature history (Fleet Telemetry, stored in TeslaHub DB).
+// Bucketed server-side so long ranges stay light. Min/Max are the temperature
+// envelope over the bucket; Avg is the mean module mid-temperature.
+public record BatteryTempPointDto
+{
+    public DateTime Bucket { get; init; }
+    public double MinC { get; init; }
+    public double MaxC { get; init; }
+    public double AvgC { get; init; }
+}
+
 public record ProjectedRangePointDto
 {
     public DateTime Date { get; init; }

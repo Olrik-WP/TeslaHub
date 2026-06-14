@@ -3,11 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useUnits } from '../hooks/useUnits';
 import { useVehicleStatus } from '../hooks/useVehicle';
-import { getBatteryHealth, getChargeLevelTimeSeries, getProjectedRange } from '../api/queries';
+import { getBatteryHealth, getChargeLevelTimeSeries, getProjectedRange, getBatteryTempHistory } from '../api/queries';
 import StatCard from '../components/StatCard';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 
-type Tab = 'health' | 'chargeLevel' | 'projectedRange';
+type Tab = 'health' | 'chargeLevel' | 'projectedRange' | 'moduleTemp';
 
 export default function Battery({ carId }: { carId?: number }) {
   const { t } = useTranslation();
@@ -37,12 +37,20 @@ export default function Battery({ carId }: { carId?: number }) {
     staleTime: 5 * 60_000,
   });
 
+  const { data: moduleTempHistory } = useQuery({
+    queryKey: ['batteryTempHistory', carId, days],
+    queryFn: () => getBatteryTempHistory(carId!, days),
+    enabled: !!carId && tab === 'moduleTemp',
+    staleTime: 5 * 60_000,
+  });
+
   if (!carId) return null;
 
   const tabs: { key: Tab; labelKey: string }[] = [
     { key: 'health', labelKey: 'batteryPage.health' },
     { key: 'chargeLevel', labelKey: 'batteryPage.chargeLevel' },
     { key: 'projectedRange', labelKey: 'batteryPage.projectedRange' },
+    { key: 'moduleTemp', labelKey: 'batteryPage.moduleTemp' },
   ];
 
   const DAYS_OPTIONS = [30, 90, 180, 365];
@@ -179,6 +187,51 @@ export default function Battery({ carId }: { carId?: number }) {
                   <Tooltip contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8 }} labelFormatter={fmtDate} />
                   <Line yAxisId="range" type="monotone" dataKey="projectedRangeKm" stroke="#3b82f6" dot={false} strokeWidth={2} name={`${t('batteryPage.projectedRange')} (${u.distanceUnit})`} />
                   <Line yAxisId="soc" type="monotone" dataKey="batteryLevel" stroke="#22c55e" dot={false} strokeWidth={1} name="SoC %" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="text-center text-[#9ca3af] py-12">{t('batteryPage.noData')}</div>
+          )}
+        </>
+      )}
+
+      {tab === 'moduleTemp' && (
+        <>
+          <div className="flex gap-1 flex-wrap">
+            {DAYS_OPTIONS.map((d) => (
+              <button
+                key={d}
+                onClick={() => setDays(d)}
+                className={`px-3 py-1.5 text-xs rounded-lg ${days === d ? 'bg-[#2a2a2a] text-white' : 'text-[#9ca3af]'}`}
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-[#6b7280]">{t('batteryPage.moduleTempHint')}</p>
+          {moduleTempHistory && moduleTempHistory.length > 0 ? (
+            <div className="bg-[#141414] border border-[#2a2a2a] rounded-xl p-4">
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart
+                  data={moduleTempHistory.map((p) => ({
+                    bucket: p.bucket,
+                    min: u.convertTemp(p.minC),
+                    max: u.convertTemp(p.maxC),
+                    avg: u.convertTemp(p.avgC),
+                  }))}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
+                  <XAxis dataKey="bucket" tick={{ fill: '#9ca3af', fontSize: 10 }} tickFormatter={fmtDate} />
+                  <YAxis tick={{ fill: '#9ca3af', fontSize: 10 }} domain={['auto', 'auto']} unit={u.tempUnit} width={48} />
+                  <Tooltip
+                    contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8 }}
+                    labelFormatter={(v) => new Date(String(v)).toLocaleString()}
+                    formatter={(value) => `${Number(value).toFixed(1)}${u.tempUnit}`}
+                  />
+                  <Line type="monotone" dataKey="max" stroke="#ef4444" dot={false} strokeWidth={1.5} name={t('batteryPage.moduleTempMax')} />
+                  <Line type="monotone" dataKey="avg" stroke="#06b6d4" dot={false} strokeWidth={1.5} name={t('batteryPage.moduleTempAvgLong')} />
+                  <Line type="monotone" dataKey="min" stroke="#3b82f6" dot={false} strokeWidth={1.5} name={t('batteryPage.moduleTempMin')} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

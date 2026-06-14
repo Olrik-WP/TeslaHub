@@ -1,5 +1,8 @@
 using System.Text;
 using System.Text.Json;
+using Dapper;
+using Microsoft.EntityFrameworkCore;
+using TeslaHub.Api.Data;
 using TeslaHub.Api.Models;
 using TeslaHub.Api.Services;
 using TeslaHub.Api.TeslaMate;
@@ -31,6 +34,31 @@ public static class VehicleEndpoints
 
             var merged = MergeLiveData(vehicle, computed, mqtt.GetLiveData(carId), mqtt.IsConnected);
             return Results.Ok(merged);
+        });
+
+        group.MapGet("/{carId:int}/battery-temp-history", async (int carId, int? days, AppDbContext db, CancellationToken ct) =>
+        {
+            var window = Math.Clamp(days ?? 30, 1, 365);
+            var cutoff = DateTime.UtcNow.AddDays(-window);
+            // Bucket granularity scales with the range so a year of samples
+            // still returns a chart-friendly number of points.
+            var unit = window <= 2 ? "minute" : window <= 31 ? "hour" : "day";
+
+            var conn = db.Database.GetDbConnection();
+            var points = await conn.QueryAsync<BatteryTempPointDto>(new CommandDefinition(
+                """
+                SELECT date_trunc(@unit, "RecordedAt") AS "Bucket",
+                       MIN("MinC") AS "MinC",
+                       MAX("MaxC") AS "MaxC",
+                       AVG(("MinC" + "MaxC") / 2.0) AS "AvgC"
+                FROM "BatteryModuleTempSamples"
+                WHERE "CarId" = @carId AND "RecordedAt" >= @cutoff
+                GROUP BY date_trunc(@unit, "RecordedAt")
+                ORDER BY "Bucket"
+                """,
+                new { unit, carId, cutoff },
+                cancellationToken: ct));
+            return Results.Ok(points);
         });
 
         group.MapGet("/{carId:int}/live-stream", async (int carId, MqttLiveDataService mqtt, HttpContext ctx, CancellationToken ct) =>

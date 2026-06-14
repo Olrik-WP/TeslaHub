@@ -773,8 +773,9 @@ function Callout({ calloutKey, anchorName, anchorPosition, label, icon, variant,
           }
           return;
         }
-        // eslint-disable-next-line no-console
-        console.log(`[VehicleCallouts] anchor "${anchorName}" resolved`);
+        if (import.meta.env.DEV)
+          // eslint-disable-next-line no-console
+          console.info(`[VehicleCallouts] anchor "${anchorName}" resolved`);
       }
       // matrixWorld is updated by R3F before frame callbacks fire, so we
       // can read the live world position even during opening animations.

@@ -334,6 +334,33 @@ public class CarShowroomWrap
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>
+/// A throttled time-series sample of the battery module temperatures, fed
+/// exclusively by the Fleet Telemetry stream (signals ModuleTempMin /
+/// ModuleTempMax). Stored in TeslaHub's own database (TeslaMate does not
+/// track these) so the Battery page can draw a history chart.
+///
+/// Writes are throttled in <see cref="Services.TeslaTelemetryConsumer"/>
+/// (at most one row every few minutes, plus on a meaningful change) and old
+/// rows are pruned on a retention window, so the table stays small.
+/// </summary>
+public class BatteryModuleTempSample
+{
+    [Key]
+    public int Id { get; set; }
+
+    /// <summary>TeslaMate-side car id (same identifier used everywhere else).</summary>
+    public int CarId { get; set; }
+
+    /// <summary>Coldest battery module temperature, in Celsius.</summary>
+    public double MinC { get; set; }
+
+    /// <summary>Hottest battery module temperature, in Celsius.</summary>
+    public double MaxC { get; set; }
+
+    public DateTime RecordedAt { get; set; } = DateTime.UtcNow;
+}
+
 // ─── DTOs ──────────────────────────────────────────────────────
 
 public record ChargingLocationCreateDto
