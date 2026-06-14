@@ -225,6 +225,12 @@ public sealed class TeslaPairingService
             ["VehicleSpeed"] = new TelemetryField(10),
             ["Locked"] = new TelemetryField(60),
             ["DoorState"] = new TelemetryField(30),
+            // Battery module temperatures (thermistor min/max + module index).
+            // Push-only over the telemetry websocket — no Fleet API HTTP cost.
+            ["ModuleTempMin"] = new TelemetryField(60),
+            ["ModuleTempMax"] = new TelemetryField(60),
+            ["NumModuleTempMin"] = new TelemetryField(60),
+            ["NumModuleTempMax"] = new TelemetryField(60),
         };
 
         var byAccount = vehicles

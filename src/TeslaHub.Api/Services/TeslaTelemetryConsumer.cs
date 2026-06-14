@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text;
 using MQTTnet;
 using MQTTnet.Packets;
 using MQTTnet.Protocol;
+using TeslaHub.Api.TeslaMate;
 
 namespace TeslaHub.Api.Services;
 
@@ -32,16 +34,27 @@ public sealed class TeslaTelemetryConsumer : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TeslaTelemetryConsumer> _logger;
+    private readonly MqttLiveDataService _liveData;
+    private readonly TeslaMateConnectionFactory _teslaMate;
     private readonly ConcurrentDictionary<string, VehicleSignalState> _state = new();
+
+    // VIN to TeslaMate carId mapping cache. The mapping is stable for the
+    // lifetime of the install, so we only hit Postgres once per VIN to bridge
+    // Fleet Telemetry battery temps into the carId-keyed live data cache.
+    private readonly ConcurrentDictionary<string, int?> _carIdByVin = new(StringComparer.OrdinalIgnoreCase);
 
     public TeslaTelemetryConsumer(
         IServiceScopeFactory scopeFactory,
         IConfiguration configuration,
-        ILogger<TeslaTelemetryConsumer> logger)
+        ILogger<TeslaTelemetryConsumer> logger,
+        MqttLiveDataService liveData,
+        TeslaMateConnectionFactory teslaMate)
     {
         _scopeFactory = scopeFactory;
         _configuration = configuration;
         _logger = logger;
+        _liveData = liveData;
+        _teslaMate = teslaMate;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -156,9 +169,11 @@ public sealed class TeslaTelemetryConsumer : BackgroundService
         if (string.Equals(category, "v", StringComparison.OrdinalIgnoreCase))
         {
             var field = rest[2];
-            HandleSignal(vin, field, raw, out var snapshot);
+            HandleSignal(vin, field, raw, out var snapshot, out var moduleTempChanged);
             if (snapshot is not null)
                 await DispatchAsync(snapshot, cancellationToken);
+            if (moduleTempChanged)
+                await BridgeBatteryTempsAsync(vin, cancellationToken);
             return;
         }
 
@@ -181,9 +196,10 @@ public sealed class TeslaTelemetryConsumer : BackgroundService
         }
     }
 
-    private void HandleSignal(string vin, string field, string raw, out TeslaTelemetryMessage? snapshot)
+    private void HandleSignal(string vin, string field, string raw, out TeslaTelemetryMessage? snapshot, out bool moduleTempChanged)
     {
         snapshot = null;
+        moduleTempChanged = false;
         var state = _state.GetOrAdd(vin, _ => new VehicleSignalState());
 
         switch (field)
@@ -200,9 +216,63 @@ public sealed class TeslaTelemetryConsumer : BackgroundService
                 state.DoorState = TrimQuotes(raw);
                 snapshot = state.ToTelemetryMessage(vin);
                 break;
+            // Battery module temperatures. These feed the live data cache for
+            // UI display only (not security alerts), so they never build a
+            // TeslaTelemetryMessage snapshot.
+            case "ModuleTempMax":
+                state.ModuleTempMaxC = ParseDouble(raw);
+                moduleTempChanged = true;
+                break;
+            case "ModuleTempMin":
+                state.ModuleTempMinC = ParseDouble(raw);
+                moduleTempChanged = true;
+                break;
+            case "NumModuleTempMax":
+                state.NumModuleTempMax = ParseInt(raw);
+                moduleTempChanged = true;
+                break;
+            case "NumModuleTempMin":
+                state.NumModuleTempMin = ParseInt(raw);
+                moduleTempChanged = true;
+                break;
             default:
                 return;
         }
+    }
+
+    private async Task BridgeBatteryTempsAsync(string vin, CancellationToken cancellationToken)
+    {
+        var carId = await ResolveCarIdAsync(vin, cancellationToken);
+        if (carId is null) return;
+        if (!_state.TryGetValue(vin, out var state)) return;
+
+        _liveData.OverlayBatteryModuleTemps(
+            carId.Value,
+            state.ModuleTempMinC,
+            state.ModuleTempMaxC,
+            state.NumModuleTempMin,
+            state.NumModuleTempMax);
+    }
+
+    private async Task<int?> ResolveCarIdAsync(string vin, CancellationToken cancellationToken)
+    {
+        if (_carIdByVin.TryGetValue(vin, out var cached)) return cached;
+
+        int? carId;
+        try
+        {
+            carId = await _teslaMate.GetCarIdByVinAsync(vin);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to resolve TeslaMate carId for VIN {Vin}", vin);
+            return null;
+        }
+
+        // Only cache positive resolutions — a null result can legitimately
+        // become non-null after TeslaMate ingests the car on its first sync.
+        if (carId.HasValue) _carIdByVin[vin] = carId;
+        return carId;
     }
 
     private async Task DispatchAsync(TeslaTelemetryMessage message, CancellationToken cancellationToken)
@@ -222,11 +292,21 @@ public sealed class TeslaTelemetryConsumer : BackgroundService
         _ => null,
     };
 
+    private static double? ParseDouble(string raw) =>
+        double.TryParse(TrimQuotes(raw), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : null;
+
+    private static int? ParseInt(string raw) =>
+        int.TryParse(TrimQuotes(raw), NumberStyles.Integer, CultureInfo.InvariantCulture, out var i) ? i : null;
+
     private sealed class VehicleSignalState
     {
         public string? SentryMode { get; set; }
         public bool? Locked { get; set; }
         public string? DoorState { get; set; }
+        public double? ModuleTempMinC { get; set; }
+        public double? ModuleTempMaxC { get; set; }
+        public int? NumModuleTempMin { get; set; }
+        public int? NumModuleTempMax { get; set; }
 
         public TeslaTelemetryMessage ToTelemetryMessage(string vin)
         {

@@ -37,6 +37,8 @@ export interface LiveStreamData {
   activeRouteLatitude: number | null;
   activeRouteLongitude: number | null;
   activeRouteError: string | null;
+  moduleTempMinC: number | null;
+  moduleTempMaxC: number | null;
   mqttConnected: boolean;
   lastUpdated: string;
 }

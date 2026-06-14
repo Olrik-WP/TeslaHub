@@ -306,6 +306,7 @@
     "firmware": "Firmware",
     "extTemp": "Außentemp.",
     "intTemp": "Innentemp.",
+    "batteryModuleTemp": "Batteriemodul-Temp.",
     "state": "Status",
     "avgConsumption": "Ø Verbrauch",
     "storedEnergy": "Gespeicherte Energie",
@@ -648,6 +649,9 @@
     "capacityByMileage": "Kapazität nach Kilometerstand",
     "batteryLevelPct": "Batteriestand (%)",
     "usableLevelPct": "Nutzbarer Stand (%)",
+    "moduleTemp": "Batteriemodul-Temp.",
+    "moduleTempAvg": "Ø",
+    "notAvailable": "Nicht verfügbar",
     "noData": "Keine Daten für diesen Zeitraum."
   },
   "efficiencyPage": {

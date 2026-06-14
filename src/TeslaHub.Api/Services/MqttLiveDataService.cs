@@ -82,6 +82,17 @@ public class MqttLiveData
     public int? Elevation { get; set; }
     public string? Geofence { get; set; }
 
+    // Battery module temperatures (Fleet Telemetry only).
+    // These are thermistor min/max across the battery modules, not a single
+    // "pack temperature". Populated exclusively by the Fleet Telemetry
+    // bridge (OverlayBatteryModuleTemps) — TeslaMate's MQTT firehose and the
+    // Fleet API vehicle_data blob do not expose them, so they stay null when
+    // Fleet Telemetry is not configured.
+    public double? ModuleTempMinC { get; set; }
+    public double? ModuleTempMaxC { get; set; }
+    public int? NumModuleTempMin { get; set; }
+    public int? NumModuleTempMax { get; set; }
+
     // Active navigation route (parsed from teslamate/cars/{id}/active_route JSON blob).
     // All fields null when no active route or when the payload is { "error": "..." }.
     public string? ActiveRouteDestination { get; set; }
@@ -180,6 +191,30 @@ public class MqttLiveDataService : BackgroundService
             changed |= ApplyClimateState(data, climateStateJson);
         if (!string.IsNullOrWhiteSpace(chargeStateJson))
             changed |= ApplyChargeState(data, chargeStateJson);
+
+        if (!changed) return;
+
+        data.LastUpdated = DateTime.UtcNow;
+        OnLiveDataChanged?.Invoke(carId, data);
+    }
+
+    /// <summary>
+    /// Overlay battery module temperatures coming from the Tesla Fleet
+    /// Telemetry stream (signals ModuleTempMin/ModuleTempMax and their
+    /// NumModuleTempMin/NumModuleTempMax module indices) onto the live cache.
+    /// This is a push pipeline (no Fleet API HTTP polling): values only flow
+    /// in when Fleet Telemetry is configured and streaming. Null arguments are
+    /// ignored so a partial signal update never clears a previously known value.
+    /// </summary>
+    public void OverlayBatteryModuleTemps(int carId, double? minC, double? maxC, int? numMin, int? numMax)
+    {
+        var data = _liveData.GetOrAdd(carId, _ => new MqttLiveData());
+        var changed = false;
+
+        if (minC.HasValue && data.ModuleTempMinC != minC) { data.ModuleTempMinC = minC; changed = true; }
+        if (maxC.HasValue && data.ModuleTempMaxC != maxC) { data.ModuleTempMaxC = maxC; changed = true; }
+        if (numMin.HasValue && data.NumModuleTempMin != numMin) { data.NumModuleTempMin = numMin; changed = true; }
+        if (numMax.HasValue && data.NumModuleTempMax != numMax) { data.NumModuleTempMax = numMax; changed = true; }
 
         if (!changed) return;
 

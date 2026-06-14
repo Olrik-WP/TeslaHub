@@ -49,6 +49,20 @@ export default function Battery({ carId }: { carId?: number }) {
 
   const fmtDate = (d: unknown) => new Date(String(d)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
+  // Battery module temperatures come from Fleet Telemetry only (thermistor
+  // min/max, not a single pack temperature). Show "Not available" when the
+  // signals are absent rather than triggering any Fleet API polling.
+  const moduleTempMin = u.convertTemp(vehicle?.batteryModuleTempMinC);
+  const moduleTempMax = u.convertTemp(vehicle?.batteryModuleTempMaxC);
+  const moduleTempAvg = u.convertTemp(vehicle?.batteryModuleTempAvgC);
+  const hasModuleTemp = moduleTempMin != null && moduleTempMax != null;
+  const moduleTempValue = hasModuleTemp
+    ? `${moduleTempMin.toFixed(1)} - ${moduleTempMax.toFixed(1)}`
+    : t('batteryPage.notAvailable');
+  const moduleTempSubtitle = hasModuleTemp && moduleTempAvg != null
+    ? `${t('batteryPage.moduleTempAvg')} ${moduleTempAvg.toFixed(1)}${u.tempUnit}`
+    : undefined;
+
   return (
     <div className="p-4 max-w-5xl mx-auto space-y-4">
       <h1 className="text-xl font-bold text-white">{t('batteryPage.title')}</h1>
@@ -80,6 +94,13 @@ export default function Battery({ carId }: { carId?: number }) {
             <StatCard label={t('batteryPage.chargeCycles')} value={health.chargeCycles?.toFixed(0) ?? '—'} color="#9ca3af" />
             <StatCard label={t('batteryPage.totalEnergyAdded')} value={health.totalEnergyAddedKwh?.toFixed(0) ?? '—'} unit="kWh" color="#3b82f6" />
             <StatCard label={t('batteryPage.chargingEfficiency')} value={health.chargingEfficiencyPct != null ? (health.chargingEfficiencyPct * 100).toFixed(1) : '—'} unit="%" color="#22c55e" />
+            <StatCard
+              label={t('batteryPage.moduleTemp')}
+              value={moduleTempValue}
+              unit={hasModuleTemp ? u.tempUnit : undefined}
+              color="#06b6d4"
+              subtitle={moduleTempSubtitle}
+            />
           </div>
 
           {health.capacityByMileage && health.capacityByMileage.length > 0 && (

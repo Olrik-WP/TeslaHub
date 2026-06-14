@@ -86,6 +86,18 @@ public record VehicleDto
     public int? Elevation { get; init; }
     public string? Geofence { get; init; }
 
+    // Battery module temperatures (Fleet Telemetry only). These are the
+    // thermistor min/max across the battery modules, not a single pack
+    // temperature. Null when Fleet Telemetry is not configured/streaming.
+    public double? BatteryModuleTempMinC { get; init; }
+    public double? BatteryModuleTempMaxC { get; init; }
+
+    // Average of the module min/max, null-safe (null unless both are known).
+    public double? BatteryModuleTempAvgC =>
+        BatteryModuleTempMinC.HasValue && BatteryModuleTempMaxC.HasValue
+            ? (BatteryModuleTempMinC.Value + BatteryModuleTempMaxC.Value) / 2
+            : null;
+
     // MQTT connectivity
     public bool MqttConnected { get; init; }
 }

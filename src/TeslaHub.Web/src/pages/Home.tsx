@@ -649,6 +649,17 @@ export default function Home({ carId }: Props) {
           unit={u.tempUnit}
           color={tempColor(vehicle.insideTemp)}
         />
+        {vehicle.batteryModuleTempMinC != null && vehicle.batteryModuleTempMaxC != null && (
+          <StatCard
+            label={t('home.batteryModuleTemp')}
+            value={`${u.convertTemp(vehicle.batteryModuleTempMinC)!.toFixed(1)} - ${u.convertTemp(vehicle.batteryModuleTempMaxC)!.toFixed(1)}`}
+            unit={u.tempUnit}
+            color="#06b6d4"
+            subtitle={vehicle.batteryModuleTempAvgC != null
+              ? `${t('batteryPage.moduleTempAvg')} ${u.convertTemp(vehicle.batteryModuleTempAvgC)!.toFixed(1)}${u.tempUnit}`
+              : undefined}
+          />
+        )}
         <StatCard
           label={t('home.state')}
           value={vehicle.state ?? '—'}

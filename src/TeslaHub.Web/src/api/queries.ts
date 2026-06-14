@@ -94,6 +94,13 @@ export interface VehicleStatus {
   elevation: number | null;
   geofence: string | null;
 
+  // Battery module temperatures (Fleet Telemetry only). Thermistor min/max
+  // across the battery modules, not a single pack temperature. Null when
+  // Fleet Telemetry is not configured/streaming. Average is server-computed.
+  batteryModuleTempMinC: number | null;
+  batteryModuleTempMaxC: number | null;
+  batteryModuleTempAvgC: number | null;
+
   // MQTT connectivity
   mqttConnected: boolean;
 }

@@ -137,6 +137,10 @@ public static class VehicleEndpoints
             Heading = live?.Heading ?? vehicle.Heading,
             Elevation = live?.Elevation ?? vehicle.Elevation,
             Geofence = live?.Geofence ?? vehicle.Geofence,
+            // Battery module temps come exclusively from Fleet Telemetry,
+            // so the DB-backed vehicle never carries them (?? is null-safe).
+            BatteryModuleTempMinC = live?.ModuleTempMinC ?? vehicle.BatteryModuleTempMinC,
+            BatteryModuleTempMaxC = live?.ModuleTempMaxC ?? vehicle.BatteryModuleTempMaxC,
             MqttConnected = mqttConnected,
         };
     }
@@ -180,6 +184,8 @@ public static class VehicleEndpoints
             data.ActiveRouteLatitude,
             data.ActiveRouteLongitude,
             data.ActiveRouteError,
+            data.ModuleTempMinC,
+            data.ModuleTempMaxC,
             MqttConnected = mqttConnected,
             data.LastUpdated,
         };
