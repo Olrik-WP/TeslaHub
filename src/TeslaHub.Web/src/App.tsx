@@ -2,7 +2,8 @@ import { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { QueryClient, useQuery, defaultShouldDehydrateQuery } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import { get as idbGet, set as idbSet, del as idbDel } from 'idb-keyval';
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
 import { isAuthenticated, tryInitialRefresh, setAuthExpiredHandler } from './api/client';
@@ -54,14 +55,21 @@ const queryClient = new QueryClient({
   },
 });
 
-// Snapshot the React Query cache to localStorage so a reopen paints the
-// previous session's data instantly (stale-while-revalidate) instead of a
-// cold spinner. Only successful queries are persisted (RQ default); tokens
-// live in cookies/memory and are never written here. `buster` invalidates
-// the whole snapshot on incompatible deploys.
-const persister = createSyncStoragePersister({
-  storage: window.localStorage,
+// Snapshot the React Query cache to IndexedDB so a reopen paints the previous
+// session's data instantly (stale-while-revalidate) instead of a cold spinner.
+// IndexedDB (via idb-keyval) is preferred over localStorage because it: has a
+// far larger quota (localStorage caps ~5MB), is asynchronous so it never blocks
+// the main thread, and is the most reliable script-writable store in installed
+// iOS/Android home-screen PWAs (standalone mode). Only successful queries are
+// persisted (RQ default); tokens live in cookies/memory and are never written
+// here. `buster` invalidates the whole snapshot on incompatible deploys.
+const persister = createAsyncStoragePersister({
   key: 'teslahub-query-cache',
+  storage: {
+    getItem: (key) => idbGet<string>(key).then((v) => v ?? null),
+    setItem: (key, value) => idbSet(key, value),
+    removeItem: (key) => idbDel(key),
+  },
 });
 
 // Real-time queries that must NEVER be restored from disk: the live vehicle
