@@ -1703,26 +1703,33 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
   ]);
 
   // Optional per-model corrective transform (community / 3rd-party GLBs
-  // that ship with a baked unit scale or off-axis forward). Tesla models
-  // leave `rootTransform` undefined → identity group, zero behaviour
-  // change. The opening animator still mutates the SAME scene object by
-  // reference, so wrapping in a group doesn't affect door/hood pivots.
+  // that ship with a baked unit scale or off-axis forward). When undefined
+  // (every Tesla model, and now the community model since its transforms are
+  // baked into the geometry at meter scale) we render the primitive directly,
+  // i.e. the exact original code path — so this can never affect other models.
   const rt = cfg.rootTransform;
-  const rootScale = rt?.scale ?? 1;
-  const rootRotation: [number, number, number] = rt?.rotation
-    ? [
-        (rt.rotation[0] * Math.PI) / 180,
-        (rt.rotation[1] * Math.PI) / 180,
-        (rt.rotation[2] * Math.PI) / 180,
-      ]
-    : [0, 0, 0];
-  const rootPosition = rt?.position ?? [0, 0, 0];
 
   return (
     <>
-      <group scale={rootScale} rotation={rootRotation} position={rootPosition}>
+      {rt ? (
+        <group
+          scale={rt.scale ?? 1}
+          rotation={
+            rt.rotation
+              ? [
+                  (rt.rotation[0] * Math.PI) / 180,
+                  (rt.rotation[1] * Math.PI) / 180,
+                  (rt.rotation[2] * Math.PI) / 180,
+                ]
+              : [0, 0, 0]
+          }
+          position={rt.position ?? [0, 0, 0]}
+        >
+          <primitive object={cleanedScene} />
+        </group>
+      ) : (
         <primitive object={cleanedScene} />
-      </group>
+      )}
       <VehicleOpeningsAnimator scene={cleanedScene} />
     </>
   );

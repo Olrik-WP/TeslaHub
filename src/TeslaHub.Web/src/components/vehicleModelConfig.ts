@@ -1525,11 +1525,11 @@ export const CommunityM3Config: VehicleModelConfig = {
   // would cause during a model switch.
   wheelUrl: '/models/community-m3.glb',
 
-  // The GLB carries a baked ×100 unit scale on `Tesla Model 3_3` (FBX
-  // cm→m artefact) → the car would render ~100× too big. Cancel it so
-  // the body lands at its real ~4.7 m length. Recalibrate if the model
-  // also needs a yaw to face the canonical +X-forward axis.
-  rootTransform: { scale: 0.01 },
+  // The source GLB carried a messy transform hierarchy (a baked ×100 unit
+  // scale plus cascading ±90° rotations on wrapper nodes). Those transforms
+  // are now BAKED into the vertex data offline (see Tesla-Godot-Test/
+  // bake-transforms.mjs), so the shipped file has identity node transforms at
+  // real metre scale and needs no runtime rootTransform correction.
 
   // First-pass 3/4 view for a ~4.7 m car. Recalibrate in the Showroom.
   cameraPose: {
