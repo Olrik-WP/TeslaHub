@@ -136,6 +136,24 @@ export interface VehicleModelConfig {
   /** Default wheel GLB URL (D50 hubcap on Highland, Gemini on Y). */
   wheelUrl: string;
 
+  /** Optional corrective transform applied to the WHOLE body scene at
+   *  render time (wraps the `<primitive>` in a group). Tesla GLBs are
+   *  pre-oriented + in metres so they don't need this. Community / 3rd-
+   *  party models often ship with a baked unit scale (e.g. an FBX node
+   *  carrying scale 100 → the car renders 100× too big) or an off-axis
+   *  "forward" — fix it here without touching the GLB or breaking the
+   *  pivot hierarchy used by the opening animations.
+   *
+   *  - `scale`    : uniform multiplier (e.g. 0.01 to cancel a baked ×100).
+   *  - `rotation` : extra Euler degrees [x, y, z] (order 'YXZ').
+   *  - `position` : extra world offset in metres, applied AFTER scale.
+   *  Undefined → identity (Tesla models). */
+  rootTransform?: {
+    scale?: number;
+    rotation?: [number, number, number];
+    position?: [number, number, number];
+  };
+
   // ───────────────────────────────────────────────────────────────────
   // Camera framing — needs to be RE-CALIBRATED PER MODEL
   // ───────────────────────────────────────────────────────────────────
@@ -1501,6 +1519,12 @@ export const CommunityM3Config: VehicleModelConfig = {
   // Deliberately absent: forces the wheel probe to 404 so no separate
   // wheels are mounted (this model ships its wheels inside the body).
   wheelUrl: '/models/__community_no_separate_wheels__.glb',
+
+  // The GLB carries a baked ×100 unit scale on `Tesla Model 3_3` (FBX
+  // cm→m artefact) → the car would render ~100× too big. Cancel it so
+  // the body lands at its real ~4.7 m length. Recalibrate if the model
+  // also needs a yaw to face the canonical +X-forward axis.
+  rootTransform: { scale: 0.01 },
 
   // First-pass 3/4 view for a ~4.7 m car. Recalibrate in the Showroom.
   cameraPose: {

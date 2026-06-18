@@ -1693,9 +1693,27 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     wrapEnvMapIntensity,
   ]);
 
+  // Optional per-model corrective transform (community / 3rd-party GLBs
+  // that ship with a baked unit scale or off-axis forward). Tesla models
+  // leave `rootTransform` undefined → identity group, zero behaviour
+  // change. The opening animator still mutates the SAME scene object by
+  // reference, so wrapping in a group doesn't affect door/hood pivots.
+  const rt = cfg.rootTransform;
+  const rootScale = rt?.scale ?? 1;
+  const rootRotation: [number, number, number] = rt?.rotation
+    ? [
+        (rt.rotation[0] * Math.PI) / 180,
+        (rt.rotation[1] * Math.PI) / 180,
+        (rt.rotation[2] * Math.PI) / 180,
+      ]
+    : [0, 0, 0];
+  const rootPosition = rt?.position ?? [0, 0, 0];
+
   return (
     <>
-      <primitive object={cleanedScene} />
+      <group scale={rootScale} rotation={rootRotation} position={rootPosition}>
+        <primitive object={cleanedScene} />
+      </group>
       <VehicleOpeningsAnimator scene={cleanedScene} />
     </>
   );
