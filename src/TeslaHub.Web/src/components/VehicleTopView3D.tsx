@@ -1702,6 +1702,48 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     wrapEnvMapIntensity,
   ]);
 
+  // TEMP DIAGNOSTIC — remove once the community model-switch bug is fixed.
+  // Logs (visible in prod console) the rendered scene's geometry, visibility
+  // and the SHARED GPU state, so we can see what gets corrupted when switching
+  // through the community model breaks all subsequent models.
+  const diagThree = useThree();
+  useEffect(() => {
+    const gl = diagThree.gl;
+    const rootScene = diagThree.scene;
+    const camera = diagThree.camera;
+    const id = window.setTimeout(() => {
+      let meshes = 0;
+      let visibleMeshes = 0;
+      let withPosition = 0;
+      cleanedScene.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        meshes++;
+        // `visible` only reflects the node; check the whole ancestor chain.
+        let vis = true;
+        let cur: THREE.Object3D | null = m;
+        while (cur) { if (!cur.visible) { vis = false; break; } cur = cur.parent; }
+        if (vis) visibleMeshes++;
+        if (m.geometry?.getAttribute?.('position')) withPosition++;
+      });
+      const box = new THREE.Box3().setFromObject(cleanedScene);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      const mem = gl.info.memory;
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[DIAG ${cfg.key}] meshes=${meshes} visible=${visibleMeshes} withPos=${withPosition} | ` +
+        `bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
+        `center=(${center.x.toFixed(2)},${center.y.toFixed(2)},${center.z.toFixed(2)}) | ` +
+        `inScene=${rootScene.getObjectById(cleanedScene.id) ? 'yes' : 'NO'} | ` +
+        `env=${rootScene.environment ? 'set' : 'NULL'} | ` +
+        `gpuGeoms=${mem.geometries} gpuTex=${mem.textures} | ` +
+        `cam=(${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)})`,
+      );
+    }, 600);
+    return () => window.clearTimeout(id);
+  }, [cleanedScene, cfg.key, diagThree]);
+
   // Optional per-model corrective transform (community / 3rd-party GLBs
   // that ship with a baked unit scale or off-axis forward). When undefined
   // (every Tesla model, and now the community model since its transforms are
