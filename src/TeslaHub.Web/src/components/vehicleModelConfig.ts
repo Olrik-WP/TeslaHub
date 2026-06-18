@@ -1583,11 +1583,14 @@ export const CommunityM3Config: VehicleModelConfig = {
   hiddenNodes: [],
   floorNodes: [],
 
-  // Body = `primary` material family. Glass left fully native (zones below
-  // match nothing → the glass routing SKIPS every mesh, keeping the
-  // model's own glass shading).
+  // Body paint: the optimize pipeline (fix-community-paint.mjs) unifies the
+  // model's `primary*` material family into a single material named `Paint`
+  // (white, untextured) so the Showroom colour picker — which drives any
+  // material named `Paint` via mat.color — recolours the whole shell. Glass
+  // left fully native (zones below match nothing → glass routing SKIPS every
+  // mesh, keeping the model's own glass shading).
   materialPatterns: {
-    bodyPaint: /^primary/i,
+    bodyPaint: /^Paint$/i,
     outerGlassMaterial: NEVER_MATCH,
     innerGlassMaterial: NEVER_MATCH,
   },
