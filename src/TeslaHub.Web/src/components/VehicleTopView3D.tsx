@@ -575,11 +575,20 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
   } = useModelConsts();
   const debug = useContext(ShowroomDebugContext);
   const debugGlass = debug.glass;
+  // Models whose wheels are baked into the body declare no wheel anchors
+  // and no fallback positions. For those we must NEVER load a separate
+  // wheel GLB: `WHEEL_URL` may point at the body itself (community model)
+  // or, on a transient stale `wheelsAvailable === true` during a model
+  // switch, at a now-wrong URL — feeding either to useGLTF risks mutating
+  // the body materials or poisoning drei's cache with a 404.
+  const hasSeparateWheels =
+    WHEEL_ANCHORS.length > 0 || WHEEL_FALLBACK_POSITIONS.length > 0;
+  const useSeparateWheels = hasSeparateWheels && wheelsAvailable;
   const { scene: rawScene } = useGLTF(MODEL_URL);
-  const wheelGltf = useGLTF(wheelsAvailable ? WHEEL_URL : MODEL_URL);
+  const wheelGltf = useGLTF(useSeparateWheels ? WHEEL_URL : MODEL_URL);
   // ^ trick: useGLTF must be called unconditionally (hook rule). When the
-  //   wheel asset is missing we reuse the main URL — its scene is then
-  //   ignored by the wheel mounting code below.
+  //   wheel asset is missing / not applicable we reuse the main URL — its
+  //   scene is then ignored by the wheel mounting code below.
 
   // CRITICAL: drei caches the parsed GLTF scene by URL — every viewer
   // mounted with the same URL gets the SAME `rawScene` object. That
@@ -600,7 +609,7 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     // propagate to all 4 visible wheels for free — no slot swapping,
     // no per-clone bookkeeping. See upgradeWheelMaterialsInPlace() at
     // module scope for the why-not-lazy explanation.
-    if (wheelsAvailable) {
+    if (useSeparateWheels) {
       upgradeWheelMaterialsInPlace(wheelGltf.scene);
       const baselines = getWheelBaselines(wheelGltf.scene);
       if (baselines) {
@@ -1430,7 +1439,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
 
     let wheelsAttached = 0;
     let wheelMode: 'anchor' | 'fallback' | 'none' = 'none';
-    if (wheelsAvailable) {
+    if (useSeparateWheels) {
       const anchorsFound = WHEEL_ANCHORS.filter((a) => anchors[a.name]).length;
       wheelMode = anchorsFound === 4 ? 'anchor' : 'fallback';
 
@@ -1525,7 +1534,7 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     // VIN changes the new GLB has a different `scene` reference too,
     // but cfg is added explicitly to make the multi-model coupling
     // visible to readers.
-  }, [scene, wheelGltf.scene, wheelsAvailable, cfg, debugGlass]);
+  }, [scene, wheelGltf.scene, wheelsAvailable, useSeparateWheels, cfg, debugGlass]);
 
   // Click handler intentionally OMITTED. The 3D viewer is read-only on Home:
   // - State reflects live MQTT/TeslaMate signals via <useVehicleVisualSync>

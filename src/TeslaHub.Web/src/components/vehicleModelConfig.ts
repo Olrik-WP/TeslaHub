@@ -1516,9 +1516,14 @@ export const CommunityM3Config: VehicleModelConfig = {
   key: 'community',
   displayName: 'Communauté — Model 3 (CC-BY)',
   modelUrl: '/models/community-m3.glb',
-  // Deliberately absent: forces the wheel probe to 404 so no separate
-  // wheels are mounted (this model ships its wheels inside the body).
-  wheelUrl: '/models/__community_no_separate_wheels__.glb',
+  // This model ships its wheels INSIDE the body, so there is no separate
+  // wheel GLB. We point wheelUrl at the body file (a real, always-present
+  // asset) and rely on the empty wheelFallbackPositions/wheelAnchorNames
+  // below: the viewer derives "no separate wheels" from those being empty
+  // and never tries to mount/clone wheels. Using a real URL here avoids a
+  // 404 probe AND the drei useGLTF cache-poisoning that a missing file
+  // would cause during a model switch.
+  wheelUrl: '/models/community-m3.glb',
 
   // The GLB carries a baked ×100 unit scale on `Tesla Model 3_3` (FBX
   // cm→m artefact) → the car would render ~100× too big. Cancel it so
