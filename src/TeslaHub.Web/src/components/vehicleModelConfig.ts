@@ -400,6 +400,20 @@ export interface VehicleModelConfig {
    *  Defaults to `true` (every Tesla config supports wraps). */
   supportsWrap?: boolean;
 
+  /** Whether the wheel-finish controls (alloy/plastic roughness, tint,
+   *  clearcoat) do anything. They operate on the SEPARATE wheel GLB
+   *  (`wheelUrl`). Community / third-party models that bake their wheels
+   *  into the body have no separate wheel GLB, so the controls are inert —
+   *  set `false` to hide them. Defaults to `true`. */
+  supportsWheelFinish?: boolean;
+
+  /** Whether the glass calibration controls (per-zone opacity / tint) do
+   *  anything. The glass router keys off Tesla's zone node names + the
+   *  `materialPatterns` glass regexes; models without that structure (their
+   *  glass regexes are NEVER_MATCH) can't route any pane, so the sliders are
+   *  inert — set `false` to hide them. Defaults to `true`. */
+  supportsGlassTint?: boolean;
+
   // ───────────────────────────────────────────────────────────────────
   // Interior material overrides — recolour Tesla's placeholder colours
   // ───────────────────────────────────────────────────────────────────
@@ -1617,6 +1631,12 @@ export const CommunityM3Config: VehicleModelConfig = {
   // Force solid paint so the colour picker works and a wrap uploaded for a
   // Tesla model never bleeds onto this body (wraps are stored per-car).
   supportsWrap: false,
+  // Wheels are baked into the body (no separate wheel GLB) → wheel-finish
+  // controls are inert here. Glass meshes exist (`glass.*`) but carry none of
+  // Tesla's zone node structure → the glass router can't address them, so the
+  // tint/opacity sliders do nothing. Hide both to avoid dead controls.
+  supportsWheelFinish: false,
+  supportsGlassTint: false,
   calloutHeight: 0.5,
   tpmsAnchorMap: { FL: 'LF', FR: 'RF', RL: 'LR', RR: 'RR' },
 

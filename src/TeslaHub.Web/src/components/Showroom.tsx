@@ -299,6 +299,15 @@ export default function Showroom({ carId }: Props) {
   const activeModelKey = pickResolvedModelKey(vehicle.vin, editedOverrides);
   const defaults = VEHICLE_MODELS[activeModelKey] ?? PoppyseedConfig;
 
+  // The lights section only does anything when the model declares emissive
+  // light nodes. Community / third-party models ship none → hide the section
+  // instead of showing dead sliders.
+  const hasLightNodes =
+    defaults.brakeLightNodes.length +
+      defaults.reverseLightNodes.length +
+      defaults.headlightNodes.length >
+    0;
+
   return (
     <div className="space-y-3">
       {/* Toolbar — sticky on scroll. Title + Save/Discard/Reset. */}
@@ -451,23 +460,31 @@ export default function Showroom({ carId }: Props) {
             wraps={wraps}
           />
 
-          <div className="h-px bg-[#1a1a1a]" />
+          {hasLightNodes && (
+            <>
+              <div className="h-px bg-[#1a1a1a]" />
 
-          <ShowroomLightsSection
-            overrides={editedOverrides}
-            onChange={setEditedOverrides}
-            defaults={defaults}
-          />
+              <ShowroomLightsSection
+                overrides={editedOverrides}
+                onChange={setEditedOverrides}
+                defaults={defaults}
+              />
+            </>
+          )}
 
-          <div className="h-px bg-[#1a1a1a]" />
+          {defaults.supportsGlassTint !== false && (
+            <>
+              <div className="h-px bg-[#1a1a1a]" />
 
-          <ShowroomGlassSection
-            overrides={editedOverrides}
-            onChange={setEditedOverrides}
-            defaults={defaults}
-            debugGlass={debugGlass}
-            onToggleDebugGlass={setDebugGlass}
-          />
+              <ShowroomGlassSection
+                overrides={editedOverrides}
+                onChange={setEditedOverrides}
+                defaults={defaults}
+                debugGlass={debugGlass}
+                onToggleDebugGlass={setDebugGlass}
+              />
+            </>
+          )}
 
           {/* Restant — Phase 3b.3d : sentry cameras (XYZ × 7).
               + Phase 4 — drag-gizmos sur les callouts/anchors. */}

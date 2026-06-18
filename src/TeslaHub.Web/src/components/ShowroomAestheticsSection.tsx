@@ -1215,7 +1215,9 @@ export function ShowroomAestheticsSection({
         <PaintSection overrides={overrides} onChange={onChange} defaults={defaults} />
       )}
       <InteriorSection overrides={overrides} onChange={onChange} defaults={defaults} />
-      <WheelsSection overrides={overrides} onChange={onChange} defaults={defaults} />
+      {defaults.supportsWheelFinish !== false && (
+        <WheelsSection overrides={overrides} onChange={onChange} defaults={defaults} />
+      )}
     </section>
   );
 }
