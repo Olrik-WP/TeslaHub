@@ -1702,6 +1702,31 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     wrapEnvMapIntensity,
   ]);
 
+  // Live-sync SOLID body paint (no wrap active). The big cleanedScene
+  // traverse colours Paint materials, but it only re-runs when the scene
+  // graph rebuilds (model switch, wheel swap, etc.). Dragging the colour
+  // picker alone must recolour in place — otherwise the new colour only
+  // appears after some unrelated change forces a rebuild. Safe for every
+  // model: it only touches materials matching the body-paint regex, exactly
+  // like the traverse. The wrap path has its own colour sync above.
+  const bodyPaintRe = cfg.materialPatterns.bodyPaint;
+  const bodyPaintColor = cfg.bodyPaintColor;
+  useEffect(() => {
+    if (wrapUrl) return;
+    cleanedScene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) {
+        const std = m as THREE.MeshStandardMaterial;
+        if (std.color && bodyPaintRe.test((std as { name?: string }).name ?? '')) {
+          std.color.setHex(bodyPaintColor);
+          std.needsUpdate = true;
+        }
+      }
+    });
+  }, [cleanedScene, wrapUrl, bodyPaintColor, bodyPaintRe]);
+
   // Simplified glass tint for community / third-party models (cfg.simpleGlass).
   // Tesla configs leave `simpleGlass` undefined → this effect is a no-op and
   // their dedicated zone router is the only thing that touches glass. For

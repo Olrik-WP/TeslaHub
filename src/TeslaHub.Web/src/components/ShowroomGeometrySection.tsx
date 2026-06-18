@@ -190,6 +190,13 @@ const KNOWN_WHEELS: Array<{ url: string; label: string; group: string }> = [
 ];
 
 function WheelsSection({ overrides, onChange, defaults }: Props) {
+  // Models that bake their wheels into the body (community / third-party)
+  // have no separate wheel GLB and no per-corner anchors → the wheel swap +
+  // XYZ offsets are meaningless and just force pointless scene rebuilds. Hide
+  // the whole section for them.
+  const hasSeparateWheels =
+    defaults.wheelAnchorNames.length > 0 ||
+    defaults.wheelFallbackPositions.length > 0;
   const corners: WheelCorner[] = ['LF', 'RF', 'LR', 'RR'];
   const positions = overrides.wheelFallbackPositions ?? {};
 
@@ -219,6 +226,8 @@ function WheelsSection({ overrides, onChange, defaults }: Props) {
   };
 
   const currentUrl = overrides.wheelUrl ?? defaults.wheelUrl;
+
+  if (!hasSeparateWheels) return null;
 
   return (
     <SubSection title="Roues" defaultOpen>
