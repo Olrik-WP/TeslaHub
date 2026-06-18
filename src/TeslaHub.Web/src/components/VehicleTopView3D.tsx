@@ -1725,10 +1725,10 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
           }
           position={rt.position ?? [0, 0, 0]}
         >
-          <primitive object={cleanedScene} />
+          <primitive object={cleanedScene} dispose={null} />
         </group>
       ) : (
-        <primitive object={cleanedScene} />
+        <primitive object={cleanedScene} dispose={null} />
       )}
       <VehicleOpeningsAnimator scene={cleanedScene} />
     </>
