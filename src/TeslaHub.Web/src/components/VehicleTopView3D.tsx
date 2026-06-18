@@ -1730,9 +1730,24 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
       const mem = gl.info.memory;
+      // Count meshes whose OWN .visible is true (ignoring ancestors), so we
+      // can tell "all meshes self-hidden" from "an ancestor is hidden".
+      let selfVisible = 0;
+      cleanedScene.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh && m.visible) selfVisible++;
+      });
+      // Walk the ancestor chain to the root and report every node's visibility,
+      // so we can pinpoint exactly WHICH ancestor is hidden.
+      const chain: string[] = [];
+      let cur: THREE.Object3D | null = cleanedScene;
+      while (cur) {
+        chain.push(`${cur.name || `(${cur.type})`}:${cur.visible ? 'V' : 'HIDDEN'}`);
+        cur = cur.parent;
+      }
       // eslint-disable-next-line no-console
       console.warn(
-        `[DIAG ${cfg.key}] meshes=${meshes} visible=${visibleMeshes} withPos=${withPosition} | ` +
+        `[DIAG ${cfg.key}] meshes=${meshes} visibleChain=${visibleMeshes} selfVisible=${selfVisible} withPos=${withPosition} | ` +
         `bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
         `center=(${center.x.toFixed(2)},${center.y.toFixed(2)},${center.z.toFixed(2)}) | ` +
         `inScene=${rootScene.getObjectById(cleanedScene.id) ? 'yes' : 'NO'} | ` +
@@ -1740,6 +1755,8 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
         `gpuGeoms=${mem.geometries} gpuTex=${mem.textures} | ` +
         `cam=(${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)})`,
       );
+      // eslint-disable-next-line no-console
+      console.warn(`[DIAG ${cfg.key}] ancestor chain (cleanedScene→root): ${chain.join(' > ')}`);
     }, 600);
     return () => window.clearTimeout(id);
   }, [cleanedScene, cfg.key, diagThree]);
