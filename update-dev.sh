@@ -134,6 +134,17 @@ else
   warn "  cd $DEPLOY_DIR && docker compose logs teslahub-api --tail 30"
 fi
 
+# ── Reconcile full stack ─────────────────────────────────────────
+# update-dev only rebuilds/recycles the TeslaHub (and optional Security
+# Alerts) services. Any other service defined in the compose file
+# (teslamate, grafana, home-automation, etc.) is left untouched — which
+# means a prior `docker compose down` or a removed container would stay
+# absent and never come back on reboot (restart policies only apply to
+# containers that exist). This reconcile pass (re)creates and starts any
+# missing service without disturbing the already-running ones.
+log "Reconciling full compose stack (starting any missing services)..."
+docker compose up -d
+
 # ── Cleanup ──────────────────────────────────────────────────────
 if $FULL_CLEAN; then
   log "Full cleanup: pruning all unused images and build cache..."

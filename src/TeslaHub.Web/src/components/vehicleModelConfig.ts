@@ -66,8 +66,10 @@ export type CalloutKeyName =
   | 'userPresent'
   | 'climateInfo';
 
-/** Tesla internal codename for each car family. */
-export type VehicleModelKey = 'poppyseed' | 'bayberry';
+/** Tesla internal codename for each car family, plus the public
+ *  community fallback (`community`) — a CC-BY licensed Model 3 used when
+ *  the operator has NOT mounted a proprietary Tesla GLB. */
+export type VehicleModelKey = 'poppyseed' | 'bayberry' | 'community';
 
 /** Each wheel mount when the GLB doesn't ship anchor empties. */
 export interface WheelFallbackPosition {
@@ -1457,9 +1459,161 @@ export const BayberryConfig: VehicleModelConfig = {
   // skips the mirror_LF / mirror_RF targets entirely.
 };
 
+// ───────────────────────────────────────────────────────────────────────────
+// COMMUNITY MODEL 3 — public CC-BY fallback (no Tesla APK assets required)
+// ───────────────────────────────────────────────────────────────────────────
+//
+// TeslaHub is public; the proprietary Tesla GLBs extracted from the mobile
+// app can't be redistributed. This config drives a CC-BY licensed Model 3
+// (community "Realistic Graphics" model) so operators who DON'T own the
+// Tesla assets still get an interactive 3D car. The operator drops
+// `community-m3.glb` into their /models volume; the runtime picks it up.
+//
+// Node names verified via `Tesla-Godot-Test/inspect-glb-nodes.mjs` against
+// the optimised community-m3.glb (dedup → weld → simplify → draco, ~214k
+// tris, 2.7 MB). The model uses MSFS-style `*_dummy_*` empties as opening
+// pivots:
+//   bonnet_dummy_279  (hood)   boot_dummy_158  (trunk)
+//   door_lf_dummy_184 / door_lr_dummy_202 / door_rf_dummy_218 / door_rr_dummy_235
+//
+// DIFFERENCES vs the Tesla configs (everything degrades gracefully):
+//   - Body paint material is `primary` (not Tesla's `Paint`) → bodyPaint
+//     regex matches `^primary`. WRAP support needs the material renamed to
+//     `Paint` in Blender (not done yet) — paint COLOUR works as-is.
+//   - Wheels are baked into the body (no separate wheel GLB) → wheelUrl
+//     points at a deliberately-absent file so the wheel probe 404s and the
+//     viewer mounts no extra wheels; the body's own wheels render (static).
+//   - No charge-port flap node, no roll-down side windows, no light/sentry
+//     nodes → those arrays are empty (no-op). Glass is left native.
+//   - openings: [] for now (STATIC-first milestone). Door/hood/trunk
+//     animations land in a follow-up `communityM3Openings.ts`.
+//
+// CAMERA + CHARGE-PORT geometry are first-pass guesses — recalibrate live
+// in the Showroom (the model authored Z-up; Sketchfab adds a Y-up root
+// rotation, so the world "forward" axis must be confirmed on screen).
+
+const NEVER_MATCH = /^__never__$/;
+
+export const CommunityM3Config: VehicleModelConfig = {
+  key: 'community',
+  displayName: 'Communauté — Model 3 (CC-BY)',
+  modelUrl: '/models/community-m3.glb',
+  // Deliberately absent: forces the wheel probe to 404 so no separate
+  // wheels are mounted (this model ships its wheels inside the body).
+  wheelUrl: '/models/__community_no_separate_wheels__.glb',
+
+  // First-pass 3/4 view for a ~4.7 m car. Recalibrate in the Showroom.
+  cameraPose: {
+    position: [4.8, 1.7, 4.8],
+    target: [0, 0.6, 0],
+    fov: 45,
+  },
+
+  // No separate wheel system — the body already carries its wheels.
+  wheelFallbackPositions: [],
+  wheelAnchorNames: [],
+
+  // No charge-port flap node in this model — the plug uses fallbackWorld.
+  chargePort: {
+    nodeName: '',
+    alternateNames: [],
+    fallbackWorld: [-1.9, 0.9, 0.9],
+    pivotToSocketOffset: [0, 0, 0],
+    plugDirection: [0, 0, 1],
+  },
+  cableGroundAnchor: [-3, 0, -1.5],
+  cableSlack: { post: 1, car: 1 },
+
+  supercharger: {
+    modelUrl: '/models/supercharger_base.glb',
+    position: [-4.2, 0, -1.6],
+    rotationY: -90,
+    cablePortOffset: [0.08, 1.05, -0.15],
+  },
+
+  // Callout anchors point at the opening pivots so the floating buttons
+  // attach to real nodes (no "anchor not found" warnings). chargePort +
+  // window have no node → left empty (callout falls back gracefully).
+  actionAnchors: {
+    frunk: 'bonnet_dummy_279',
+    trunk: 'boot_dummy_158',
+    chargePort: '',
+    window: '',
+    lock: 'door_lf_dummy_184',
+    sentry: 'door_lr_dummy_202',
+    climate: 'door_rf_dummy_218',
+  },
+
+  sentryCameraPositions: [],
+
+  brakeLightNodes: [],
+  reverseLightNodes: [],
+  headlightNodes: [],
+  groundProjectionNodes: { headlights: '', stoplights: '' },
+
+  hiddenNodes: [],
+  floorNodes: [],
+
+  // Body = `primary` material family. Glass left fully native (zones below
+  // match nothing → the glass routing SKIPS every mesh, keeping the
+  // model's own glass shading).
+  materialPatterns: {
+    bodyPaint: /^primary/i,
+    outerGlassMaterial: NEVER_MATCH,
+    innerGlassMaterial: NEVER_MATCH,
+  },
+  glassZoning: {
+    doorWindowNode: NEVER_MATCH,
+    panoroofNode: NEVER_MATCH,
+  },
+  // White multi-coat — multiplies the native white texture by white, i.e.
+  // leaves it unchanged. The Showroom colour picker overrides this.
+  bodyPaintColor: 0xffffff,
+  calloutHeight: 0.5,
+  tpmsAnchorMap: { FL: 'LF', FR: 'RF', RL: 'LR', RR: 'RR' },
+
+  // Wheel/glass/light tuning are inert for this model (no matching nodes /
+  // no separate wheels) but the fields are required — use safe defaults.
+  wheelFinish: {
+    alloyRoughnessMin: 0.35,
+    alloyEnvBoost: 1.0,
+    alloyClearcoat: 0,
+    plasticRoughness: 0.55,
+    plasticEnvBoost: 1.0,
+    plasticClearcoat: 0,
+  },
+  glassFinish: {
+    outerEnvMultiplier: 1.0,
+    doorWindowOpacity: 0.55,
+    doorWindowTint: 0.0,
+    panoroofOpacity: 0.85,
+    panoroofTint: 0.15,
+    trunkGlassOpacity: 0.85,
+    trunkGlassTint: 0.30,
+    innerMixedOpacity: 0.08,
+    innerMixedEnvMultiplier: 0.02,
+    innerSoloOpacity: 0.85,
+    innerSoloEnvMultiplier: 0.6,
+  },
+  lightTuning: {
+    brakeIntensity: 3,
+    brakeColor: 0xff1a1a,
+    reverseIntensity: 1.5,
+    reverseColor: 0xfff8e8,
+    headlightIntensity: 1.0,
+    headlightColor: 0xffffff,
+  },
+
+  // STATIC-first milestone: no opening animations yet. Pivots are present
+  // in the GLB (door_*_dummy_*, bonnet_dummy_279, boot_dummy_158) ready
+  // for a follow-up communityM3Openings.ts.
+  openings: [],
+};
+
 export const VEHICLE_MODELS: Record<VehicleModelKey, VehicleModelConfig> = {
   poppyseed: PoppyseedConfig,
   bayberry: BayberryConfig,
+  community: CommunityM3Config,
 };
 
 /**

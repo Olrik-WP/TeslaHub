@@ -43,6 +43,7 @@ import type { ShowroomOverrides } from './showroomOverrides';
 import {
   PoppyseedConfig,
   BayberryConfig,
+  CommunityM3Config,
   VEHICLE_MODELS,
   type VehicleModelKey,
 } from './vehicleModelConfig';
@@ -499,6 +500,7 @@ const TRIM_OPTIONS: Array<{
 }> = [
   { key: 'poppyseed', label: PoppyseedConfig.displayName },
   { key: 'bayberry', label: BayberryConfig.displayName },
+  { key: 'community', label: CommunityM3Config.displayName },
 ];
 
 interface ModelSectionProps {
