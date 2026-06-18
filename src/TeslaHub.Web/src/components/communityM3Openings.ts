@@ -44,7 +44,7 @@ export const OPENINGS_COMMUNITY_M3: ReadonlyArray<OpeningDefinition> = [
         node: 'bonnet_dummy_279',
         rotation: [
           { t: 0, eul: [0, 0, 0] },
-          { t: OPEN_LEN, eul: [-45, 0, 0] },
+          { t: OPEN_LEN, eul: [45, 0, 0] },
         ],
       },
     ],
@@ -58,7 +58,7 @@ export const OPENINGS_COMMUNITY_M3: ReadonlyArray<OpeningDefinition> = [
         node: 'boot_dummy_158',
         rotation: [
           { t: 0, eul: [0, 0, 0] },
-          { t: OPEN_LEN, eul: [55, 0, 0] },
+          { t: OPEN_LEN, eul: [-55, 0, 0] },
         ],
       },
     ],
