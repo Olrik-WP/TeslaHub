@@ -1702,65 +1702,6 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     wrapEnvMapIntensity,
   ]);
 
-  // TEMP DIAGNOSTIC — remove once the community model-switch bug is fixed.
-  // Logs (visible in prod console) the rendered scene's geometry, visibility
-  // and the SHARED GPU state, so we can see what gets corrupted when switching
-  // through the community model breaks all subsequent models.
-  const diagThree = useThree();
-  useEffect(() => {
-    const gl = diagThree.gl;
-    const rootScene = diagThree.scene;
-    const camera = diagThree.camera;
-    const id = window.setTimeout(() => {
-      let meshes = 0;
-      let visibleMeshes = 0;
-      let withPosition = 0;
-      cleanedScene.traverse((o) => {
-        const m = o as THREE.Mesh;
-        if (!m.isMesh) return;
-        meshes++;
-        // `visible` only reflects the node; check the whole ancestor chain.
-        let vis = true;
-        let cur: THREE.Object3D | null = m;
-        while (cur) { if (!cur.visible) { vis = false; break; } cur = cur.parent; }
-        if (vis) visibleMeshes++;
-        if (m.geometry?.getAttribute?.('position')) withPosition++;
-      });
-      const box = new THREE.Box3().setFromObject(cleanedScene);
-      const size = box.getSize(new THREE.Vector3());
-      const center = box.getCenter(new THREE.Vector3());
-      const mem = gl.info.memory;
-      // Count meshes whose OWN .visible is true (ignoring ancestors), so we
-      // can tell "all meshes self-hidden" from "an ancestor is hidden".
-      let selfVisible = 0;
-      cleanedScene.traverse((o) => {
-        const m = o as THREE.Mesh;
-        if (m.isMesh && m.visible) selfVisible++;
-      });
-      // Walk the ancestor chain to the root and report every node's visibility,
-      // so we can pinpoint exactly WHICH ancestor is hidden.
-      const chain: string[] = [];
-      let cur: THREE.Object3D | null = cleanedScene;
-      while (cur) {
-        chain.push(`${cur.name || `(${cur.type})`}:${cur.visible ? 'V' : 'HIDDEN'}`);
-        cur = cur.parent;
-      }
-      // eslint-disable-next-line no-console
-      console.warn(
-        `[DIAG ${cfg.key}] meshes=${meshes} visibleChain=${visibleMeshes} selfVisible=${selfVisible} withPos=${withPosition} | ` +
-        `bbox=${size.x.toFixed(2)}x${size.y.toFixed(2)}x${size.z.toFixed(2)} ` +
-        `center=(${center.x.toFixed(2)},${center.y.toFixed(2)},${center.z.toFixed(2)}) | ` +
-        `inScene=${rootScene.getObjectById(cleanedScene.id) ? 'yes' : 'NO'} | ` +
-        `env=${rootScene.environment ? 'set' : 'NULL'} | ` +
-        `gpuGeoms=${mem.geometries} gpuTex=${mem.textures} | ` +
-        `cam=(${camera.position.x.toFixed(1)},${camera.position.y.toFixed(1)},${camera.position.z.toFixed(1)})`,
-      );
-      // eslint-disable-next-line no-console
-      console.warn(`[DIAG ${cfg.key}] ancestor chain (cleanedScene→root): ${chain.join(' > ')}`);
-    }, 600);
-    return () => window.clearTimeout(id);
-  }, [cleanedScene, cfg.key, diagThree]);
-
   // Optional per-model corrective transform (community / 3rd-party GLBs
   // that ship with a baked unit scale or off-axis forward). When undefined
   // (every Tesla model, and now the community model since its transforms are
@@ -2964,6 +2905,16 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
             </group>
           </Suspense>
 
+          {/* React's Suspense hide/unhide toggles `.visible` on host objects.
+              When switching models triggers overlapping suspensions, the
+              stashed "previous visible" of the ROOT scene can be overwritten
+              with `false`, so the unhide restores it to `false` and the entire
+              3D view stays hidden (confirmed: switching through the community
+              model left `(Scene):HIDDEN`, hiding every later model too). The
+              root scene is never legitimately hidden as a whole, so we keep it
+              visible defensively — cheap and side-effect free. */}
+          <RootSceneVisibilityGuard />
+
           {/* Read MQTT/TeslaMate state → drive openings + cableMode. */}
           <VehicleStateSync vehicle={vehicle} onCableModeChange={setCableMode} />
 
@@ -3368,6 +3319,20 @@ function CameraPoseSync({ activeMode }: { activeMode: CableMode }) {
     }
   });
 
+  return null;
+}
+
+// Defensive guard against a React/R3F Suspense quirk where the ROOT scene can
+// be left `visible=false` after overlapping model-switch suspensions (the
+// stashed "previous visible" gets overwritten, so unhide restores `false`).
+// The whole 3D view lives under this scene and is never meant to be globally
+// hidden, so we re-assert visibility every frame. Setting a boolean only when
+// it changed is effectively free and cannot affect per-node visibility.
+function RootSceneVisibilityGuard() {
+  const scene = useThree((s) => s.scene);
+  useFrame(() => {
+    if (!scene.visible) scene.visible = true;
+  });
   return null;
 }
 
