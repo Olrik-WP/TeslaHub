@@ -1171,10 +1171,15 @@ export function ShowroomAestheticsSection({
   carId,
   wraps,
 }: AestheticsProps) {
+  // Community / third-party models lack Tesla's wrap UV1 layout, so a PNG
+  // wrap can never map onto the body. Hide the wrap UI entirely and always
+  // show the solid-paint picker for those models.
+  const supportsWrap = defaults.supportsWrap !== false;
   // Sans wrap : section Peinture complète. Avec wrap : la couleur de
   // fond est dans WrapSection (zones transparentes du PNG).
   const wrapActive =
-    !!overrides.wraps?.paintTextureUrl || (!!carId && wraps.length > 0);
+    supportsWrap &&
+    (!!overrides.wraps?.paintTextureUrl || (!!carId && wraps.length > 0));
 
   return (
     <section className="space-y-3">
@@ -1186,13 +1191,26 @@ export function ShowroomAestheticsSection({
         intérieur, finition des jantes. Sauvegardé par voiture.
       </p>
       <VariantAxesSection overrides={overrides} onChange={onChange} defaults={defaults} />
-      <WrapSection
-        overrides={overrides}
-        onChange={onChange}
-        defaults={defaults}
-        carId={carId}
-        wraps={wraps}
-      />
+      {supportsWrap ? (
+        <WrapSection
+          overrides={overrides}
+          onChange={onChange}
+          defaults={defaults}
+          carId={carId}
+          wraps={wraps}
+        />
+      ) : (
+        <div className="border border-[#1f1f1f] rounded-md px-2 py-2 bg-[#141414]">
+          <p className="text-[11px] uppercase tracking-wider text-[#d4d4d4] font-medium">
+            Wrap indisponible
+          </p>
+          <p className="text-[10px] text-[#6b7280] mt-1 leading-relaxed">
+            Ce modèle 3D communautaire n'a pas la cartographie UV dédiée aux
+            wraps Tesla : un PNG ne pourrait pas s'appliquer sur la
+            carrosserie. Utilise la peinture unie ci-dessous.
+          </p>
+        </div>
+      )}
       {!wrapActive && (
         <PaintSection overrides={overrides} onChange={onChange} defaults={defaults} />
       )}

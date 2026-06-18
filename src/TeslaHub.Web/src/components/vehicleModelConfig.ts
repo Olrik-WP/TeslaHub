@@ -388,6 +388,18 @@ export interface VehicleModelConfig {
   /** RGB hex applied to every material matching `materialPatterns.bodyPaint`. */
   bodyPaintColor: number;
 
+  /** Whether this model can render a custom PNG "wrap" (livrée). The Tesla
+   *  wrap shader samples the PNG through the dedicated TEXCOORD_1 (UV1)
+   *  channel whose layout was authored to match Tesla's wrap templates.
+   *  Community / third-party models don't ship that UV1 wrap-unwrap, so a
+   *  wrap PNG would only sample the transparent corner pixel and never map
+   *  onto the body. Set `false` to disable wraps entirely: the viewer then
+   *  always renders solid `bodyPaintColor` and ignores any wrap stored on
+   *  the car (wraps are a per-car asset, so one uploaded for a Tesla model
+   *  must NOT bleed onto the community model when the picker switches).
+   *  Defaults to `true` (every Tesla config supports wraps). */
+  supportsWrap?: boolean;
+
   // ───────────────────────────────────────────────────────────────────
   // Interior material overrides — recolour Tesla's placeholder colours
   // ───────────────────────────────────────────────────────────────────
@@ -1601,6 +1613,10 @@ export const CommunityM3Config: VehicleModelConfig = {
   // White multi-coat — multiplies the native white texture by white, i.e.
   // leaves it unchanged. The Showroom colour picker overrides this.
   bodyPaintColor: 0xffffff,
+  // No Tesla wrap UV1 layout on this community mesh → PNG wraps can't map.
+  // Force solid paint so the colour picker works and a wrap uploaded for a
+  // Tesla model never bleeds onto this body (wraps are stored per-car).
+  supportsWrap: false,
   calloutHeight: 0.5,
   tpmsAnchorMap: { FL: 'LF', FR: 'RF', RL: 'LR', RR: 'RR' },
 

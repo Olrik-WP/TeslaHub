@@ -2463,7 +2463,15 @@ export default function VehicleTopView3D({ vehicle, localOverrides, showroomMode
   //      config `updatedAt` so a freshly-uploaded PNG busts the
   //      browser cache automatically.
   //   3. null — render solid paint via `cfg.bodyPaintColor`.
-  const wrapOverride = extras.wraps?.paintTextureUrl;
+  // Models without the Tesla wrap UV1 layout (community / third-party) can
+  // never map a PNG wrap onto the body — the shader would sample the
+  // transparent corner pixel everywhere. Wraps are stored per-CAR, so a wrap
+  // uploaded while viewing a Tesla model would otherwise stay "active" and
+  // bleed onto the community model when the picker switches. Disable wraps
+  // entirely for those models: the viewer then renders solid bodyPaintColor
+  // and the colour picker works as expected.
+  const modelSupportsWrap = modelConfig.supportsWrap !== false;
+  const wrapOverride = modelSupportsWrap ? extras.wraps?.paintTextureUrl : undefined;
   const wrapRotation = extras.wraps?.rotationDeg ?? 0;
   const wrapFinish = extras.wraps?.finish;
   // Destructure to scalar deps so useMemo doesn't rebuild when the
@@ -2486,7 +2494,7 @@ export default function VehicleTopView3D({ vehicle, localOverrides, showroomMode
           }
         : undefined;
     if (wrapOverride) return { url: wrapOverride, rotationDeg: wrapRotation, finish };
-    if (wrapExists && vehicle.carId) {
+    if (modelSupportsWrap && wrapExists && vehicle.carId) {
       return {
         url: wrapPngUrl(vehicle.carId, updatedAt ?? undefined),
         rotationDeg: wrapRotation,
@@ -2497,6 +2505,7 @@ export default function VehicleTopView3D({ vehicle, localOverrides, showroomMode
   }, [
     wrapOverride,
     wrapRotation,
+    modelSupportsWrap,
     wrapExists,
     vehicle.carId,
     updatedAt,
