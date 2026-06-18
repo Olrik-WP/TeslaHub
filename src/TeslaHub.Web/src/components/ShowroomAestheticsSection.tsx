@@ -1153,6 +1153,80 @@ function WheelsSection({ overrides, onChange, defaults }: Props) {
 }
 
 // ────────────────────────────────────────────────────────────────────
+// VITRES (simplifié) — community / third-party models without Tesla's
+// glass zone structure. A single global opacity + tint applied to the
+// model's glass material(s). Reuses glassFinish.doorWindow{Opacity,Tint}.
+// ────────────────────────────────────────────────────────────────────
+
+function SimpleGlassSection({ overrides, onChange, defaults }: Props) {
+  if (!defaults.simpleGlass) return null;
+  const gf = overrides.glassFinish ?? {};
+  const setField = (
+    key: 'doorWindowOpacity' | 'doorWindowTint',
+    value: number | undefined,
+  ) => {
+    const next = { ...gf };
+    if (value === undefined) {
+      delete next[key];
+    } else {
+      next[key] = value;
+    }
+    onChange({
+      ...overrides,
+      glassFinish: Object.keys(next).length > 0 ? next : undefined,
+    });
+  };
+  const opacity = gf.doorWindowOpacity ?? defaults.glassFinish.doorWindowOpacity;
+  const tint = gf.doorWindowTint ?? defaults.glassFinish.doorWindowTint;
+  const overridden =
+    gf.doorWindowOpacity !== undefined || gf.doorWindowTint !== undefined;
+
+  return (
+    <SubSection
+      title="Vitres"
+      rightSlot={
+        overridden ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setField('doorWindowOpacity', undefined);
+              setField('doorWindowTint', undefined);
+            }}
+            className="text-[10px] text-[#6b7280] hover:text-white"
+          >
+            ↺ Reset
+          </button>
+        ) : null
+      }
+    >
+      <ShowroomSlider
+        label="Opacité"
+        value={opacity}
+        onChange={(n) => setField('doorWindowOpacity', n)}
+        defaultValue={defaults.glassFinish.doorWindowOpacity}
+        min={0}
+        max={1}
+        step={0.01}
+      />
+      <ShowroomSlider
+        label="Teinte"
+        value={tint}
+        onChange={(n) => setField('doorWindowTint', n)}
+        defaultValue={defaults.glassFinish.doorWindowTint}
+        min={0}
+        max={1}
+        step={0.01}
+      />
+      <p className="text-[10px] text-[#6b7280] -mt-1">
+        Teinte globale des vitres (modèle communautaire). 0 = clair, 1 =
+        fumé noir. L'opacité règle la transparence.
+      </p>
+    </SubSection>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Aggregator
 // ────────────────────────────────────────────────────────────────────
 
@@ -1214,6 +1288,7 @@ export function ShowroomAestheticsSection({
       {!wrapActive && (
         <PaintSection overrides={overrides} onChange={onChange} defaults={defaults} />
       )}
+      <SimpleGlassSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <InteriorSection overrides={overrides} onChange={onChange} defaults={defaults} />
       {defaults.supportsWheelFinish !== false && (
         <WheelsSection overrides={overrides} onChange={onChange} defaults={defaults} />

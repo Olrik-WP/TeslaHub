@@ -414,6 +414,17 @@ export interface VehicleModelConfig {
    *  inert — set `false` to hide them. Defaults to `true`. */
   supportsGlassTint?: boolean;
 
+  /** Simplified, zone-less glass tinting for community / third-party models
+   *  that have identifiable glass material(s) but none of Tesla's glass zone
+   *  node structure. When set, the viewer applies a single global opacity +
+   *  tint (read from `glassFinish.doorWindowOpacity` / `doorWindowTint`) to
+   *  every material whose name matches `material`. Tesla configs leave this
+   *  `undefined` so their dedicated zone router is untouched. */
+  simpleGlass?: {
+    /** Material-name regex selecting the glass surfaces to tint. */
+    material: RegExp;
+  };
+
   // ───────────────────────────────────────────────────────────────────
   // Interior material overrides — recolour Tesla's placeholder colours
   // ───────────────────────────────────────────────────────────────────
@@ -1637,6 +1648,10 @@ export const CommunityM3Config: VehicleModelConfig = {
   // tint/opacity sliders do nothing. Hide both to avoid dead controls.
   supportsWheelFinish: false,
   supportsGlassTint: false,
+  // The full Tesla zone router can't address this model's glass, but the
+  // `glass.*` materials ARE identifiable → expose a single global opacity +
+  // tint slider that targets them directly.
+  simpleGlass: { material: /^glass/i },
   calloutHeight: 0.5,
   tpmsAnchorMap: { FL: 'LF', FR: 'RF', RL: 'LR', RR: 'RR' },
 

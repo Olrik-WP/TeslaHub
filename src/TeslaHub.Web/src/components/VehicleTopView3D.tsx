@@ -1702,6 +1702,42 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
     wrapEnvMapIntensity,
   ]);
 
+  // Simplified glass tint for community / third-party models (cfg.simpleGlass).
+  // Tesla configs leave `simpleGlass` undefined → this effect is a no-op and
+  // their dedicated zone router is the only thing that touches glass. For
+  // models that DO set it, apply a single global opacity + tint to every
+  // material matching the regex. We stash the pristine colour/opacity on
+  // userData so dragging the sliders recomputes from the original instead of
+  // compounding (the material objects are shared across cfg-driven rebuilds).
+  const simpleGlass = cfg.simpleGlass;
+  const simpleGlassOpacity = cfg.glassFinish.doorWindowOpacity;
+  const simpleGlassTint = cfg.glassFinish.doorWindowTint;
+  useEffect(() => {
+    if (!simpleGlass) return;
+    const re = simpleGlass.material;
+    cleanedScene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) {
+        const std = m as THREE.MeshStandardMaterial & {
+          userData: { __glassBaseColor?: number };
+        };
+        if (!re.test((std as { name?: string }).name ?? '')) continue;
+        if (std.userData.__glassBaseColor === undefined) {
+          std.userData.__glassBaseColor = std.color.getHex();
+        }
+        // Tint: 0 = original colour, 1 = black (fully smoked).
+        const t = Math.min(Math.max(simpleGlassTint, 0), 1);
+        std.color.setHex(std.userData.__glassBaseColor).multiplyScalar(1 - t);
+        std.transparent = true;
+        std.opacity = Math.min(Math.max(simpleGlassOpacity, 0), 1);
+        std.depthWrite = false;
+        std.needsUpdate = true;
+      }
+    });
+  }, [cleanedScene, simpleGlass, simpleGlassOpacity, simpleGlassTint]);
+
   // Optional per-model corrective transform (community / 3rd-party GLBs
   // that ship with a baked unit scale or off-axis forward). When undefined
   // (every Tesla model, and now the community model since its transforms are
