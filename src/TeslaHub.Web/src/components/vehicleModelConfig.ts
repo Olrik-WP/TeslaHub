@@ -37,6 +37,7 @@ import type {
 import { OPENINGS_POPPYSEED } from './poppyseedOpenings';
 import { MIRROR_TRACKS_POPPYSEED } from './poppyseedOpenings';
 import { OPENINGS_BAYBERRY } from './bayberryOpenings';
+import { OPENINGS_COMMUNITY_M3 } from './communityM3Openings';
 
 /**
  * Every floating callout key the viewer knows about. Used to type
@@ -1552,21 +1553,24 @@ const NEVER_MATCH = /^__never__$/;
 export const CommunityM3Config: VehicleModelConfig = {
   key: 'community',
   displayName: 'Communauté — Model 3 (CC-BY)',
-  modelUrl: '/models/community-m3.glb',
-  // This model ships its wheels INSIDE the body, so there is no separate
-  // wheel GLB. We point wheelUrl at the body file (a real, always-present
-  // asset) and rely on the empty wheelFallbackPositions/wheelAnchorNames
-  // below: the viewer derives "no separate wheels" from those being empty
-  // and never tries to mount/clone wheels. Using a real URL here avoids a
-  // 404 probe AND the drei useGLTF cache-poisoning that a missing file
-  // would cause during a model switch.
-  wheelUrl: '/models/community-m3.glb',
+  // RIGGED export (community-m3-rigged.glb): keeps the full node hierarchy so
+  // the hinge dummies survive for the opening animations. The static baked
+  // file (community-m3.glb) flattened the graph and lost the pivots — it's
+  // kept around but no longer referenced. The ×100→m unit correction that the
+  // bake used to apply is now done at render time via rootTransform below; the
+  // rigged model renders IDENTICALLY (same world orientation + scale) but with
+  // working pivots.
+  modelUrl: '/models/community-m3-rigged.glb',
+  // No separate wheel GLB (wheels are inside the body). Point wheelUrl at the
+  // body file (always-present) and rely on the empty wheelFallbackPositions/
+  // wheelAnchorNames below so the viewer never tries to mount/clone wheels.
+  wheelUrl: '/models/community-m3-rigged.glb',
 
-  // The source GLB carried a messy transform hierarchy (a baked ×100 unit
-  // scale plus cascading ±90° rotations on wrapper nodes). Those transforms
-  // are now BAKED into the vertex data offline (see Tesla-Godot-Test/
-  // bake-transforms.mjs), so the shipped file has identity node transforms at
-  // real metre scale and needs no runtime rootTransform correction.
+  // The rigged GLB keeps the source's ×100 unit scale (cm) and cascading
+  // wrapper rotations in the node graph. Applying scale 0.01 at the root
+  // reproduces the baked model's metre-scale orientation exactly, while
+  // leaving the hinge dummies intact for the opening animations.
+  rootTransform: { scale: 0.01 },
 
   // First-pass 3/4 view for a ~4.7 m car. Recalibrate in the Showroom.
   cameraPose: {
@@ -1687,10 +1691,10 @@ export const CommunityM3Config: VehicleModelConfig = {
     headlightColor: 0xffffff,
   },
 
-  // STATIC-first milestone: no opening animations yet. Pivots are present
-  // in the GLB (door_*_dummy_*, bonnet_dummy_279, boot_dummy_158) ready
-  // for a follow-up communityM3Openings.ts.
-  openings: [],
+  // Opening animations driving the hinge dummies preserved in the rigged GLB
+  // (door_*_dummy_*, bonnet_dummy_279, boot_dummy_158). Angles are first-pass
+  // geometric guesses — calibrate live in the viewer (see communityM3Openings).
+  openings: OPENINGS_COMMUNITY_M3,
 };
 
 export const VEHICLE_MODELS: Record<VehicleModelKey, VehicleModelConfig> = {
