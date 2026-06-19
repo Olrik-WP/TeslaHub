@@ -29,9 +29,10 @@ export function SuperchargerModel() {
   }, [rawScene]);
 
   const rotationRad = THREE.MathUtils.degToRad(sc.rotationY);
+  const scale = sc.scale ?? 1;
 
   return (
-    <group position={sc.position} rotation={[0, rotationRad, 0]}>
+    <group position={sc.position} rotation={[0, rotationRad, 0]} scale={scale}>
       <primitive object={scene} />
     </group>
   );

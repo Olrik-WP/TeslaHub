@@ -34,6 +34,31 @@ section whenever the community model is selected, and in the project
 `README.md`. Per CC BY 4.0 you must keep these notices intact when
 redistributing the build.
 
+## Bundled — community Supercharger (charging view)
+
+| | |
+|---|---|
+| **File** | `community-supercharger.glb` |
+| **Title** | Tesla Super Charger (low-poly) |
+| **Author** | Suyog modak |
+| **Source** | https://sketchfab.com/3d-models/tesla-super-charger-low-poly-b9fc975778f542babbb2e861d32b1acd |
+| **Licence** | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| **Changes** | Re-scaled / re-positioned to TeslaHub's world axes (see `CommunityM3Config.supercharger`). May be re-optimised with `gltf-transform`. |
+
+### Attribution notice (CC BY 4.0)
+
+> "Tesla Super Charger (low-poly)" by **Suyog modak**
+> (https://sketchfab.com/3d-models/tesla-super-charger-low-poly-b9fc975778f542babbb2e861d32b1acd)
+> is licensed under **CC BY 4.0**
+> (https://creativecommons.org/licenses/by/4.0/).
+> The model has been **modified** for use in TeslaHub (re-scaled,
+> re-positioned).
+
+> NOTE — the charging cable + plug are generated **procedurally** by
+> TeslaHub (no third-party asset). The proprietary Tesla plug handle
+> (`charger_handle.glb`) is NOT bundled; the cable simply terminates at
+> the car's charge port for the community build.
+
 ## Proprietary Tesla models (NOT committed)
 
 The `*.glb` files extracted from the Tesla mobile app (e.g.

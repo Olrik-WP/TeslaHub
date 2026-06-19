@@ -65,7 +65,6 @@ import { ShowroomGeometrySection } from './ShowroomGeometrySection';
 import { ShowroomAestheticsSection } from './ShowroomAestheticsSection';
 import { ShowroomLightsSection } from './ShowroomLightsSection';
 import { ShowroomGlassSection } from './ShowroomGlassSection';
-import { ShowroomSentrySection } from './ShowroomSentrySection';
 
 // Lazy-load the viewer — same trick VehicleTopView.tsx uses to keep
 // the GLB/three.js bundle off the initial Settings page load.
@@ -654,17 +653,9 @@ export default function Showroom({ carId }: Props) {
             </>
           )}
 
-          <div className="h-px bg-[#1a1a1a]" />
-
-          <ShowroomSentrySection
-            overrides={editedOverrides}
-            onChange={setEditedOverrides}
-            defaults={defaults}
-            visualState={visualState}
-            onVisualChange={setVisualState}
-          />
-
-          {/* Restant — Phase 4 : drag-gizmos sur les callouts/anchors. */}
+          {/* Restant — Phase 4 : drag-gizmos sur les callouts/anchors.
+              (Les caméras sentinelles sont éditées dans la section
+              Géométrie ci-dessus — SentryCamerasSection.) */}
           <div className="text-[10px] text-[#4b5563] text-center pt-4 border-t border-[#1a1a1a]">
             {t('showroom.moreSoon', 'À venir : drag-gizmos…')}
           </div>

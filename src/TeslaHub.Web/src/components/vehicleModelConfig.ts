@@ -240,6 +240,10 @@ export interface VehicleModelConfig {
      *  (applied before rotationY). Tune in Showroom until the orange
      *  debug marker sits on the handle recess. */
     cablePortOffset: [number, number, number];
+    /** Uniform scale applied to the SC GLB. Defaults to 1. Needed for
+     *  third-party (CC) charger models whose authored units differ from
+     *  the Tesla-app export — tune live in the Showroom. */
+    scale?: number;
   };
 
   /** Optional secondary camera pose used while the car is charging — lets
@@ -1661,10 +1665,15 @@ export const CommunityM3Config: VehicleModelConfig = {
   cableSlack: { post: 1.7, car: 1.5 },
 
   supercharger: {
-    modelUrl: '/models/supercharger_base.glb',
+    // CC-BY community charger (bundled, not the proprietary Tesla GLB).
+    // Served from /community-models so the optional /srv/models volume
+    // never shadows it. scale + position are first-pass — calibrate live
+    // in the Showroom (third-party GLBs ship at arbitrary units/origin).
+    modelUrl: '/community-models/community-supercharger.glb',
     position: [-2.3, 0, 2.2],
     rotationY: 180,
     cablePortOffset: [0.14, 1.49, -0.98],
+    scale: 1,
   },
 
   // User-calibrated charging 3/4-rear pose (2026-06) framing car + SC.

@@ -470,6 +470,16 @@ function SuperchargerSection({ overrides, onChange, defaults }: Props) {
         step={1}
         unit="°"
       />
+      <ShowroomSlider
+        label="Échelle (modèle CC tiers)"
+        value={sc.scale ?? 1}
+        onChange={(v) => patch({ scale: v })}
+        defaultValue={defaults.supercharger.scale ?? 1}
+        min={0.05}
+        max={5}
+        step={0.01}
+        unit="×"
+      />
       <ShowroomVec3Slider
         label="Offset port câble (local → orange)"
         value={sc.cablePortOffset}

@@ -1215,6 +1215,8 @@ Download it from [tesla-wrap.com](https://www.tesla-wrap.com/design/79dc51bc-98e
 The 3D vehicle viewer ships with a **community-licensed Model 3** so it works out of the box, without any Tesla proprietary asset:
 
 > "Tesla Model 3 (Realistic Graphics)" by **ChoochooLi** ([Sketchfab](https://sketchfab.com/3d-models/tesla-model-3-realistic-graphics)) is licensed under [**CC BY 4.0**](https://creativecommons.org/licenses/by/4.0/). The model has been **modified** for TeslaHub (rigged for door/hood/trunk animations, optimised with `gltf-transform`, re-scaled/re-oriented, materials remapped).
+>
+> Charging-view supercharger: "Tesla Super Charger (low-poly)" by **Suyog modak** ([Sketchfab](https://sketchfab.com/3d-models/tesla-super-charger-low-poly-b9fc975778f542babbb2e861d32b1acd)) is licensed under [**CC BY 4.0**](https://creativecommons.org/licenses/by/4.0/), **modified** (re-scaled/re-positioned). The charging cable + plug are generated procedurally (no third-party asset).
 
 This credit is also shown in-app (Showroom → Modèle / Trim) and documented in [`public/community-models/CREDITS.md`](src/TeslaHub.Web/public/community-models/CREDITS.md). If you redistribute the build, keep these notices intact (CC BY 4.0 requirement).
 
@@ -1226,7 +1228,7 @@ TeslaHub works alongside [TeslaMate](https://github.com/teslamate-org/teslamate)
 
 TeslaHub is an independent project and does not modify TeslaMate. It only reads TeslaMate data using a read-only database user.
 
-3D vehicle model: "Tesla Model 3 (Realistic Graphics)" by ChoochooLi, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), modified — see [§ 3D vehicle model](#3d-vehicle-model).
+3D vehicle model: "Tesla Model 3 (Realistic Graphics)" by ChoochooLi, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), modified. Supercharger: "Tesla Super Charger (low-poly)" by Suyog modak, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), modified — see [§ 3D vehicle model](#3d-vehicle-model).
 
 ## License
 
