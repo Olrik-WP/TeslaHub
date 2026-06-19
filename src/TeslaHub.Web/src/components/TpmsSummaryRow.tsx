@@ -5,7 +5,12 @@ import {
   useResolvedModelConfig,
   useSaveShowroom,
 } from './useResolvedModelConfig';
-import type { ShowroomOverrides } from './showroomOverrides';
+import {
+  buildSavedBlob,
+  modelSlot,
+  normalizeBlob,
+  resolveActiveModelKey,
+} from './showroomOverrides';
 
 interface Props {
   vehicle: VehicleStatus;
@@ -103,8 +108,13 @@ export default function TpmsSummaryRow({ vehicle }: Props) {
 
   const toggle3dTpms = () => {
     if (!vehicle.carId || saveShowroom.isPending) return;
-    const prev: ShowroomOverrides = savedOverrides ?? {};
-    const prevHidden = { ...(prev.calloutsHidden ?? {}) };
+    // Operate on the ACTIVE model's per-car slot (v2 blob). We edit only
+    // that slot's calloutsHidden and rebuild the namespaced blob so the
+    // other models' calibration is preserved.
+    const vin = vehicle.vin;
+    const activeKey = resolveActiveModelKey(vin, savedOverrides);
+    const slot = modelSlot(savedOverrides, vin, activeKey);
+    const prevHidden = { ...(slot.calloutsHidden ?? {}) };
     if (tpms3dHidden) {
       // Currently all 4 hidden → reveal them: drop the 4 keys.
       for (const k of TPMS_CALLOUT_KEYS) delete prevHidden[k];
@@ -112,12 +122,19 @@ export default function TpmsSummaryRow({ vehicle }: Props) {
       // Hide all 4 in one go.
       for (const k of TPMS_CALLOUT_KEYS) prevHidden[k] = true;
     }
-    const next: ShowroomOverrides = {
-      ...prev,
+    const nextSlot = {
+      ...slot,
       calloutsHidden:
         Object.keys(prevHidden).length > 0 ? prevHidden : undefined,
     };
-    saveShowroom.mutate(next);
+    const blob = buildSavedBlob(
+      savedOverrides,
+      vin,
+      activeKey,
+      nextSlot,
+      normalizeBlob(savedOverrides, vin).activeModelKey,
+    );
+    saveShowroom.mutate(blob);
   };
 
   const toggleLabel = tpms3dHidden

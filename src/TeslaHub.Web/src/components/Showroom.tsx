@@ -47,7 +47,13 @@ import {
   VEHICLE_MODELS,
   type VehicleModelKey,
 } from './vehicleModelConfig';
-import { pickResolvedModelKey } from './showroomOverrides';
+import {
+  modelSlot,
+  buildSavedBlob,
+  normalizeBlob,
+  resolveActiveModelKey,
+  vinModelKey,
+} from './showroomOverrides';
 import {
   type ShowroomVisualState,
   DEFAULT_VISUAL_STATE,
@@ -118,14 +124,31 @@ export default function Showroom({ carId }: Props) {
   // Fetch the persisted override blob. We use the same hook the
   // viewer uses so they share the React Query cache (single network
   // request even though both consume the data).
+  const vin = vehicle?.vin ?? null;
+
+  // `savedOverrides` is the RAW per-car blob from the backend (v2
+  // namespaced-by-model, or a legacy flat blob that normalizeBlob
+  // migrates on the fly). We never feed it straight to the editor —
+  // we slice out the SELECTED model's slot below.
   const {
-    savedOverrides,
+    savedOverrides: savedBlob,
     wraps,
     isLoading: cfgLoading,
-  } = useResolvedModelConfig(carId, vehicle?.vin ?? null);
+  } = useResolvedModelConfig(carId, vin);
 
-  // In-flight edits — starts at the saved blob, updated as the user
-  // tweaks sliders. Reset to saved on Discard / when carId changes.
+  // Which model the editor is currently tuning. Defaults to the car's
+  // displayed model; the picker can switch it to test another model
+  // WITHOUT touching the displayed one.
+  const [selectedKey, setSelectedKey] = useState<VehicleModelKey>('poppyseed');
+
+  // The model the car DISPLAYS everywhere (Home, cards). Edited via the
+  // "Afficher sur cette voiture" toggle; `undefined` = VIN auto-detect.
+  const [activeKeyEdit, setActiveKeyEdit] = useState<VehicleModelKey | undefined>(
+    undefined,
+  );
+
+  // In-flight edits for the SELECTED model's slot. Reset to the saved
+  // slot on Discard / model switch / car switch.
   const [editedOverrides, setEditedOverrides] = useState<ShowroomOverrides>({});
 
   // EPHEMERAL visual state — drives doors / charging / sentry / shift
@@ -159,12 +182,11 @@ export default function Showroom({ carId }: Props) {
     [debugGlass, debugAnchors],
   );
 
-  // Hydrate `editedOverrides` from the saved blob on first load and
-  // whenever the user switches cars. We intentionally don't depend on
-  // `savedOverrides` content alone — that would clobber in-flight
-  // edits whenever React Query refetches. Re-hydration ONLY on carId
-  // change or when the saved blob arrives for the FIRST time (i.e.
-  // transitions from undefined to something).
+  // Hydrate the editor from the saved blob on first load and whenever
+  // the user switches cars. We intentionally don't depend on the blob
+  // content alone — that would clobber in-flight edits whenever React
+  // Query refetches. Re-hydration ONLY on carId change or when the
+  // saved blob first arrives.
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     setHydrated(false);
@@ -172,14 +194,58 @@ export default function Showroom({ carId }: Props) {
   useEffect(() => {
     if (hydrated) return;
     if (cfgLoading) return;
-    setEditedOverrides(savedOverrides ?? {});
+    const active = resolveActiveModelKey(vin, savedBlob);
+    setSelectedKey(active);
+    setActiveKeyEdit(normalizeBlob(savedBlob, vin).activeModelKey);
+    setEditedOverrides(modelSlot(savedBlob, vin, active));
     setHydrated(true);
-  }, [hydrated, cfgLoading, savedOverrides]);
+  }, [hydrated, cfgLoading, savedBlob, vin]);
+
+  // The saved slot for the model currently being edited — the baseline
+  // for the dirty check and Discard.
+  const savedSlot = useMemo(
+    () => modelSlot(savedBlob, vin, selectedKey),
+    [savedBlob, vin, selectedKey],
+  );
+  const savedActiveKey = useMemo(
+    () => normalizeBlob(savedBlob, vin).activeModelKey,
+    [savedBlob, vin],
+  );
 
   const dirty = useMemo(
-    () => !isOverrideEqual(editedOverrides, savedOverrides),
-    [editedOverrides, savedOverrides],
+    () =>
+      !isOverrideEqual(editedOverrides, savedSlot) ||
+      activeKeyEdit !== savedActiveKey,
+    [editedOverrides, savedSlot, activeKeyEdit, savedActiveKey],
   );
+
+  // What the live preview renders: the edited slot tagged with the
+  // selected model key (so the viewer picks the right model + GLB).
+  // Memoised so a new object reference doesn't re-resolve the viewer
+  // (and reset projection nodes) on every unrelated re-render.
+  const viewerOverrides = useMemo(
+    () => ({ ...editedOverrides, modelKey: selectedKey }),
+    [editedOverrides, selectedKey],
+  );
+
+  // Switch the model being edited. Re-hydrates the editor from that
+  // model's saved slot; warns before discarding unsaved edits.
+  const handleSelectModel = (next: VehicleModelKey) => {
+    if (next === selectedKey) return;
+    if (
+      dirty &&
+      !window.confirm(
+        t(
+          'showroom.confirmModelSwitch',
+          'Changer de modèle abandonnera les modifications non sauvegardées de ce modèle. Continuer ?',
+        ),
+      )
+    ) {
+      return;
+    }
+    setSelectedKey(next);
+    setEditedOverrides(modelSlot(savedBlob, vin, next));
+  };
 
   // Mutations
   const saveMutation = useSaveShowroom(carId);
@@ -204,11 +270,19 @@ export default function Showroom({ carId }: Props) {
 
   const handleSave = () => {
     if (!carId || !dirty) return;
-    saveMutation.mutate(editedOverrides);
+    const blob = buildSavedBlob(
+      savedBlob,
+      vin,
+      selectedKey,
+      editedOverrides,
+      activeKeyEdit,
+    );
+    saveMutation.mutate(blob);
   };
 
   const handleDiscard = () => {
-    setEditedOverrides(savedOverrides ?? {});
+    setEditedOverrides(savedSlot);
+    setActiveKeyEdit(savedActiveKey);
   };
 
   // Tiny "copied" badge that flashes for 1.5s after a successful copy.
@@ -247,14 +321,18 @@ export default function Showroom({ carId }: Props) {
       !window.confirm(
         t(
           'showroom.confirmReset',
-          'Réinitialiser TOUS les réglages aux valeurs par défaut ? Cette action est irréversible.',
+          'Réinitialiser les réglages de TOUS les modèles de cette voiture aux valeurs par défaut ? Cette action est irréversible.',
         ),
       )
     ) {
       return;
     }
     resetMutation.mutate(undefined, {
-      onSuccess: () => setEditedOverrides({}),
+      onSuccess: () => {
+        setEditedOverrides({});
+        setActiveKeyEdit(undefined);
+        setSelectedKey(vinModelKey(vin));
+      },
     });
   };
 
@@ -292,12 +370,9 @@ export default function Showroom({ carId }: Props) {
   // remote-controlling from the right-hand panel.
   const stubVehicle = buildShowroomStubVehicle(vehicle, visualState);
 
-  // Active model SHIPPED defaults (no overrides applied). Used by the
-  // geometry section so the sliders' "↺ reset" buttons know what to
-  // revert to. We re-resolve on every render so a model switch made
-  // higher in the panel (Modèle/Trim section) is picked up here.
-  const activeModelKey = pickResolvedModelKey(vehicle.vin, editedOverrides);
-  const defaults = VEHICLE_MODELS[activeModelKey] ?? PoppyseedConfig;
+  // SHIPPED defaults for the model being edited. Used by every section
+  // so the sliders' "↺ reset" buttons know what to revert to.
+  const defaults = VEHICLE_MODELS[selectedKey] ?? PoppyseedConfig;
 
   // The lights section only does anything when the model declares emissive
   // light nodes. Community / third-party models ship none → hide the section
@@ -410,7 +485,7 @@ export default function Showroom({ carId }: Props) {
             >
               <VehicleTopView3D
                 vehicle={stubVehicle}
-                localOverrides={editedOverrides}
+                localOverrides={viewerOverrides}
                 showroomMode
                 debugMode={debugMode}
               />
@@ -426,8 +501,12 @@ export default function Showroom({ carId }: Props) {
           }
         >
           <ModelSection
-            overrides={editedOverrides}
-            onChange={setEditedOverrides}
+            selectedKey={selectedKey}
+            onSelectModel={handleSelectModel}
+            displayed={activeKeyEdit === selectedKey}
+            onToggleDisplay={(display) =>
+              setActiveKeyEdit(display ? selectedKey : undefined)
+            }
             vin={vehicle.vin}
           />
 
@@ -521,21 +600,29 @@ const TRIM_OPTIONS: Array<{
 ];
 
 interface ModelSectionProps {
-  overrides: ShowroomOverrides;
-  onChange: (next: ShowroomOverrides) => void;
+  /** Model currently being edited (drives the editor + live preview). */
+  selectedKey: VehicleModelKey;
+  /** Switch the model being edited (re-hydrates its saved slot). */
+  onSelectModel: (next: VehicleModelKey) => void;
+  /** Whether the SELECTED model is the one the car displays everywhere. */
+  displayed: boolean;
+  /** Set/clear the selected model as the car's displayed model. */
+  onToggleDisplay: (display: boolean) => void;
   vin: string | null;
 }
 
-function ModelSection({ overrides, onChange, vin }: ModelSectionProps) {
+function ModelSection({
+  selectedKey,
+  onSelectModel,
+  displayed,
+  onToggleDisplay,
+  vin,
+}: ModelSectionProps) {
   const { t } = useTranslation();
 
-  // The user's choice (if any) wins; otherwise we show the VIN-based
-  // detection so the dropdown reflects what's actually rendering.
   const autoDetected: VehicleModelKey = vin?.toUpperCase().charAt(3) === 'Y'
     ? 'bayberry'
     : 'poppyseed';
-  const currentKey = overrides.modelKey ?? autoDetected;
-  const isOverridden = !!overrides.modelKey;
 
   return (
     <section className="space-y-2">
@@ -543,27 +630,11 @@ function ModelSection({ overrides, onChange, vin }: ModelSectionProps) {
         <h3 className="text-xs uppercase tracking-wider text-[#9ca3af] font-medium">
           {t('showroom.sections.model', 'Modèle / Trim')}
         </h3>
-        {isOverridden && (
-          <button
-            type="button"
-            onClick={() => {
-              const { modelKey: _modelKey, ...rest } = overrides;
-              void _modelKey;
-              onChange(rest);
-            }}
-            className="text-[10px] text-[#6b7280] hover:text-white"
-            title={t('showroom.resetField', 'Revenir à la détection automatique')}
-          >
-            {t('showroom.auto', 'Auto')}
-          </button>
-        )}
       </header>
 
       <select
-        value={currentKey}
-        onChange={(e) =>
-          onChange({ ...overrides, modelKey: e.target.value as VehicleModelKey })
-        }
+        value={selectedKey}
+        onChange={(e) => onSelectModel(e.target.value as VehicleModelKey)}
         className={
           'w-full bg-[#0a0a0a] border border-[#2a2a2a] rounded-md px-3 py-2 ' +
           'text-sm text-white focus:border-[#e31937] focus:outline-none'
@@ -572,21 +643,32 @@ function ModelSection({ overrides, onChange, vin }: ModelSectionProps) {
         {TRIM_OPTIONS.map((o) => (
           <option key={o.key} value={o.key}>
             {o.label}
-            {!isOverridden && o.key === autoDetected ? ' · (auto)' : ''}
+            {o.key === autoDetected ? ' · (auto)' : ''}
           </option>
         ))}
       </select>
 
+      {/* Display toggle — each model keeps its OWN calibration slot on
+          this car, so switching the picker only changes what you EDIT.
+          This checkbox controls what the car actually shows everywhere. */}
+      <label className="flex items-center gap-2 text-[11px] text-[#d1d5db] cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={displayed}
+          onChange={(e) => onToggleDisplay(e.target.checked)}
+          className="accent-[#e31937]"
+        />
+        {t(
+          'showroom.displayOnCar',
+          'Afficher ce modèle sur cette voiture (Accueil, cartes)',
+        )}
+      </label>
+
       <p className="text-[10px] text-[#6b7280]">
-        {isOverridden
-          ? t(
-              'showroom.modelOverridden',
-              'Modèle forcé manuellement. Cliquez "Auto" pour revenir à la détection par VIN.',
-            )
-          : t(
-              'showroom.modelAuto',
-              'Détecté à partir du VIN. Cliquez pour forcer un autre modèle.',
-            )}
+        {t(
+          'showroom.modelPerCarHint',
+          "Tester un modèle n'écrase plus les autres : chaque modèle garde ses propres réglages par voiture. Coche la case pour que cette voiture l'affiche partout.",
+        )}
       </p>
     </section>
   );

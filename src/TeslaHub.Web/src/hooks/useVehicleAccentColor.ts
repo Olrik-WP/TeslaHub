@@ -25,6 +25,7 @@
  */
 import type { VehicleStatus } from '../api/queries';
 import { useResolvedModelConfig } from '../components/useResolvedModelConfig';
+import { selectModelOverrides } from '../components/showroomOverrides';
 
 /**
  * Tesla exterior color codes seen in TeslaMate's `vehicle_config`
@@ -101,13 +102,14 @@ export function useVehicleAccentColor(
   status: VehicleStatus | undefined,
 ): AccentColor {
   // Pulls the persisted Showroom override blob via the shared React
-  // Query cache (same key the 3D viewer uses — already deduped).
-  // We pass status?.vin for completeness even though it's only used
-  // by the hook to pick the model variant; we only need
-  // `savedOverrides.bodyPaintColor` from the result.
-  const { savedOverrides } = useResolvedModelConfig(carId, status?.vin ?? null);
+  // Query cache (same key the 3D viewer uses — already deduped). The
+  // blob is namespaced by model (v2), so we slice out the active
+  // model's slot before reading its `bodyPaintColor` override.
+  const vin = status?.vin ?? null;
+  const { savedOverrides } = useResolvedModelConfig(carId, vin);
+  const activeOverrides = selectModelOverrides(savedOverrides, vin);
 
-  const showroomHex = hexNumToString(savedOverrides?.bodyPaintColor ?? null);
+  const showroomHex = hexNumToString(activeOverrides.bodyPaintColor ?? null);
   if (showroomHex) return { hex: showroomHex, source: 'showroom' };
 
   const code = status?.exteriorColor?.toUpperCase();

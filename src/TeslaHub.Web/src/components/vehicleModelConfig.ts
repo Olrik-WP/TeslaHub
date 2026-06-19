@@ -1576,33 +1576,42 @@ export const CommunityM3Config: VehicleModelConfig = {
   // (×0.01 = -0.752) — see Tesla-Godot-Test/bbox.mjs.
   rootTransform: { scale: 0.01, position: [0, 0.752, 0] },
 
-  // First-pass 3/4 view for a ~4.7 m car. Recalibrate in the Showroom.
+  // User-calibrated (2026-06) via the Showroom — low 3/4 view, wide 70° FOV.
   cameraPose: {
-    position: [4.8, 1.7, 4.8],
+    position: [-2.8, -3.45, -4.4],
     target: [0, 0.6, 0],
-    fov: 45,
+    fov: 70,
   },
 
   // No separate wheel system — the body already carries its wheels.
   wheelFallbackPositions: [],
   wheelAnchorNames: [],
 
-  // No charge-port flap node in this model — the plug uses fallbackWorld.
+  // No charge-port flap node in this model — the plug uses fallbackWorld
+  // exclusively (no anchor node → pivotToSocketOffset is inert, kept only
+  // to mirror the calibrated JSON). User-calibrated (2026-06).
   chargePort: {
     nodeName: '',
     alternateNames: [],
-    fallbackWorld: [-1.9, 0.9, 0.9],
-    pivotToSocketOffset: [0, 0, 0],
-    plugDirection: [0, 0, 1],
+    fallbackWorld: [-0.89, 0.965, 2.145],
+    pivotToSocketOffset: [0.265, 0.265, 0.625],
+    plugDirection: [1, -0.2, -0.12],
   },
-  cableGroundAnchor: [-3, 0, -1.5],
-  cableSlack: { post: 1, car: 1 },
+  cableGroundAnchor: [-1.5, 0, 2.05],
+  cableSlack: { post: 1.7, car: 1.5 },
 
   supercharger: {
     modelUrl: '/models/supercharger_base.glb',
-    position: [-4.2, 0, -1.6],
-    rotationY: -90,
-    cablePortOffset: [0.08, 1.05, -0.15],
+    position: [-2.3, 0, 2.2],
+    rotationY: 180,
+    cablePortOffset: [0.14, 1.49, -0.98],
+  },
+
+  // User-calibrated charging 3/4-rear pose (2026-06) framing car + SC.
+  chargingCameraPose: {
+    position: [-3.972, 2.141, -2.583],
+    target: [-0.594, 0.755, -0.021],
+    fov: 38.15,
   },
 
   // Callout anchors point at the opening pivots so the floating buttons
@@ -1643,9 +1652,8 @@ export const CommunityM3Config: VehicleModelConfig = {
     doorWindowNode: NEVER_MATCH,
     panoroofNode: NEVER_MATCH,
   },
-  // White multi-coat — multiplies the native white texture by white, i.e.
-  // leaves it unchanged. The Showroom colour picker overrides this.
-  bodyPaintColor: 0xffffff,
+  // User-calibrated body paint (2026-06) — warm off-white (0xF2F2F0).
+  bodyPaintColor: 0xf2f2f0,
   // No Tesla wrap UV1 layout on this community mesh → PNG wraps can't map.
   // Force solid paint so the colour picker works and a wrap uploaded for a
   // Tesla model never bleeds onto this body (wraps are stored per-car).
@@ -1663,35 +1671,70 @@ export const CommunityM3Config: VehicleModelConfig = {
   calloutHeight: 0.5,
   tpmsAnchorMap: { FL: 'LF', FR: 'RF', RL: 'LR', RR: 'RR' },
 
+  // User-calibrated floating-button placement (2026-06). Callouts with no
+  // backing node on this community model (window/chargePort/sentry hardware,
+  // TPMS pills, climate/defrost/honk/flash) are hidden so no inert button
+  // floats over the car.
+  calloutOffsets: {
+    honk: [0.56, 0, 0],
+    lock: [0.97, 0.91, 1.5],
+    flash: [0.94, -0.24, -0.68],
+    frunk: [0, -0.26, -1.23],
+    trunk: [0, -0.17, 0.82],
+    sentry: [1.03, 0.77, -0.69],
+    climate: [0.27, 0, -1.36],
+    defrost: [0.33, 0, -0.43],
+    climateInfo: [0, 0, -0.02],
+    userPresent: [0.52, -0.07, 0.85],
+  },
+  calloutsHidden: {
+    honk: true,
+    flash: true,
+    tpmsFL: true,
+    tpmsFR: true,
+    tpmsRL: true,
+    tpmsRR: true,
+    window: true,
+    climate: true,
+    defrost: true,
+    chargePort: true,
+    userPresent: true,
+  },
+
   // Wheel/glass/light tuning are inert for this model (no matching nodes /
   // no separate wheels) but the fields are required — use safe defaults.
+  // Wheel finish is inert here (wheels baked into the body, supportsWheelFinish
+  // false) — values kept to mirror the calibrated JSON for consistency.
   wheelFinish: {
-    alloyRoughnessMin: 0.35,
-    alloyEnvBoost: 1.0,
-    alloyClearcoat: 0,
-    plasticRoughness: 0.55,
-    plasticEnvBoost: 1.0,
+    alloyRoughnessMin: 0,
+    alloyEnvBoost: 0.95,
+    alloyTint: 0x404040,
+    alloyClearcoat: 0.16,
+    plasticRoughness: 0.32,
+    plasticEnvBoost: 1.6,
     plasticClearcoat: 0,
   },
+  // User-calibrated (2026-06). doorWindow* drive the simpleGlass tint.
   glassFinish: {
-    outerEnvMultiplier: 1.0,
-    doorWindowOpacity: 0.55,
+    outerEnvMultiplier: 1.5,
+    doorWindowOpacity: 0.6,
     doorWindowTint: 0.0,
-    panoroofOpacity: 0.85,
-    panoroofTint: 0.15,
+    panoroofOpacity: 0.8,
+    panoroofTint: 0.0,
     trunkGlassOpacity: 0.85,
     trunkGlassTint: 0.30,
-    innerMixedOpacity: 0.08,
-    innerMixedEnvMultiplier: 0.02,
-    innerSoloOpacity: 0.85,
-    innerSoloEnvMultiplier: 0.6,
+    innerMixedOpacity: 0.5,
+    innerMixedEnvMultiplier: 0.0,
+    innerSoloOpacity: 0.0,
+    innerSoloEnvMultiplier: 0.0,
   },
+  // User-calibrated (2026-06).
   lightTuning: {
-    brakeIntensity: 3,
+    brakeIntensity: 5,
     brakeColor: 0xff1a1a,
     reverseIntensity: 1.5,
     reverseColor: 0xfff8e8,
-    headlightIntensity: 1.0,
+    headlightIntensity: 0.7,
     headlightColor: 0xffffff,
   },
 

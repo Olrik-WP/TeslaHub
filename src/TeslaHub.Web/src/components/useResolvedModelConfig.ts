@@ -24,6 +24,7 @@ import {
   resolveModelConfig,
   resolveModelExtras,
   type ResolvedModelExtras,
+  type ShowroomBlobV2,
   type ShowroomOverrides,
 } from './showroomOverrides';
 import type { VehicleModelConfig } from './vehicleModelConfig';
@@ -194,7 +195,7 @@ export function useResolvedModelConfigOnly(
 export function useSaveShowroom(carId: number | null | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (overrides: ShowroomOverrides) => {
+    mutationFn: (overrides: ShowroomOverrides | ShowroomBlobV2) => {
       if (!carId) return Promise.reject(new Error('No carId — cannot save Showroom config'));
       return api<{ success: boolean; updatedAt: string }>(
         `/vehicle/${carId}/showroom`,

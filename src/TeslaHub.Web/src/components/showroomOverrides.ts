@@ -258,10 +258,131 @@ export function pickResolvedModelKey(
   overrides: ShowroomOverrides | null | undefined,
 ): VehicleModelKey {
   if (overrides?.modelKey) return overrides.modelKey;
+  return vinModelKey(vin);
+}
+
+// ─── Per-model blob (v2) ────────────────────────────────────────────────────
+//
+// Cars used to store ONE flat `ShowroomOverrides` blob, with the model
+// chosen via an in-blob `modelKey`. That meant testing / tuning a second
+// model on a car OVERWROTE the first model's calibration (the whole blob is
+// replaced on save). The v2 blob namespaces overrides BY MODEL so each model
+// the user calibrates on a car keeps its own independent slot, and switching
+// models for a quick test never clobbers another.
+//
+//   { schema: 2, activeModelKey?, models: { poppyseed: {...}, community: {...} } }
+//
+// `activeModelKey` is the model the car DISPLAYS everywhere (Home, cards);
+// when absent it falls back to VIN detection. Backward compat: a legacy flat
+// blob is migrated on read by `normalizeBlob`; the next save rewrites it as
+// v2. No DB migration needed (the column is opaque jsonb).
+
+/** A car's per-model Showroom blob. */
+export interface ShowroomBlobV2 {
+  schema: 2;
+  /** Model the car renders everywhere. Absent → VIN detection. */
+  activeModelKey?: VehicleModelKey;
+  /** Per-model override slots (each WITHOUT a `modelKey` field — it's
+   *  the map key). */
+  models: Partial<Record<VehicleModelKey, ShowroomOverrides>>;
+}
+
+/** Type guard — true for the v2 namespaced blob, false for a legacy flat
+ *  `ShowroomOverrides`. */
+export function isBlobV2(raw: unknown): raw is ShowroomBlobV2 {
+  return (
+    !!raw &&
+    typeof raw === 'object' &&
+    (raw as { schema?: unknown }).schema === 2 &&
+    typeof (raw as { models?: unknown }).models === 'object' &&
+    (raw as { models?: unknown }).models !== null
+  );
+}
+
+/** VIN → default model key. Community is never auto-detected (no VIN maps
+ *  to it) — it must be selected explicitly via `activeModelKey`. */
+export function vinModelKey(vin: string | null | undefined): VehicleModelKey {
   if (!vin) return 'poppyseed';
-  const code = vin.toUpperCase().charAt(3);
-  if (code === 'Y') return 'bayberry';
-  return 'poppyseed';
+  return vin.toUpperCase().charAt(3) === 'Y' ? 'bayberry' : 'poppyseed';
+}
+
+/** Migrate any stored shape (legacy flat OR v2) into the canonical v2
+ *  form. Pure — never mutates its input. */
+export function normalizeBlob(
+  raw: unknown,
+  vin: string | null | undefined,
+): ShowroomBlobV2 {
+  if (isBlobV2(raw)) {
+    return {
+      schema: 2,
+      activeModelKey: raw.activeModelKey,
+      models: { ...raw.models },
+    };
+  }
+  // Legacy flat blob: the whole object is one model's overrides; its
+  // `modelKey` (if present) names the model AND becomes the active model.
+  const flat = (raw && typeof raw === 'object' ? raw : {}) as ShowroomOverrides;
+  const { modelKey, ...rest } = flat;
+  const key = modelKey ?? vinModelKey(vin);
+  const models: Partial<Record<VehicleModelKey, ShowroomOverrides>> = {};
+  if (Object.keys(rest).length > 0) {
+    models[key] = rest as ShowroomOverrides;
+  }
+  return { schema: 2, activeModelKey: modelKey, models };
+}
+
+/** The model a car DISPLAYS (explicit `activeModelKey` then VIN). */
+export function resolveActiveModelKey(
+  vin: string | null | undefined,
+  raw: unknown,
+): VehicleModelKey {
+  return normalizeBlob(raw, vin).activeModelKey ?? vinModelKey(vin);
+}
+
+/** Flatten a v2 blob to the single-model `ShowroomOverrides` the resolver
+ *  expects (with `modelKey` set so model selection stays correct).
+ *  `forcedKey` previews a model other than the car's displayed one — used
+ *  by the Showroom editor. */
+export function selectModelOverrides(
+  raw: unknown,
+  vin: string | null | undefined,
+  forcedKey?: VehicleModelKey,
+): ShowroomOverrides {
+  const blob = normalizeBlob(raw, vin);
+  const key = forcedKey ?? blob.activeModelKey ?? vinModelKey(vin);
+  return { ...(blob.models[key] ?? {}), modelKey: key };
+}
+
+/** Read one model's saved override slot (without `modelKey`). Hydrates the
+ *  Showroom editor for the selected model. */
+export function modelSlot(
+  raw: unknown,
+  vin: string | null | undefined,
+  key: VehicleModelKey,
+): ShowroomOverrides {
+  return normalizeBlob(raw, vin).models[key] ?? {};
+}
+
+/** Build the v2 blob to persist after editing ONE model's slot, preserving
+ *  every other model's slot. `activeModelKey` is set explicitly by the
+ *  caller so saving a test calibration never changes what the car
+ *  displays unless the user opted in. */
+export function buildSavedBlob(
+  prevRaw: unknown,
+  vin: string | null | undefined,
+  key: VehicleModelKey,
+  slot: ShowroomOverrides,
+  activeModelKey: VehicleModelKey | undefined,
+): ShowroomBlobV2 {
+  const blob = normalizeBlob(prevRaw, vin);
+  // Strip a stray modelKey from the slot — it's namespaced by the map key.
+  const { modelKey: _drop, ...cleanSlot } = slot;
+  void _drop;
+  return {
+    schema: 2,
+    activeModelKey,
+    models: { ...blob.models, [key]: cleanSlot as ShowroomOverrides },
+  };
 }
 
 /**
@@ -428,11 +549,17 @@ export function mergeShowroomConfig(
  */
 export function resolveModelConfig(
   vin: string | null | undefined,
-  overrides: ShowroomOverrides | null | undefined,
+  overrides: ShowroomOverrides | ShowroomBlobV2 | null | undefined,
 ): VehicleModelConfig {
-  const key = pickResolvedModelKey(vin, overrides);
+  // A v2 blob (from the backend) is flattened to its active model's slot
+  // first; a flat blob (legacy DB rows + the Showroom's in-flight edits)
+  // passes through unchanged so existing behaviour is preserved.
+  const flat = isBlobV2(overrides)
+    ? selectModelOverrides(overrides, vin)
+    : overrides;
+  const key = pickResolvedModelKey(vin, flat);
   const defaults = VEHICLE_MODELS[key] ?? PoppyseedConfig;
-  return mergeShowroomConfig(defaults, overrides);
+  return mergeShowroomConfig(defaults, flat);
 }
 
 /**
@@ -450,11 +577,14 @@ export interface ResolvedModelExtras {
 
 export function resolveModelExtras(
   vin: string | null | undefined,
-  overrides: ShowroomOverrides | null | undefined,
+  overrides: ShowroomOverrides | ShowroomBlobV2 | null | undefined,
 ): ResolvedModelExtras {
+  const flat = isBlobV2(overrides)
+    ? selectModelOverrides(overrides, vin)
+    : overrides;
   return {
-    config: resolveModelConfig(vin, overrides),
-    glass: overrides?.glass,
-    wraps: overrides?.wraps,
+    config: resolveModelConfig(vin, flat),
+    glass: flat?.glass,
+    wraps: flat?.wraps,
   };
 }
