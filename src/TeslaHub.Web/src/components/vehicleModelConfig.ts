@@ -1673,7 +1673,9 @@ export const CommunityM3Config: VehicleModelConfig = {
     position: [-2.3, 0, 2.2],
     rotationY: 180,
     cablePortOffset: [0.14, 1.49, -0.98],
-    scale: 1,
+    // First-pass guess — the CC GLB ships ~10× oversized. Fine-tune live
+    // via the Showroom "Échelle" slider / numeric field.
+    scale: 0.1,
   },
 
   // User-calibrated charging 3/4-rear pose (2026-06) framing car + SC.

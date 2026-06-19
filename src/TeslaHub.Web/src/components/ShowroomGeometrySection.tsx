@@ -475,9 +475,9 @@ function SuperchargerSection({ overrides, onChange, defaults }: Props) {
         value={sc.scale ?? 1}
         onChange={(v) => patch({ scale: v })}
         defaultValue={defaults.supercharger.scale ?? 1}
-        min={0.05}
+        min={0.001}
         max={5}
-        step={0.01}
+        step={0.001}
         unit="×"
       />
       <ShowroomVec3Slider
