@@ -410,7 +410,53 @@ export function ChargingCable({
           position={handleTransform.position}
           quaternion={handleTransform.quaternion}
         />
-      ) : null}
+      ) : (
+        // No proprietary Tesla handle GLB available (public build / no
+        // /models volume) → draw a generic, non-branded connector so the
+        // cable terminates cleanly at the port instead of leaving a 21 cm
+        // gap. Fully procedural — zero third-party asset.
+        <GenericPlug
+          position={handleTransform.position}
+          quaternion={handleTransform.quaternion}
+        />
+      )}
+    </group>
+  );
+}
+
+/**
+ * Generic charging connector — a simple procedural plug used when the
+ * real Tesla `charger_handle.glb` isn't bundled (public build). Oriented
+ * with +Z pointing INTO the port (same basis as the GLB handle), spanning
+ * the reserved HANDLE_LENGTH so the cable meets the car body seamlessly.
+ */
+function GenericPlug({
+  position,
+  quaternion,
+}: {
+  position: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+}) {
+  // Local +Z runs from the cable end (back, z<0) to the port (front, z>0),
+  // centred on the group origin which sits at the span midpoint.
+  const half = HANDLE_LENGTH / 2;
+  return (
+    <group position={position} quaternion={quaternion}>
+      {/* Body / grip — dark matte block filling the rear ~13 cm. */}
+      <mesh position={[0, 0, -half + 0.065]} castShadow>
+        <boxGeometry args={[0.055, 0.05, 0.13]} />
+        <meshStandardMaterial color="#1f2937" roughness={0.55} metalness={0.25} />
+      </mesh>
+      {/* Collar — light grey ring where the nozzle meets the grip. */}
+      <mesh position={[0, 0, 0.02]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <cylinderGeometry args={[0.03, 0.03, 0.03, 20]} />
+        <meshStandardMaterial color="#9ca3af" roughness={0.4} metalness={0.5} />
+      </mesh>
+      {/* Nozzle — cylinder pointing into the port (+Z). */}
+      <mesh position={[0, 0, half - 0.04]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <cylinderGeometry args={[0.022, 0.024, 0.08, 20]} />
+        <meshStandardMaterial color="#111827" roughness={0.5} metalness={0.3} />
+      </mesh>
     </group>
   );
 }

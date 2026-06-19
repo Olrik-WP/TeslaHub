@@ -1670,11 +1670,12 @@ export const CommunityM3Config: VehicleModelConfig = {
     // never shadows it. scale + position are first-pass — calibrate live
     // in the Showroom (third-party GLBs ship at arbitrary units/origin).
     modelUrl: '/community-models/community-supercharger.glb',
-    position: [-2.3, 0, 2.2],
+    // User-calibrated (2026-06) — the CC GLB is 22.8 u tall, scale 0.1 →
+    // ~2.28 m (a real V3 post). position/cablePortOffset dialled live so
+    // the cable leaves the post's connector recess cleanly.
+    position: [-2.3, 0, 3.25],
     rotationY: 180,
-    cablePortOffset: [0.14, 1.49, -0.98],
-    // First-pass guess — the CC GLB ships ~10× oversized. Fine-tune live
-    // via the Showroom "Échelle" slider / numeric field.
+    cablePortOffset: [0.26, 1.67, 0.01],
     scale: 0.1,
   },
 
