@@ -588,3 +588,75 @@ export function resolveModelExtras(
     wraps: flat?.wraps,
   };
 }
+
+/**
+ * Build a COMPLETE override blob holding every effective value (model
+ * default where the user didn't override, the user's value where they
+ * did). Used by the Showroom "Copier JSON complet" button so the user
+ * can archive / share a fully self-describing calibration rather than
+ * the compact delta that "Copier JSON" emits.
+ *
+ * The output is a valid `ShowroomOverrides` — re-importing it reproduces
+ * the exact look regardless of future changes to the code defaults.
+ */
+export function buildEffectiveOverrides(
+  defaults: VehicleModelConfig,
+  overrides: ShowroomOverrides | null | undefined,
+): ShowroomOverrides {
+  const cfg = mergeShowroomConfig(defaults, overrides);
+  const ov = overrides ?? {};
+
+  const wheelFallbackPositions: Partial<Record<WheelCorner, WheelPositionOverride>> = {};
+  for (const w of cfg.wheelFallbackPositions) {
+    wheelFallbackPositions[w.id as WheelCorner] = {
+      x: w.x,
+      y: w.y,
+      z: w.z,
+      flipZ: w.flipZ,
+      rotY: w.rotY ?? 0,
+    };
+  }
+
+  const interiorColors: Record<string, number> = {};
+  for (const io of cfg.interiorOverrides ?? []) {
+    interiorColors[io.key] = io.color;
+  }
+
+  const out: ShowroomOverrides = {
+    cameraPose: { ...cfg.cameraPose },
+    chargingCameraPose: cfg.chargingCameraPose
+      ? { ...cfg.chargingCameraPose }
+      : undefined,
+    wheelUrl: cfg.wheelUrl,
+    wheelFallbackPositions:
+      Object.keys(wheelFallbackPositions).length > 0
+        ? wheelFallbackPositions
+        : undefined,
+    chargePort: { ...cfg.chargePort },
+    cableGroundAnchor: [...cfg.cableGroundAnchor] as [number, number, number],
+    cableSlackPost: cfg.cableSlack.post,
+    cableSlackCar: cfg.cableSlack.car,
+    supercharger: cfg.supercharger ? { ...cfg.supercharger } : undefined,
+    sentryCameraPositions: cfg.sentryCameraPositions.map(
+      (p) => [...p] as [number, number, number],
+    ),
+    bodyPaintColor: cfg.bodyPaintColor,
+    calloutHeight: cfg.calloutHeight,
+    calloutOffsets: cfg.calloutOffsets ? { ...cfg.calloutOffsets } : undefined,
+    calloutsHidden: cfg.calloutsHidden ? { ...cfg.calloutsHidden } : undefined,
+    interiorColors:
+      Object.keys(interiorColors).length > 0 ? interiorColors : undefined,
+    wheelFinish: { ...cfg.wheelFinish },
+    lightTuning: { ...cfg.lightTuning },
+    glassFinish: { ...cfg.glassFinish },
+    variants: cfg.activeVariants ? { ...cfg.activeVariants } : undefined,
+  };
+
+  // Legacy / passthrough fields with no config-side default — keep the
+  // user's value verbatim so an effective export round-trips fully.
+  if (ov.glass) out.glass = ov.glass;
+  if (ov.wraps) out.wraps = ov.wraps;
+  if (ov.modelKey) out.modelKey = ov.modelKey;
+
+  return out;
+}

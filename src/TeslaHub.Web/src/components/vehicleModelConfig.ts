@@ -716,14 +716,12 @@ export const PoppyseedConfig: VehicleModelConfig = {
   modelUrl: '/models/poppyseed.glb',
   wheelUrl: '/models/wheel_d50_highland.glb',
 
-  // Calibrated by user (2026-05) — 3/4 front-driver view with a wider
-  // FOV than the original 38° (now 45°) so the whole front bumper
-  // reads in frame; target nudged +0.6 m on Z to recentre the body
-  // visually around the windshield.
+  // User-calibrated (2026-06 re-calibration) — 3/4 front-driver view,
+  // FOV 50 with the body pulled slightly closer than the previous pass.
   cameraPose: {
-    position: [4.85, 1.25, -3.45],
+    position: [4.462535204529355, 1.3, -3.1445116442362093],
     target: [0, 0.6, 0.6],
-    fov: 45,
+    fov: 50,
   },
 
   // Wheelbase 2875 mm → x ±1.4375 with a +50 mm forward bias for the GLB.
@@ -759,7 +757,7 @@ export const PoppyseedConfig: VehicleModelConfig = {
   // 1.5 m to the left of the car centre — slightly closer to the car
   // than the original -3.5 m so the cable doesn't disappear off-frame
   // at the wider FOV the user set above.
-  cableGroundAnchor: [-2.95, 0, -1.5],
+  cableGroundAnchor: [-2.6, 0, -1.5],
 
   cableSlack: { post: 1, car: 1 },
 
@@ -767,13 +765,14 @@ export const PoppyseedConfig: VehicleModelConfig = {
     modelUrl: '/models/supercharger_base.glb',
     position: [-4.2, 0, -1.6],
     rotationY: -90,
-    cablePortOffset: [0.08, 1.05, -0.15],
+    cablePortOffset: [-0.31, 1.48, -0.98],
   },
 
+  // User-calibrated charging 3/4-rear pose (2026-06) framing car + SC.
   chargingCameraPose: {
-    position: [-4.8, 2.4, -4.2],
-    target: [-1.5, 0.6, -0.6],
-    fov: 38,
+    position: [1.9796723323960075, 1.670709642181532, -3.672886016586493],
+    target: [-0.7050493168424934, 0.4419014029516001, -0.4170858074732687],
+    fov: 38.049593606726155,
   },
 
   actionAnchors: {
@@ -855,7 +854,8 @@ export const PoppyseedConfig: VehicleModelConfig = {
     doorWindowNode: /^window_(l|r)[fr]$/i,
     panoroofNode: /^windows_top$/i,
   },
-  bodyPaintColor: 0xf2f2f0,
+  // User-calibrated body paint (2026-06) — 0x00B60B (46603).
+  bodyPaintColor: 0x00b60b,
   calloutHeight: 0.45,
   // M3 (+X = forward) — wheel IDs match physical positions 1:1.
   tpmsAnchorMap: {
@@ -864,6 +864,29 @@ export const PoppyseedConfig: VehicleModelConfig = {
     RL: 'LR',
     RR: 'RR',
   },
+  // User-calibrated floating-button placement (2026-06).
+  calloutOffsets: {
+    lock: [-1.26, 0.89, 0.9],
+    frunk: [1.14, -0.21, 0],
+    trunk: [-0.66, -0.11, 0],
+    sentry: [-0.18, 0.35, 0.9],
+    window: [-0.59, 0.09, 0],
+    chargePort: [-0.06, -0.09, -0.08],
+    userPresent: [-0.8, 0, 0.49],
+  },
+  // User-calibrated callout visibility (2026-06) — honk/flash, the four
+  // TPMS pills, climate/defrost and userPresent hidden.
+  calloutsHidden: {
+    honk: true,
+    flash: true,
+    tpmsFL: true,
+    tpmsFR: true,
+    tpmsRL: true,
+    tpmsRR: true,
+    climate: true,
+    defrost: true,
+    userPresent: true,
+  },
   // User-calibrated wheel finish (2026-05) tuned for the Highland D50
   // plastic hubcaps. alloyRoughnessMin=0 keeps the alloy spokes as
   // mirror-polish; plasticClearcoat will be tuned live by the user
@@ -871,11 +894,11 @@ export const PoppyseedConfig: VehicleModelConfig = {
   // console log `wheel polish: alloy=N plastic=M | materials seen: …`).
   wheelFinish: {
     alloyRoughnessMin: 0,
-    alloyEnvBoost: 0.4,
-    alloyClearcoat: 0,
-    plasticRoughness: 0.45,
+    alloyEnvBoost: 1.9,
+    alloyClearcoat: 0.5,
+    plasticRoughness: 0.73,
     plasticEnvBoost: 0.5,
-    plasticClearcoat: 0,
+    plasticClearcoat: 0.02,
   },
   // User-calibrated glass finish (2026-05) for the Highland greenhouse.
   // Much higher outerEnvMultiplier (1.5 vs old 0.3) lets the HDR sky
@@ -883,10 +906,10 @@ export const PoppyseedConfig: VehicleModelConfig = {
   // pushed to 90% opacity for proper privacy glass feel. Pano opacity
   // dropped to 80% so the cabin reads through the roof.
   glassFinish: {
-    outerEnvMultiplier: 1.5,
+    outerEnvMultiplier: 1.1,
     doorWindowOpacity: 0.9,
     doorWindowTint: 0.0,
-    panoroofOpacity: 0.8,
+    panoroofOpacity: 0.6,
     panoroofTint: 0.0,
     // M3 has no separate trunk glass — these are kept for the type
     // (Showroom hides the slider when the model has no trunkGlassNode).
@@ -1627,7 +1650,18 @@ export const CommunityM3Config: VehicleModelConfig = {
     climate: 'door_rf_dummy_218',
   },
 
-  sentryCameraPositions: [],
+  // User-calibrated Sentry camera placement (2026-06) — hand-placed on
+  // the community body (no anchor nodes ship with this GLB): B-pillars
+  // L/R, rear, front, roof centre, and the two front-fender lenses.
+  sentryCameraPositions: [
+    [-0.79, 1.38, 0.28],
+    [0.79, 1.38, 0.28],
+    [0, 0.32, -2.64],
+    [0, 0.9, 2.56],
+    [0, 1.4, -0.7],
+    [-1.06, 0.77, -1.32],
+    [1.06, 0.77, -1.32],
+  ],
 
   brakeLightNodes: [],
   reverseLightNodes: [],

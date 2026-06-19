@@ -50,6 +50,7 @@ import {
 import {
   modelSlot,
   buildSavedBlob,
+  buildEffectiveOverrides,
   normalizeBlob,
   resolveActiveModelKey,
   vinModelKey,
@@ -289,31 +290,46 @@ export default function Showroom({ carId }: Props) {
   // Tiny "copied" badge that flashes for 1.5s after a successful copy.
   // Used by the Copy-JSON button below — gives a visual ack so the user
   // doesn't wonder whether the clipboard actually got written.
-  const [copyFlash, setCopyFlash] = useState(false);
-  const handleCopyJson = async () => {
+  // Copy helper shared by both buttons — Clipboard API with a textarea
+  // fallback for insecure (http-over-LAN) contexts.
+  const copyToClipboard = async (text: string, flash: () => void) => {
     try {
-      const text = JSON.stringify(editedOverrides, null, 2);
       await navigator.clipboard.writeText(text);
-      setCopyFlash(true);
-      window.setTimeout(() => setCopyFlash(false), 1500);
+      flash();
     } catch {
-      // Clipboard API can fail on insecure contexts (http on non-
-      // localhost). Fall back to a textarea-based copy so the feature
-      // still works when the app is served on plain HTTP over the LAN.
       const ta = document.createElement('textarea');
-      ta.value = JSON.stringify(editedOverrides, null, 2);
+      ta.value = text;
       ta.style.position = 'fixed';
       ta.style.opacity = '0';
       document.body.appendChild(ta);
       ta.select();
       try {
         document.execCommand('copy');
-        setCopyFlash(true);
-        window.setTimeout(() => setCopyFlash(false), 1500);
+        flash();
       } finally {
         document.body.removeChild(ta);
       }
     }
+  };
+
+  const [copyFlash, setCopyFlash] = useState(false);
+  const handleCopyJson = () => {
+    // Compact DELTA — only fields that differ from the model defaults.
+    void copyToClipboard(JSON.stringify(editedOverrides, null, 2), () => {
+      setCopyFlash(true);
+      window.setTimeout(() => setCopyFlash(false), 1500);
+    });
+  };
+
+  const [copyFullFlash, setCopyFullFlash] = useState(false);
+  const handleCopyFullJson = () => {
+    // COMPLETE effective config — defaults merged with overrides, every
+    // field populated. Self-describing archive that round-trips on import.
+    const full = buildEffectiveOverrides(defaults, editedOverrides);
+    void copyToClipboard(JSON.stringify(full, null, 2), () => {
+      setCopyFullFlash(true);
+      window.setTimeout(() => setCopyFullFlash(false), 1500);
+    });
   };
 
   // ─── Import JSON ───────────────────────────────────────────────
@@ -471,6 +487,23 @@ export default function Showroom({ carId }: Props) {
             {copyFlash
               ? t('showroom.copied', '✓ Copié')
               : t('showroom.copyJson', 'Copier JSON')}
+          </button>
+          <button
+            type="button"
+            onClick={handleCopyFullJson}
+            title={t(
+              'showroom.copyFullJsonHint',
+              'Copie la config EFFECTIVE complète (défauts + tes réglages fusionnés) — archive autonome ré-importable',
+            )}
+            className={
+              'h-8 px-3 text-xs rounded-md bg-[#1a1a1a] border border-[#2a2a2a] ' +
+              'text-[#9ca3af] hover:text-white hover:bg-[#2a2a2a] ' +
+              'transition-colors'
+            }
+          >
+            {copyFullFlash
+              ? t('showroom.copied', '✓ Copié')
+              : t('showroom.copyFullJson', 'Copier JSON complet')}
           </button>
           <button
             type="button"
