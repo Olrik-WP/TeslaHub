@@ -2525,7 +2525,13 @@ export default function VehicleTopView3D({ vehicle, localOverrides, showroomMode
     extras,
     wrapExists,
     updatedAt,
-  } = useResolvedModelConfig(vehicle.carId, vehicle.vin, localOverrides);
+  } = useResolvedModelConfig(vehicle.carId, vehicle.vin, localOverrides, {
+    // Public builds ship without the proprietary Tesla GLBs. When the
+    // VIN-detected model's file is missing, auto-render the bundled
+    // CC-BY community model so users get a real 3D car with no manual
+    // Showroom selection. No-op for self-hosters who mounted /models.
+    communityFallback: true,
+  });
 
   // Resolve the wrap PNG URL once at this layer so every descendant
   // (PoppyseedModel inside the Canvas, future inspector panels, etc.)

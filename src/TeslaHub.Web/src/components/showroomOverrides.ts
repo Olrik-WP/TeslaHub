@@ -550,14 +550,20 @@ export function mergeShowroomConfig(
 export function resolveModelConfig(
   vin: string | null | undefined,
   overrides: ShowroomOverrides | ShowroomBlobV2 | null | undefined,
+  forcedKey?: VehicleModelKey,
 ): VehicleModelConfig {
   // A v2 blob (from the backend) is flattened to its active model's slot
   // first; a flat blob (legacy DB rows + the Showroom's in-flight edits)
   // passes through unchanged so existing behaviour is preserved.
+  // `forcedKey` pins a specific model (its own override slot + defaults)
+  // regardless of VIN/activeModelKey — used by the automatic
+  // community fallback when the VIN-detected GLB is missing.
   const flat = isBlobV2(overrides)
-    ? selectModelOverrides(overrides, vin)
-    : overrides;
-  const key = pickResolvedModelKey(vin, flat);
+    ? selectModelOverrides(overrides, vin, forcedKey)
+    : forcedKey
+      ? { ...(overrides ?? {}), modelKey: forcedKey }
+      : overrides;
+  const key = forcedKey ?? pickResolvedModelKey(vin, flat);
   const defaults = VEHICLE_MODELS[key] ?? PoppyseedConfig;
   return mergeShowroomConfig(defaults, flat);
 }
@@ -578,12 +584,15 @@ export interface ResolvedModelExtras {
 export function resolveModelExtras(
   vin: string | null | undefined,
   overrides: ShowroomOverrides | ShowroomBlobV2 | null | undefined,
+  forcedKey?: VehicleModelKey,
 ): ResolvedModelExtras {
   const flat = isBlobV2(overrides)
-    ? selectModelOverrides(overrides, vin)
-    : overrides;
+    ? selectModelOverrides(overrides, vin, forcedKey)
+    : forcedKey
+      ? { ...(overrides ?? {}), modelKey: forcedKey }
+      : overrides;
   return {
-    config: resolveModelConfig(vin, flat),
+    config: resolveModelConfig(vin, flat, forcedKey),
     glass: flat?.glass,
     wraps: flat?.wraps,
   };

@@ -28,6 +28,7 @@ import {
   type ShowroomOverrides,
 } from './showroomOverrides';
 import type { VehicleModelConfig } from './vehicleModelConfig';
+import { useGlbAvailable } from './useGlbAvailable';
 
 // ─── DTOs (mirror C# ShowroomConfigDto) ───────────────────────────────────
 
@@ -106,6 +107,18 @@ export function useResolvedModelConfig(
   carId: number | null | undefined,
   vin: string | null | undefined,
   localOverrides?: ShowroomOverrides,
+  opts?: {
+    /**
+     * When true, the hook auto-switches to the bundled community model
+     * if the VIN-detected (proprietary Tesla) GLB is missing — i.e. a
+     * public build with no `/srv/models` volume mounted. This lets
+     * out-of-the-box deployments render a real 3D car with zero manual
+     * Showroom selection. Only honoured for the live, persisted state
+     * (`localOverrides` undefined); the Showroom editor passes its
+     * in-flight edits and must NEVER be overridden by the fallback.
+     */
+    communityFallback?: boolean;
+  },
 ): {
   config: VehicleModelConfig;
   extras: ResolvedModelExtras;
@@ -146,10 +159,44 @@ export function useResolvedModelConfig(
   // back to the saved blob.
   const effective = localOverrides ?? savedOverrides;
 
-  const extras = useMemo(
+  const baseExtras = useMemo(
     () => resolveModelExtras(vin, effective),
     [vin, effective],
   );
+
+  // The community model resolved against the same blob (its own saved
+  // slot if any, defaults otherwise). Computed unconditionally so the
+  // probe hooks below are called in a stable order — cheap, pure memo.
+  const communityExtras = useMemo(
+    () => resolveModelExtras(vin, effective, 'community'),
+    [vin, effective],
+  );
+
+  // Auto-fallback only when explicitly enabled, only for the live
+  // persisted state (NOT the Showroom's in-flight edits), and only when
+  // the resolved model isn't already the community one.
+  const wantFallback =
+    !!opts?.communityFallback &&
+    localOverrides === undefined &&
+    baseExtras.config.key !== 'community';
+
+  // Probe lazily: pass undefined (→ no network) unless a fallback is
+  // even possible for this car. Both hooks are still called every render.
+  const primaryAvailable = useGlbAvailable(
+    wantFallback ? baseExtras.config.modelUrl : undefined,
+  );
+  const communityAvailable = useGlbAvailable(
+    wantFallback ? communityExtras.config.modelUrl : undefined,
+  );
+
+  // Swap to community only once the Tesla GLB is CONFIRMED missing and
+  // the community GLB isn't also missing (don't trade one 404 for
+  // another). While probes are in flight (null) we keep the primary so
+  // self-hosters with the GLB never see a flicker to community.
+  const useFallback =
+    wantFallback && primaryAvailable === false && communityAvailable !== false;
+
+  const extras = useFallback ? communityExtras : baseExtras;
 
   return {
     config: extras.config,
