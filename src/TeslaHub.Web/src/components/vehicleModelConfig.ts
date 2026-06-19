@@ -1570,7 +1570,11 @@ export const CommunityM3Config: VehicleModelConfig = {
   // wrapper rotations in the node graph. Applying scale 0.01 at the root
   // reproduces the baked model's metre-scale orientation exactly, while
   // leaving the hinge dummies intact for the opening animations.
-  rootTransform: { scale: 0.01 },
+  // The model's origin sits at the car's vertical centre, so after scaling
+  // the wheels rest at Y≈-0.75 m (below the floor). Lift the whole group so
+  // the tyres sit on the ground plane (Y=0). Source world bbox minY=-75.16
+  // (×0.01 = -0.752) — see Tesla-Godot-Test/bbox.mjs.
+  rootTransform: { scale: 0.01, position: [0, 0.752, 0] },
 
   // First-pass 3/4 view for a ~4.7 m car. Recalibrate in the Showroom.
   cameraPose: {
