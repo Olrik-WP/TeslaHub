@@ -397,9 +397,17 @@ TESLA_CLIENT_ID=your_tesla_client_id
 TESLA_CLIENT_SECRET=your_tesla_client_secret
 TESLA_REDIRECT_URI=https://teslahub.yourdomain.com/api/tesla-oauth/callback
 
+# Region preset — "global" (default) or "china".
+# China runs a fully separate Tesla instance: you must create a dedicated
+# developer app on https://developer.tesla.cn/ (+86 phone required). Setting
+# TESLA_REGION=china switches the authorize, token AND audience endpoints to
+# the .cn instance automatically — no other change needed.
+TESLA_REGION=global
+
 # Region — pick the audience matching your Tesla account region
 # EU:    https://fleet-api.prd.eu.vn.cloud.tesla.com   (default)
 # NA/AP: https://fleet-api.prd.na.vn.cloud.tesla.com
+# China: https://fleet-api.prd.cn.vn.cloud.tesla.cn    (auto when TESLA_REGION=china)
 TESLA_AUDIENCE=https://fleet-api.prd.eu.vn.cloud.tesla.com
 
 # Master switch — set to true to start the telemetry consumer.
@@ -420,6 +428,7 @@ Add the new variables to the `environment:` block of `teslahub-api` in your `doc
       - TESLA_CLIENT_ID=${TESLA_CLIENT_ID:-}
       - TESLA_CLIENT_SECRET=${TESLA_CLIENT_SECRET:-}
       - TESLA_REDIRECT_URI=${TESLA_REDIRECT_URI:-}
+      - TESLA_REGION=${TESLA_REGION:-global}
       - TESLA_AUDIENCE=${TESLA_AUDIENCE:-}
       - SECURITY_ALERTS_ENABLED=${SECURITY_ALERTS_ENABLED:-false}
 ```
@@ -1144,7 +1153,8 @@ The provided `update.sh` script does this for you when `SECURITY_ALERTS_ENABLED=
 | `MQTT_PASSWORD` | *(empty)* | MQTT password |
 | `MQTT_NAMESPACE` | *(empty)* | TeslaMate MQTT namespace (if configured) |
 | `TESLA_CLIENT_ID` / `TESLA_CLIENT_SECRET` / `TESLA_REDIRECT_URI` | *(optional)* | Tesla developer app credentials, required for the **Control** page, **Send to car**, and **Sentry alerts**. See [Tesla Fleet API integration](#tesla-fleet-api-integration-optional). |
-| `TESLA_AUDIENCE` | EU Fleet API | `https://fleet-api.prd.eu.vn.cloud.tesla.com` (EU) or `https://fleet-api.prd.na.vn.cloud.tesla.com` (NA/AP). |
+| `TESLA_REGION` | `global` | Tesla endpoint preset: `global` (NA/EU/AP) or `china`. `china` switches the OAuth authorize, token, and audience URLs to the `.cn` instance — which requires a **separate** developer app created on [developer.tesla.cn](https://developer.tesla.cn/) (+86 phone). |
+| `TESLA_AUDIENCE` | region default | `https://fleet-api.prd.eu.vn.cloud.tesla.com` (EU), `https://fleet-api.prd.na.vn.cloud.tesla.com` (NA/AP), or `https://fleet-api.prd.cn.vn.cloud.tesla.cn` (China, auto when `TESLA_REGION=china`). |
 | `TESLA_SCOPES` | `openid offline_access vehicle_device_data vehicle_cmds` | Override the OAuth scopes requested from Tesla. The default unlocks every TeslaHub feature; only change if you know exactly what you're doing. |
 | `TESLA_COMMAND_PROXY_URL` | *(empty)* | URL of the local `tesla-http-proxy` container (e.g. `https://tesla-http-proxy:4443`). Required to send any signed Fleet command (climate, charging, locks, OTA, …). Without it, only the unsigned `wake_up` and `share` calls work. |
 | `SECURITY_ALERTS_ENABLED` | `false` | Master switch for the Fleet Telemetry consumer (Sentry / break-in alerts). The **Control** page and **Send to car** work even when this is `false`, as long as the Tesla app + virtual key are paired. |

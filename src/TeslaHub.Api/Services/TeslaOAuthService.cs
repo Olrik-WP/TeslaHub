@@ -24,10 +24,9 @@ namespace TeslaHub.Api.Services;
 
 public sealed class TeslaOAuthService
 {
-    private const string TeslaAuthorizeUrl = "https://auth.tesla.com/oauth2/v3/authorize";
-    private const string TeslaTokenUrl = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token";
-    private const string DefaultAudience = "https://fleet-api.prd.eu.vn.cloud.tesla.com";
-    private const string DefaultScopes = "openid offline_access vehicle_device_data vehicle_cmds";
+    // Tesla OAuth endpoints are region-specific (global vs China) and now
+    // come from TeslaOAuthOptions (driven by TESLA_REGION). See the region
+    // presets in TeslaOAuthOptions below.
     private const string StateTokenAudience = "teslahub:tesla-oauth-state";
     private const int StateValidityMinutes = 10;
 
@@ -76,7 +75,7 @@ public sealed class TeslaOAuthService
             ["state"] = state,
         };
 
-        var url = TeslaAuthorizeUrl + "?" + string.Join("&",
+        var url = _options.AuthorizeUrl + "?" + string.Join("&",
             query.Select(kvp => $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
 
         return new TeslaOAuthLoginDto { AuthorizeUrl = url, State = state };
@@ -313,7 +312,7 @@ public sealed class TeslaOAuthService
     private async Task<TeslaTokensResponse> CallTokenEndpointAsync(IDictionary<string, string> form, CancellationToken cancellationToken)
     {
         var client = _httpFactory.CreateClient("tesla");
-        using var request = new HttpRequestMessage(HttpMethod.Post, TeslaTokenUrl)
+        using var request = new HttpRequestMessage(HttpMethod.Post, _options.TokenUrl)
         {
             Content = new FormUrlEncodedContent(form),
         };
@@ -498,24 +497,65 @@ public sealed class TeslaOAuthService
 
 public sealed class TeslaOAuthOptions
 {
+    // ── Region presets — official Tesla Fleet API endpoints ──────────────────
+    // Global region (NA/EU/AP). Token exchange uses the dedicated
+    // fleet-auth domain Tesla mandated for partners (announcement
+    // 2025-07-21, migrating away from auth.tesla.com).
+    //   Docs: https://developer.tesla.com/docs/fleet-api
+    public const string GlobalAuthorizeUrl = "https://auth.tesla.com/oauth2/v3/authorize";
+    public const string GlobalTokenUrl = "https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token";
+    public const string GlobalAudience = "https://fleet-api.prd.eu.vn.cloud.tesla.com";
+
+    // China region. Tesla runs a fully separate instance — a dedicated
+    // developer account + app (created on developer.tesla.cn, requires a
+    // +86 phone) is mandatory; NA/EU credentials are rejected here. China
+    // has no fleet-auth domain: token exchange is on auth.tesla.cn directly.
+    //   Docs: https://developer.tesla.cn/docs/fleet-api
+    public const string ChinaAuthorizeUrl = "https://auth.tesla.cn/oauth2/v3/authorize";
+    public const string ChinaTokenUrl = "https://auth.tesla.cn/oauth2/v3/token";
+    public const string ChinaAudience = "https://fleet-api.prd.cn.vn.cloud.tesla.cn";
+
+    private const string DefaultScopes = "openid offline_access vehicle_device_data vehicle_cmds";
+
     public string ClientId { get; init; } = string.Empty;
     public string ClientSecret { get; init; } = string.Empty;
     public string RedirectUri { get; init; } = string.Empty;
-    public string Audience { get; init; } = "https://fleet-api.prd.eu.vn.cloud.tesla.com";
-    public string Scopes { get; init; } = "openid offline_access vehicle_device_data vehicle_cmds";
+    /// <summary>Resolved region — "global" (default) or "china".</summary>
+    public string Region { get; init; } = "global";
+    public string AuthorizeUrl { get; init; } = GlobalAuthorizeUrl;
+    public string TokenUrl { get; init; } = GlobalTokenUrl;
+    public string Audience { get; init; } = GlobalAudience;
+    public string Scopes { get; init; } = DefaultScopes;
     public bool SecurityAlertsEnabled { get; init; }
 
-    public static TeslaOAuthOptions FromConfiguration(IConfiguration config) => new()
+    public static TeslaOAuthOptions FromConfiguration(IConfiguration config)
     {
-        ClientId = config["TESLA_CLIENT_ID"] ?? string.Empty,
-        ClientSecret = config["TESLA_CLIENT_SECRET"] ?? string.Empty,
-        RedirectUri = config["TESLA_REDIRECT_URI"] ?? string.Empty,
-        Audience = string.IsNullOrWhiteSpace(config["TESLA_AUDIENCE"])
-            ? "https://fleet-api.prd.eu.vn.cloud.tesla.com"
-            : config["TESLA_AUDIENCE"]!,
-        Scopes = string.IsNullOrWhiteSpace(config["TESLA_SCOPES"])
-            ? "openid offline_access vehicle_device_data vehicle_cmds"
-            : config["TESLA_SCOPES"]!,
-        SecurityAlertsEnabled = string.Equals(config["SECURITY_ALERTS_ENABLED"], "true", StringComparison.OrdinalIgnoreCase),
-    };
+        // TESLA_REGION selects the endpoint preset. Default "global" keeps
+        // the exact pre-existing behaviour for every current deployment;
+        // "china"/"cn" switches authorize + token + audience to the .cn
+        // instance. Each endpoint can still be overridden individually
+        // (escape hatch for future regions / Tesla URL changes).
+        var region = (config["TESLA_REGION"] ?? "global").Trim().ToLowerInvariant();
+        var isChina = region is "china" or "cn";
+
+        var authorizeDefault = isChina ? ChinaAuthorizeUrl : GlobalAuthorizeUrl;
+        var tokenDefault = isChina ? ChinaTokenUrl : GlobalTokenUrl;
+        var audienceDefault = isChina ? ChinaAudience : GlobalAudience;
+
+        static string Pick(IConfiguration c, string key, string fallback) =>
+            string.IsNullOrWhiteSpace(c[key]) ? fallback : c[key]!;
+
+        return new TeslaOAuthOptions
+        {
+            ClientId = config["TESLA_CLIENT_ID"] ?? string.Empty,
+            ClientSecret = config["TESLA_CLIENT_SECRET"] ?? string.Empty,
+            RedirectUri = config["TESLA_REDIRECT_URI"] ?? string.Empty,
+            Region = isChina ? "china" : "global",
+            AuthorizeUrl = Pick(config, "TESLA_AUTHORIZE_URL", authorizeDefault),
+            TokenUrl = Pick(config, "TESLA_TOKEN_URL", tokenDefault),
+            Audience = Pick(config, "TESLA_AUDIENCE", audienceDefault),
+            Scopes = Pick(config, "TESLA_SCOPES", DefaultScopes),
+            SecurityAlertsEnabled = string.Equals(config["SECURITY_ALERTS_ENABLED"], "true", StringComparison.OrdinalIgnoreCase),
+        };
+    }
 }

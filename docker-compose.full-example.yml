@@ -101,6 +101,8 @@ services:
       - TESLA_CLIENT_ID=${TESLA_CLIENT_ID:-}
       - TESLA_CLIENT_SECRET=${TESLA_CLIENT_SECRET:-}
       - TESLA_REDIRECT_URI=${TESLA_REDIRECT_URI:-}
+      # Region preset: "global" (default) or "china" (uses .cn endpoints).
+      - TESLA_REGION=${TESLA_REGION:-global}
       - TESLA_AUDIENCE=${TESLA_AUDIENCE:-}
       - SECURITY_ALERTS_ENABLED=${SECURITY_ALERTS_ENABLED:-false}
       - TELEMETRY_DOMAIN=${TELEMETRY_DOMAIN:-}
