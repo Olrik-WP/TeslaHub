@@ -1210,11 +1210,23 @@ Download it from [tesla-wrap.com](https://www.tesla-wrap.com/design/79dc51bc-98e
 |:---:|:---:|
 | ![TeslaHub wrap — front](docs/screenshots/TeslaHub_F.png) | ![TeslaHub wrap — rear](docs/screenshots/TeslaHub_R.png) |
 
+## 3D vehicle model
+
+The 3D vehicle viewer ships with a **community-licensed Model 3** so it works out of the box, without any Tesla proprietary asset:
+
+> "Tesla Model 3 (Realistic Graphics)" by **ChoochooLi** ([Sketchfab](https://sketchfab.com/3d-models/tesla-model-3-realistic-graphics)) is licensed under [**CC BY 4.0**](https://creativecommons.org/licenses/by/4.0/). The model has been **modified** for TeslaHub (rigged for door/hood/trunk animations, optimised with `gltf-transform`, re-scaled/re-oriented, materials remapped).
+
+This credit is also shown in-app (Showroom → Modèle / Trim) and documented in [`public/community-models/CREDITS.md`](src/TeslaHub.Web/public/community-models/CREDITS.md). If you redistribute the build, keep these notices intact (CC BY 4.0 requirement).
+
+The community model is bundled in `public/community-models/` and **baked into the web image**, so the 3D viewer works with no extra setup. The exact in-app Tesla trims (Model 3 Highland, Model Y Juniper, Supercharger, …) rely on **proprietary** GLBs that are **not** included (git-ignored); you can mount your own copies at runtime via the optional `./teslahub-models:/srv/models:ro` volume (see the compose comments). That volume only affects `/srv/models`, never the bundled community model.
+
 ## Credits
 
 TeslaHub works alongside [TeslaMate](https://github.com/teslamate-org/teslamate), which is licensed under the [GNU AGPLv3](https://github.com/teslamate-org/teslamate/blob/master/LICENSE).
 
 TeslaHub is an independent project and does not modify TeslaMate. It only reads TeslaMate data using a read-only database user.
+
+3D vehicle model: "Tesla Model 3 (Realistic Graphics)" by ChoochooLi, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), modified — see [§ 3D vehicle model](#3d-vehicle-model).
 
 ## License
 

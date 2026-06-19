@@ -787,6 +787,8 @@ function ModelSection({
     ? 'bayberry'
     : 'poppyseed';
 
+  const attribution = VEHICLE_MODELS[selectedKey]?.attribution;
+
   return (
     <section className="space-y-2">
       <header className="flex items-center justify-between">
@@ -833,6 +835,35 @@ function ModelSection({
           "Tester un modèle n'écrase plus les autres : chaque modèle garde ses propres réglages par voiture. Coche la case pour que cette voiture l'affiche partout.",
         )}
       </p>
+
+      {/* CC BY 4.0 (and similar) require a visible credit. Rendered for
+          any model that declares an `attribution`. */}
+      {attribution && (
+        <div className="text-[10px] text-[#6b7280] border-t border-[#1a1a1a] pt-2 leading-relaxed">
+          <span className="text-[#9ca3af]">{attribution.title}</span>
+          {' — '}
+          <a
+            href={attribution.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#9ca3af] underline hover:text-white"
+          >
+            {attribution.author}
+          </a>
+          {attribution.modified
+            ? t('showroom.attributionModified', ' (modifié)')
+            : ''}
+          {' · '}
+          <a
+            href={attribution.licenseUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#9ca3af] underline hover:text-white"
+          >
+            {attribution.license}
+          </a>
+        </div>
+      )}
     </section>
   );
 }

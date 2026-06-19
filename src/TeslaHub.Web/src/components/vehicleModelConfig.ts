@@ -132,6 +132,25 @@ export interface VehicleModelConfig {
   key: VehicleModelKey;
   /** Marketing name for diagnostics / dev tools. */
   displayName: string;
+  /** Attribution for third-party GLBs shipped under a credit-required
+   *  licence (e.g. CC BY 4.0). When present, the Showroom renders a
+   *  visible credit line (creator + licence + source link) so the app
+   *  stays compliant. Omit for first-party / proprietary models. */
+  attribution?: {
+    /** Title of the work as published by the author. */
+    title: string;
+    /** Creator name to credit. */
+    author: string;
+    /** Link to the original material. */
+    sourceUrl: string;
+    /** Short licence label, e.g. "CC BY 4.0". */
+    license: string;
+    /** Canonical link to the licence deed / legal code. */
+    licenseUrl: string;
+    /** Whether the asset was modified from the original (CC BY 4.0
+     *  requires indicating changes). */
+    modified?: boolean;
+  };
   /** Body GLB URL, relative to public/. */
   modelUrl: string;
   /** Default wheel GLB URL (D50 hubcap on Highland, Gemini on Y). */
@@ -1545,8 +1564,10 @@ export const BayberryConfig: VehicleModelConfig = {
 // TeslaHub is public; the proprietary Tesla GLBs extracted from the mobile
 // app can't be redistributed. This config drives a CC-BY licensed Model 3
 // (community "Realistic Graphics" model) so operators who DON'T own the
-// Tesla assets still get an interactive 3D car. The operator drops
-// `community-m3.glb` into their /models volume; the runtime picks it up.
+// Tesla assets still get an interactive 3D car. The GLB ships INSIDE the
+// web image under /community-models (committed to the repo) — it is NOT
+// loaded from the optional /models Docker volume, so it always works even
+// when an operator mounts their own proprietary GLBs over /srv/models.
 //
 // Node names verified via `Tesla-Godot-Test/inspect-glb-nodes.mjs` against
 // the optimised community-m3.glb (dedup → weld → simplify → draco, ~214k
@@ -1576,6 +1597,17 @@ const NEVER_MATCH = /^__never__$/;
 export const CommunityM3Config: VehicleModelConfig = {
   key: 'community',
   displayName: 'Communauté — Model 3 (CC-BY)',
+  // CC BY 4.0 — REQUIRES visible credit. Rendered in the Showroom model
+  // section and documented in public/models/CREDITS.md + the README.
+  attribution: {
+    title: 'Tesla Model 3 (Realistic Graphics)',
+    author: 'ChoochooLi',
+    sourceUrl:
+      'https://sketchfab.com/3d-models/tesla-model-3-realistic-graphics',
+    license: 'CC BY 4.0',
+    licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+    modified: true,
+  },
   // RIGGED export (community-m3-rigged.glb): keeps the full node hierarchy so
   // the hinge dummies survive for the opening animations. The static baked
   // file (community-m3.glb) flattened the graph and lost the pivots — it's
@@ -1583,11 +1615,16 @@ export const CommunityM3Config: VehicleModelConfig = {
   // bake used to apply is now done at render time via rootTransform below; the
   // rigged model renders IDENTICALLY (same world orientation + scale) but with
   // working pivots.
-  modelUrl: '/models/community-m3-rigged.glb',
+  // Served from /community-models (NOT /models): the optional Tesla-models
+  // Docker volume mounts on /srv/models and would otherwise SHADOW this
+  // bundled CC-BY asset. /community-models is always baked into the image
+  // and never mounted over, so the community car works out of the box for
+  // every user, whether or not they mount their own proprietary GLBs.
+  modelUrl: '/community-models/community-m3-rigged.glb',
   // No separate wheel GLB (wheels are inside the body). Point wheelUrl at the
   // body file (always-present) and rely on the empty wheelFallbackPositions/
   // wheelAnchorNames below so the viewer never tries to mount/clone wheels.
-  wheelUrl: '/models/community-m3-rigged.glb',
+  wheelUrl: '/community-models/community-m3-rigged.glb',
 
   // The rigged GLB keeps the source's ×100 unit scale (cm) and cascading
   // wrapper rotations in the node graph. Applying scale 0.01 at the root

@@ -40,5 +40,9 @@ Tesla-APK-Android/
 Tesla-Godot-Test/
 docs/3d-viewer-spec.md
 
-# Tesla 3D models (proprietary assets, never commit)
+# Tesla 3D models (proprietary assets, never commit). These are the
+# Tesla-app GLBs operators may mount at runtime via ./teslahub-models.
 src/TeslaHub.Web/public/models/*.glb
+# NOTE: the bundled CC-BY community model lives in public/community-models/
+# (committed, shipped in the image) — NOT here — so it's never shadowed by
+# the optional /srv/models volume. Credit: ChoochooLi (CC BY 4.0).
