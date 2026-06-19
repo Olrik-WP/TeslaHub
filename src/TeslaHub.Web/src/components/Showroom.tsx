@@ -64,6 +64,7 @@ import { ShowroomGeometrySection } from './ShowroomGeometrySection';
 import { ShowroomAestheticsSection } from './ShowroomAestheticsSection';
 import { ShowroomLightsSection } from './ShowroomLightsSection';
 import { ShowroomGlassSection } from './ShowroomGlassSection';
+import { ShowroomSentrySection } from './ShowroomSentrySection';
 
 // Lazy-load the viewer — same trick VehicleTopView.tsx uses to keep
 // the GLB/three.js bundle off the initial Settings page load.
@@ -315,6 +316,42 @@ export default function Showroom({ carId }: Props) {
     }
   };
 
+  // ─── Import JSON ───────────────────────────────────────────────
+  // Paste a previously-copied JSON (the output of "Copier JSON") to
+  // re-apply a whole calibration to the SELECTED model's slot. Covers
+  // every field — camera, charge port, cable, supercharger, paint,
+  // glass, lights, sentry cameras, callouts, etc. — because it replaces
+  // the entire slot. The user's safety net between nightly backups.
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const handleImportApply = () => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(importText);
+    } catch {
+      setImportError(
+        t('showroom.importInvalid', 'JSON invalide — vérifie le contenu collé.'),
+      );
+      return;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      setImportError(
+        t('showroom.importNotObject', 'Le JSON doit être un objet de réglages.'),
+      );
+      return;
+    }
+    // Strip a stray modelKey — the slot is namespaced by the picker, not
+    // by an in-blob field. Everything else applies to the selected model.
+    const { modelKey: _drop, ...slot } = parsed as ShowroomOverrides;
+    void _drop;
+    setEditedOverrides(slot as ShowroomOverrides);
+    setImportOpen(false);
+    setImportText('');
+    setImportError(null);
+  };
+
   const handleReset = () => {
     if (!carId) return;
     if (
@@ -434,6 +471,25 @@ export default function Showroom({ carId }: Props) {
             {copyFlash
               ? t('showroom.copied', '✓ Copié')
               : t('showroom.copyJson', 'Copier JSON')}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setImportText('');
+              setImportError(null);
+              setImportOpen(true);
+            }}
+            title={t(
+              'showroom.importJsonHint',
+              'Colle un JSON copié pour ré-appliquer toute une calibration au modèle sélectionné',
+            )}
+            className={
+              'h-8 px-3 text-xs rounded-md bg-[#1a1a1a] border border-[#2a2a2a] ' +
+              'text-[#9ca3af] hover:text-white hover:bg-[#2a2a2a] ' +
+              'transition-colors'
+            }
+          >
+            {t('showroom.importJson', 'Importer JSON')}
           </button>
           <button
             type="button"
@@ -565,16 +621,90 @@ export default function Showroom({ carId }: Props) {
             </>
           )}
 
-          {/* Restant — Phase 3b.3d : sentry cameras (XYZ × 7).
-              + Phase 4 — drag-gizmos sur les callouts/anchors. */}
+          <div className="h-px bg-[#1a1a1a]" />
+
+          <ShowroomSentrySection
+            overrides={editedOverrides}
+            onChange={setEditedOverrides}
+            defaults={defaults}
+            visualState={visualState}
+            onVisualChange={setVisualState}
+          />
+
+          {/* Restant — Phase 4 : drag-gizmos sur les callouts/anchors. */}
           <div className="text-[10px] text-[#4b5563] text-center pt-4 border-t border-[#1a1a1a]">
-            {t(
-              'showroom.moreSoon',
-              'À venir : caméras sentinelles, drag-gizmos…',
-            )}
+            {t('showroom.moreSoon', 'À venir : drag-gizmos…')}
           </div>
         </div>
       </div>
+
+      {/* Import-JSON modal — paste a copied calibration and apply it to
+          the selected model's slot. Replaces the whole slot, so it covers
+          every field at once. */}
+      {importOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setImportOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-[#141414] border border-[#2a2a2a] rounded-xl p-4 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="text-sm font-medium text-white">
+                {t('showroom.importJson', 'Importer JSON')}
+              </h3>
+              <p className="text-[11px] text-[#9ca3af] mt-0.5">
+                {t(
+                  'showroom.importJsonDesc',
+                  'Colle un JSON (issu de « Copier JSON »). Tous les réglages — caméra, port de charge, câble, chargeur, peinture, vitres, lumières, sentinelles, boutons — seront appliqués au modèle sélectionné. Sauvegarde ensuite pour conserver.',
+                )}
+              </p>
+            </div>
+            <textarea
+              value={importText}
+              onChange={(e) => {
+                setImportText(e.target.value);
+                setImportError(null);
+              }}
+              spellCheck={false}
+              placeholder='{ "cameraPose": { ... }, "chargePort": { ... }, ... }'
+              className={
+                'w-full h-56 bg-[#0a0a0a] border border-[#2a2a2a] rounded-md p-2 ' +
+                'text-[11px] font-mono text-white resize-none ' +
+                'focus:border-[#e31937] focus:outline-none'
+              }
+            />
+            {importError && (
+              <p className="text-[11px] text-[#ef4444]">{importError}</p>
+            )}
+            <div className="flex items-center justify-end gap-1.5">
+              <button
+                type="button"
+                onClick={() => setImportOpen(false)}
+                className={
+                  'h-8 px-3 text-xs rounded-md bg-[#1a1a1a] border border-[#2a2a2a] ' +
+                  'text-[#9ca3af] hover:text-white hover:bg-[#2a2a2a]'
+                }
+              >
+                {t('showroom.discard', 'Annuler')}
+              </button>
+              <button
+                type="button"
+                onClick={handleImportApply}
+                disabled={importText.trim() === ''}
+                className={
+                  'h-8 px-3 text-xs rounded-md font-medium transition-colors ' +
+                  'bg-[#e31937] text-white hover:bg-[#c0152f] ' +
+                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                }
+              >
+                {t('showroom.importApply', 'Appliquer')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
