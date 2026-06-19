@@ -382,8 +382,8 @@ function ChargePortSection({ overrides, onChange, defaults }: Props) {
         value={fallbackWorld}
         onChange={(v) => setField('fallbackWorld', v)}
         defaultValue={defaults.chargePort.fallbackWorld as [number, number, number]}
-        min={-3}
-        max={3}
+        min={-4}
+        max={4}
         step={0.005}
         unit="m"
       />
@@ -392,8 +392,8 @@ function ChargePortSection({ overrides, onChange, defaults }: Props) {
         value={pivotToSocketOffset}
         onChange={(v) => setField('pivotToSocketOffset', v)}
         defaultValue={defaults.chargePort.pivotToSocketOffset as [number, number, number]}
-        min={-0.3}
-        max={0.3}
+        min={-1.5}
+        max={1.5}
         step={0.005}
         unit="m"
       />

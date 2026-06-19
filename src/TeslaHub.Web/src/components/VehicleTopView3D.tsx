@@ -1880,7 +1880,15 @@ function LiveChargingCable({ mode, handleAvailable }: LiveChargingCableProps) {
   // stay invisible forever on an unknown GLB.
   useFrame(() => {
     if (anchorRef.current) return;
-    const candidates = [CHARGE_PORT_NODE, ...CHARGE_PORT_ALT_NAMES];
+    const candidates = [CHARGE_PORT_NODE, ...CHARGE_PORT_ALT_NAMES].filter(Boolean);
+    // Models without a charge-port node (community / 3rd-party) → there is
+    // nothing to anchor to. Use the per-model fallback world position
+    // directly (the "Position monde (fallback)" sliders) instead of polling
+    // for a node that will never exist.
+    if (candidates.length === 0) {
+      setEndWorld(CHARGE_PORT_FALLBACK_WORLD.clone());
+      return;
+    }
     for (const name of candidates) {
       const obj = scene.getObjectByName(name);
       if (obj) {
@@ -2022,7 +2030,7 @@ function ShowroomAnchorMarkers() {
   // React state churn that would come from setState-per-frame.
   useFrame(() => {
     if (!anchorRef.current) {
-      const candidates = [CHARGE_PORT_NODE, ...CHARGE_PORT_ALT_NAMES];
+      const candidates = [CHARGE_PORT_NODE, ...CHARGE_PORT_ALT_NAMES].filter(Boolean);
       for (const name of candidates) {
         const obj = scene.getObjectByName(name);
         if (obj) {
@@ -2039,6 +2047,10 @@ function ShowroomAnchorMarkers() {
       const pivot = new THREE.Vector3();
       anchor.getWorldPosition(pivot);
       group.position.copy(pivot.add(PORT_FROM_PIVOT_OFFSET));
+    } else if (group) {
+      // No anchor node (community / 3rd-party) → pin the live plug socket
+      // marker to the fallback world position so it tracks the sliders.
+      group.position.copy(CHARGE_PORT_FALLBACK_WORLD);
     }
   });
 
