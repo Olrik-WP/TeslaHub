@@ -39,7 +39,6 @@ import {
   type VehicleModelKey,
   type WheelFallbackPosition,
 } from './vehicleModelConfig';
-import type { OpeningDefinition } from './vehicleOpeningTypes';
 
 /** Identifier for each wheel corner — used as the key for per-wheel overrides. */
 export type WheelCorner = 'LF' | 'RF' | 'LR' | 'RR';
@@ -207,9 +206,10 @@ export interface ShowroomOverrides {
     /** REST rotation (deg, YXZ) applied while closed — lays a wrongly-tilted
      *  flap flush on the body without re-baking the GLB. */
     closedEuler?: [number, number, number];
-    /** Terminal open rotation (deg, YXZ) — 3 axes so a tilted hinge can be
-     *  dialed in without twisting the flap. */
-    openEuler?: [number, number, number];
+    /** WORLD axis the flap rotates about when opening (through the hinge). */
+    openAxis?: [number, number, number];
+    /** How far to rotate about `openAxis` when fully open (deg). */
+    openAngle?: number;
   };
 
   // Legacy glass fine-tuning (still in transit toward `glassFinish`).
@@ -439,38 +439,6 @@ function mergeWheelPositions(
  * read them via a type cast — until the Phase 3 refactor brings them
  * into `VehicleModelConfig` proper.
  */
-/**
- * Re-inject the calibrated rotations into the `charge_port` opening's
- * `charge_dummy` track. The rest keyframe (t=0) gets `closedEuler` (so a
- * flap baked at a wrong tilt lies flush when shut); every later keyframe
- * gets `openEuler`. Both degrees, YXZ. Pure — returns a new openings array,
- * leaving the shipped defaults intact.
- */
-function applyChargeFlapRotation(
-  openings: ReadonlyArray<OpeningDefinition>,
-  closedEuler: readonly [number, number, number],
-  openEuler: readonly [number, number, number],
-): ReadonlyArray<OpeningDefinition> {
-  return openings.map((op) => {
-    if (op.id !== 'charge_port') return op;
-    return {
-      ...op,
-      tracks: op.tracks.map((tr) =>
-        tr.node === 'charge_dummy' && tr.rotation
-          ? {
-              ...tr,
-              rotation: tr.rotation.map((kf, i) =>
-                i === 0
-                  ? { ...kf, eul: [...closedEuler] as [number, number, number] }
-                  : { ...kf, eul: [...openEuler] as [number, number, number] },
-              ),
-            }
-          : tr,
-      ),
-    };
-  });
-}
-
 export function mergeShowroomConfig(
   defaults: VehicleModelConfig,
   overrides: ShowroomOverrides | null | undefined,
@@ -484,24 +452,19 @@ export function mergeShowroomConfig(
         offset: overrides.chargeFlap?.offset ?? defaults.chargeFlap.offset,
         closedEuler:
           overrides.chargeFlap?.closedEuler ?? defaults.chargeFlap.closedEuler,
-        openEuler:
-          overrides.chargeFlap?.openEuler ?? defaults.chargeFlap.openEuler,
+        openAxis: overrides.chargeFlap?.openAxis ?? defaults.chargeFlap.openAxis,
+        openAngle:
+          overrides.chargeFlap?.openAngle ?? defaults.chargeFlap.openAngle,
       }
     : undefined;
 
   return {
     ...defaults,
 
-    // Charge-port flap (community rigged pivot) — offset + closed rotation
-    // consumed by the animator, open rotation baked into the openings below.
+    // Charge-port flap (community rigged pivot) — offset + closed rotation +
+    // open axis/angle are all consumed by the animator at runtime (it slerps
+    // closed → open about the fixed axis). The openings array is untouched.
     chargeFlap,
-    openings: chargeFlap
-      ? applyChargeFlapRotation(
-          defaults.openings,
-          chargeFlap.closedEuler,
-          chargeFlap.openEuler,
-        )
-      : defaults.openings,
     // wheelUrl swap (different wheel design)
     wheelUrl: overrides.wheelUrl ?? defaults.wheelUrl,
 
@@ -736,7 +699,8 @@ export function buildEffectiveOverrides(
             number,
             number,
           ],
-          openEuler: [...cfg.chargeFlap.openEuler] as [number, number, number],
+          openAxis: [...cfg.chargeFlap.openAxis] as [number, number, number],
+          openAngle: cfg.chargeFlap.openAngle,
         }
       : undefined,
     variants: cfg.activeVariants ? { ...cfg.activeVariants } : undefined,

@@ -426,7 +426,8 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
   const cf = overrides.chargeFlap ?? {};
   const offset = (cf.offset ?? defaults.chargeFlap.offset) as [number, number, number];
   const closedEuler = (cf.closedEuler ?? defaults.chargeFlap.closedEuler) as [number, number, number];
-  const openEuler = (cf.openEuler ?? defaults.chargeFlap.openEuler) as [number, number, number];
+  const openAxis = (cf.openAxis ?? defaults.chargeFlap.openAxis) as [number, number, number];
+  const openAngle = cf.openAngle ?? defaults.chargeFlap.openAngle;
 
   const set = (patch: Partial<NonNullable<ShowroomOverrides['chargeFlap']>>) => {
     onChange({ ...overrides, chargeFlap: { ...cf, ...patch } });
@@ -435,7 +436,8 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
   const isOverridden =
     cf.offset !== undefined ||
     cf.closedEuler !== undefined ||
-    cf.openEuler !== undefined;
+    cf.openAxis !== undefined ||
+    cf.openAngle !== undefined;
   const reset = () => {
     const { chargeFlap: _drop, ...rest } = overrides;
     void _drop;
@@ -480,24 +482,35 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
         step={1}
         unit="°"
       />
-      <ShowroomVec3Slider
-        label="Rotation ouverte — pose absolue (°, X/Y/Z)"
-        value={openEuler}
-        onChange={(v) => set({ openEuler: v })}
-        defaultValue={defaults.chargeFlap.openEuler}
+      <ShowroomSlider
+        label="Angle d'ouverture"
+        value={openAngle}
+        onChange={(v) => set({ openAngle: v })}
+        defaultValue={defaults.chargeFlap.openAngle}
         min={-180}
         max={180}
         step={5}
         unit="°"
       />
+      <ShowroomVec3Slider
+        label="Axe de charnière (avancé · Z=lève · Y=porte)"
+        value={openAxis}
+        onChange={(v) => set({ openAxis: v })}
+        defaultValue={defaults.chargeFlap.openAxis}
+        min={-1}
+        max={1}
+        step={1}
+        unit=""
+      />
       <p className="text-[10px] text-[#6b7280]">
-        Place la trappe sur l'aile arrière sans ré-exporter le GLB. Les deux
-        rotations sont des <strong>poses absolues</strong>, réglées de la même
-        façon : <strong>Rotation fermée</strong> = trappe à plat contre la
-        carrosserie ; <strong>Rotation ouverte</strong> = trappe ouverte comme
-        tu la veux. La transition entre les deux est lissée automatiquement
-        (jamais de passage à travers la carrosserie). L'aperçu est en direct,
-        clique « trappe » pour voir le mouvement.
+        Place la trappe sur l'aile arrière sans ré-exporter le GLB.{' '}
+        <strong>Rotation fermée</strong> = trappe à plat contre la carrosserie
+        (ne pas y toucher : déjà calée). <strong>Angle d'ouverture</strong> =
+        seul réglage courant : monte/descends pour ouvrir plus ou moins. La
+        trappe pivote toujours autour du même axe (par défaut elle se{' '}
+        <em>lève</em>), donc régler l'angle ne peut jamais la faire rentrer dans
+        la voiture. L'<strong>axe de charnière</strong> est avancé : Z = se lève,
+        Y = s'ouvre comme une porte. Aperçu en direct (clique « trappe »).
       </p>
     </SubSection>
   );

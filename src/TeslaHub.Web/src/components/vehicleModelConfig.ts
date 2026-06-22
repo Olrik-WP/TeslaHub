@@ -725,14 +725,17 @@ export interface VehicleModelConfig {
    *     closed, so a flap baked at a wrong tilt can be laid flush on the
    *     body WITHOUT re-exporting the GLB. Also the `charge_port` opening's
    *     first keyframe.
-   *   - `openEuler`: ABSOLUTE open pose (degrees, YXZ), dialed exactly like
-   *     `closedEuler`. The runtime slerps closed → open along the short arc, so
-   *     the motion is a clean hinge swing for any pair of poses (no diving
-   *     through the body, no frame/axis guessing). */
+   *   - `openAxis`: WORLD axis the flap rotates about when opening (through the
+   *     hinge). World Z (front-rear) lifts it up like a lid; world Y swings it
+   *     like a door. Fixing the axis means tuning the angle can never push the
+   *     flap into the body.
+   *   - `openAngle`: how far to rotate about `openAxis` when fully open (deg).
+   *     The runtime slerps closed → open, a clean single-axis hinge motion. */
   chargeFlap?: {
     offset: [number, number, number];
     closedEuler: [number, number, number];
-    openEuler: [number, number, number];
+    openAxis: [number, number, number];
+    openAngle: number;
   };
 
   /** Optional auto-fold tracks for the side mirrors, triggered on lock.
@@ -1856,10 +1859,13 @@ export const CommunityM3Config: VehicleModelConfig = {
   chargeFlap: {
     offset: [-0.01, -0.1, -0.18],
     closedEuler: [0, -90, 90],
-    // Absolute open pose = closed swung ~90° OUTWARD about the (vertical) hinge,
-    // verified by headless render (flap clears the body, recess exposed). The
-    // opposite swing [0, 0, 90] dives into the bodywork.
-    openEuler: [0, -180, 90],
+    // Opening = rotate `openAngle` about `openAxis` (a WORLD axis) through the
+    // hinge, on top of the closed pose. World Z (front-rear horizontal) makes
+    // the flap LIFT UP like a lid; -80° verified by headless render (flap rises
+    // off the body, doesn't swing sideways nor dive in). Dialing only the angle
+    // can never push the flap into the body — the axis is fixed.
+    openAxis: [0, 0, 1],
+    openAngle: -80,
   },
 };
 

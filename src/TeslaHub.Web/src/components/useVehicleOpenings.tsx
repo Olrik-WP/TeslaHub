@@ -274,25 +274,29 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
   // base + offset whenever the calibration changes — no GLB re-export needed.
   const flapOffset = model.chargeFlap?.offset;
   const flapClosedEuler = model.chargeFlap?.closedEuler;
-  const flapOpenEuler = model.chargeFlap?.openEuler;
+  const flapOpenAxis = model.chargeFlap?.openAxis;
+  const flapOpenAngle = model.chargeFlap?.openAngle;
   const flapBaseRef = useRef<{ node: THREE.Object3D; base: THREE.Vector3 } | null>(null);
 
-  // Closed/open orientations as quaternions. BOTH are ABSOLUTE poses (Euler,
-  // YXZ) — `openEuler` is dialed exactly like `closedEuler`: rotate the sliders
-  // until the flap looks open. The runtime slerps closed → open along the short
-  // arc, so the motion is always a clean hinge swing regardless of how tilted
-  // the two poses are (no diving through the bodywork, no frame/axis guessing).
+  // Closed = absolute rest pose (Euler, YXZ, dialed so the flap lies flat).
+  // Open = rotate `openAngle` about the WORLD `openAxis` (through the hinge) on
+  // top of closed. The axis is FIXED, so tuning only the angle can never push
+  // the flap into the body — it always travels along the same clean hinge arc.
+  // The runtime slerps closed → open by progress.
   const flapQuats = useMemo(() => {
-    if (!flapClosedEuler || !flapOpenEuler) return null;
+    if (!flapClosedEuler || !flapOpenAxis || flapOpenAngle == null) return null;
     const d = THREE.MathUtils.degToRad;
     const closed = new THREE.Quaternion().setFromEuler(
       new THREE.Euler(d(flapClosedEuler[0]), d(flapClosedEuler[1]), d(flapClosedEuler[2]), 'YXZ'),
     );
-    const open = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(d(flapOpenEuler[0]), d(flapOpenEuler[1]), d(flapOpenEuler[2]), 'YXZ'),
-    );
+    const axis = new THREE.Vector3(flapOpenAxis[0], flapOpenAxis[1], flapOpenAxis[2]);
+    if (axis.lengthSq() < 1e-9) axis.set(0, 0, 1);
+    axis.normalize();
+    const open = new THREE.Quaternion()
+      .setFromAxisAngle(axis, d(flapOpenAngle))
+      .multiply(closed);
     return { closed, open };
-  }, [flapClosedEuler, flapOpenEuler]);
+  }, [flapClosedEuler, flapOpenAxis, flapOpenAngle]);
 
   // Apply position offset + orientation. Re-runs whenever calibration changes
   // and re-applies at the flap's CURRENT open progress, so dragging a slider
