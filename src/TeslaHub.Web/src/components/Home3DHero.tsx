@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import HomeBatteryBar from './HomeBatteryBar';
+import HomeLoadSheddingStrip from './HomeLoadSheddingStrip';
 import TpmsSummaryRow from './TpmsSummaryRow';
 import type { VehicleStatus } from '../api/queries';
 
@@ -61,6 +62,9 @@ export default function Home3DHero({ vehicle }: Props) {
           numbers in one place). Renders nothing for cars without TPMS. */}
       <TpmsSummaryRow vehicle={vehicle} />
       <HomeBatteryBar vehicle={vehicle} isCharging={isCharging} />
+      {/* Live house power + last load-shedding decisions. Self-hides when
+          load shedding isn't configured/reachable. */}
+      <HomeLoadSheddingStrip vehicle={vehicle} />
     </div>
   );
 }

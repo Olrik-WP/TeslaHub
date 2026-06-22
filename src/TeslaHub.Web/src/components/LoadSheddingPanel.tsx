@@ -2,6 +2,19 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
+import { utcDate } from '../utils/date';
+
+// Compact "day/month + time" used by the decisions timeline. The hour
+// alone is ambiguous once events span more than one day, so we always
+// show the date too. utcDate() normalises the backend timestamp (which
+// may or may not carry a trailing 'Z') before converting to local time.
+function formatEventDateTime(iso: string): { date: string; time: string } {
+  const d = utcDate(iso);
+  return {
+    date: d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' }),
+    time: d.toLocaleTimeString(),
+  };
+}
 
 type LoadSheddingProfile = {
   id: number;
@@ -329,7 +342,7 @@ export default function LoadSheddingPanel() {
     if (!selected) return null;
     const r = selected.runtime;
     const lastCmd = r.lastCommandAt
-      ? new Date(r.lastCommandAt).toLocaleTimeString()
+      ? `${formatEventDateTime(r.lastCommandAt).date} ${formatEventDateTime(r.lastCommandAt).time}`
       : '—';
 
     return (
@@ -385,7 +398,10 @@ export default function LoadSheddingPanel() {
       <ul className="space-y-1">
         {events.map((e) => (
           <li key={e.id} className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-md p-2 text-xs flex items-start gap-2">
-            <span className="text-[#6b7280] tabular-nums w-20 shrink-0">{new Date(e.at).toLocaleTimeString()}</span>
+            <span className="text-[#6b7280] tabular-nums shrink-0 flex flex-col leading-tight w-[3.5rem]">
+              <span>{formatEventDateTime(e.at).date}</span>
+              <span>{formatEventDateTime(e.at).time}</span>
+            </span>
             <StatePill kind={e.kind} />
             <span className="text-[#9ca3af] flex-1 break-words">
               {e.fromAmps !== null && e.fromAmps !== undefined && e.toAmps !== null && e.toAmps !== undefined

@@ -237,6 +237,10 @@
       "noData": "No battery data",
       "chargeLimit": "Charge limit"
     },
+    "power": {
+      "house": "House (live)",
+      "tesla": "Tesla"
+    },
     "quickActions": {
       "title": "Quick actions",
       "more": "More",

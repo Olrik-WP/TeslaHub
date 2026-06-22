@@ -237,6 +237,10 @@
       "noData": "Aucune donnée batterie",
       "chargeLimit": "Limite de charge"
     },
+    "power": {
+      "house": "Maison (temps réel)",
+      "tesla": "Tesla"
+    },
     "quickActions": {
       "title": "Actions rapides",
       "more": "Plus",
