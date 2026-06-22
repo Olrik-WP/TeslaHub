@@ -293,7 +293,7 @@ export default function Settings({ carId }: Props) {
           />
 
           {/* Dynamic load shedding (ZLinky → Z2M → Tesla) */}
-          <LoadSheddingPanel />
+          <LoadSheddingPanel carId={carId} />
         </>
       ) : (
         <>

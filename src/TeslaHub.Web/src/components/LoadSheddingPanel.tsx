@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 import { utcDate } from '../utils/date';
+import { useVehicleStatus } from '../hooks/useVehicle';
 
 // Compact "day/month + time" used by the decisions timeline. The hour
 // alone is ambiguous once events span more than one day, so we always
@@ -203,12 +204,26 @@ function StatePill({ kind }: { kind: string }) {
   );
 }
 
-export default function LoadSheddingPanel() {
+interface LoadSheddingPanelProps {
+  /** The globally-selected TeslaMate car (top-menu switcher). The panel
+   *  follows it so its profile + decisions history track whichever
+   *  vehicle the user picks app-wide, mapping carId → Fleet vehicleId by
+   *  VIN. The in-panel dropdown still allows a manual override. */
+  carId?: number;
+}
+
+export default function LoadSheddingPanel({ carId }: LoadSheddingPanelProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
   const [form, setForm] = useState<LoadSheddingProfile>(DEFAULT_PROFILE);
+
+  // VIN of the globally-selected car — used to map the top-menu car to
+  // the matching load-shedding vehicle (which is keyed by Fleet vehicleId,
+  // not TeslaMate carId).
+  const { data: carStatus } = useVehicleStatus(carId);
+  const carVin = carStatus?.vin ?? null;
 
   // Live status: short-poll every 3s. SSE would be cheaper but the
   // app's existing EventSource-with-token plumbing is scoped to the
@@ -233,15 +248,34 @@ export default function LoadSheddingPanel() {
 
   const vehicles = status?.vehicles ?? [];
 
-  // Auto-select the first vehicle on first render so the form is not
-  // dangling. Re-select if the chosen vehicle disappears (rare, but
-  // happens when the user removes a Tesla from their account).
+  // Tracks the last global VIN we snapped to. Lets us react ONLY to a
+  // real top-menu change — `vehicles` gets a fresh array reference on
+  // every 3s status poll, so without this guard the panel would yank the
+  // selection back to the global car every 3s and break manual overrides.
+  const syncedCarVinRef = useRef<string | null>(null);
+
+  // Select the vehicle to show: follow the global top-menu car (by VIN)
+  // when it changes, otherwise keep a valid selection. Re-selects if the
+  // chosen vehicle disappears (e.g. the user removed a Tesla).
   useEffect(() => {
     if (vehicles.length === 0) return;
+
+    // Top-menu car changed → snap to its matching load-shedding vehicle.
+    if (carVin && syncedCarVinRef.current !== carVin) {
+      const match = vehicles.find((v) => v.vin?.toUpperCase() === carVin.toUpperCase());
+      syncedCarVinRef.current = carVin;
+      if (match) {
+        setSelectedVehicleId(match.vehicleId);
+        return;
+      }
+      // No load-shedding profile for that car — fall through to keep a
+      // valid selection rather than blanking the panel.
+    }
+
     if (selectedVehicleId === null || !vehicles.some((v) => v.vehicleId === selectedVehicleId)) {
       setSelectedVehicleId(vehicles[0].vehicleId);
     }
-  }, [vehicles, selectedVehicleId]);
+  }, [vehicles, selectedVehicleId, carVin]);
 
   const selected = useMemo(
     () => vehicles.find((v) => v.vehicleId === selectedVehicleId) ?? null,
