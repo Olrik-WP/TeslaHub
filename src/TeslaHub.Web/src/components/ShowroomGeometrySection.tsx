@@ -425,13 +425,13 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
 
   const cf = overrides.chargeFlap ?? {};
   const offset = (cf.offset ?? defaults.chargeFlap.offset) as [number, number, number];
-  const angle = cf.openAngleDeg ?? defaults.chargeFlap.openAngleDeg;
+  const openEuler = (cf.openEuler ?? defaults.chargeFlap.openEuler) as [number, number, number];
 
   const set = (patch: Partial<NonNullable<ShowroomOverrides['chargeFlap']>>) => {
     onChange({ ...overrides, chargeFlap: { ...cf, ...patch } });
   };
 
-  const isOverridden = cf.offset !== undefined || cf.openAngleDeg !== undefined;
+  const isOverridden = cf.offset !== undefined || cf.openEuler !== undefined;
   const reset = () => {
     const { chargeFlap: _drop, ...rest } = overrides;
     void _drop;
@@ -466,19 +466,20 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
         step={0.01}
         unit="m"
       />
-      <ShowroomSlider
-        label="Ouv°"
-        value={angle}
-        onChange={(n) => set({ openAngleDeg: n })}
-        defaultValue={defaults.chargeFlap.openAngleDeg}
+      <ShowroomVec3Slider
+        label="Rotation ouverte (°, X/Y/Z)"
+        value={openEuler}
+        onChange={(v) => set({ openEuler: v })}
+        defaultValue={defaults.chargeFlap.openEuler}
         min={-180}
         max={180}
         step={5}
         unit="°"
       />
       <p className="text-[10px] text-[#6b7280]">
-        Place la trappe sur l'aile arrière sans ré-exporter le GLB. Ouv° = angle
-        d'ouverture autour de l'axe vertical (négatif = vers l'extérieur).
+        Place la trappe sur l'aile arrière sans ré-exporter le GLB. Rotation
+        ouverte = angles d'ouverture sur les 3 axes (la charnière n'étant pas
+        forcément verticale, joue sur X/Y/Z pour trouver le bon basculement).
       </p>
     </SubSection>
   );

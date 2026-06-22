@@ -204,8 +204,9 @@ export interface ShowroomOverrides {
   chargeFlap?: {
     /** Chassis-frame nudge of the flap+pivot (X right+, Y front+, Z up+). */
     offset?: [number, number, number];
-    /** Open swing angle (deg) around the vertical axis (negative = outward). */
-    openAngleDeg?: number;
+    /** Terminal open rotation (deg, YXZ) — 3 axes so a tilted hinge can be
+     *  dialed in without twisting the flap. */
+    openEuler?: [number, number, number];
   };
 
   // Legacy glass fine-tuning (still in transit toward `glassFinish`).
@@ -436,15 +437,15 @@ function mergeWheelPositions(
  * into `VehicleModelConfig` proper.
  */
 /**
- * Re-inject the calibrated open angle into the `charge_port` opening's
+ * Re-inject the calibrated open rotation into the `charge_port` opening's
  * terminal rotation keyframe (the `charge_dummy` track). The rest
- * keyframe (t=0) stays at [0,0,0]; every later keyframe gets [0,0,angle]
- * so the flap swings around the vertical axis by `angleDeg`. Pure — returns
- * a new openings array, leaving the shipped defaults untouched.
+ * keyframe (t=0) stays at [0,0,0]; every later keyframe gets `openEuler`
+ * (degrees, YXZ) so the flap swings on whichever axes the user dialed in.
+ * Pure — returns a new openings array, leaving the shipped defaults intact.
  */
-function applyChargeFlapAngle(
+function applyChargeFlapEuler(
   openings: ReadonlyArray<OpeningDefinition>,
-  angleDeg: number,
+  openEuler: readonly [number, number, number],
 ): ReadonlyArray<OpeningDefinition> {
   return openings.map((op) => {
     if (op.id !== 'charge_port') return op;
@@ -457,7 +458,7 @@ function applyChargeFlapAngle(
               rotation: tr.rotation.map((kf, i) =>
                 i === 0
                   ? kf
-                  : { ...kf, eul: [0, 0, angleDeg] as [number, number, number] },
+                  : { ...kf, eul: [...openEuler] as [number, number, number] },
               ),
             }
           : tr,
@@ -477,8 +478,8 @@ export function mergeShowroomConfig(
   const chargeFlap = defaults.chargeFlap
     ? {
         offset: overrides.chargeFlap?.offset ?? defaults.chargeFlap.offset,
-        openAngleDeg:
-          overrides.chargeFlap?.openAngleDeg ?? defaults.chargeFlap.openAngleDeg,
+        openEuler:
+          overrides.chargeFlap?.openEuler ?? defaults.chargeFlap.openEuler,
       }
     : undefined;
 
@@ -486,10 +487,10 @@ export function mergeShowroomConfig(
     ...defaults,
 
     // Charge-port flap (community rigged pivot) — offset consumed by the
-    // animator, angle baked into the openings below.
+    // animator, open rotation baked into the openings below.
     chargeFlap,
     openings: chargeFlap
-      ? applyChargeFlapAngle(defaults.openings, chargeFlap.openAngleDeg)
+      ? applyChargeFlapEuler(defaults.openings, chargeFlap.openEuler)
       : defaults.openings,
     // wheelUrl swap (different wheel design)
     wheelUrl: overrides.wheelUrl ?? defaults.wheelUrl,
@@ -720,7 +721,7 @@ export function buildEffectiveOverrides(
     chargeFlap: cfg.chargeFlap
       ? {
           offset: [...cfg.chargeFlap.offset] as [number, number, number],
-          openAngleDeg: cfg.chargeFlap.openAngleDeg,
+          openEuler: [...cfg.chargeFlap.openEuler] as [number, number, number],
         }
       : undefined,
     variants: cfg.activeVariants ? { ...cfg.activeVariants } : undefined,

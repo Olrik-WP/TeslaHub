@@ -721,12 +721,14 @@ export interface VehicleModelConfig {
    *     at runtime (X right+, Y front+, Z up+) so the flap can be
    *     re-aligned on the quarter panel from the Showroom WITHOUT
    *     re-baking the GLB.
-   *   - `openAngleDeg`: terminal swing angle (degrees) around the
-   *     vertical axis injected into the `charge_port` opening's last
-   *     keyframe (negative = swings outward, away from the body). */
+   *   - `openEuler`: terminal open rotation (degrees, YXZ order) injected
+   *     into the `charge_port` opening's last keyframe. Three axes because
+   *     a grafted flap's hinge edge is rarely aligned with the vertical
+   *     axis, so a single-axis swing twists it — the user dials the right
+   *     combination live in the Showroom. */
   chargeFlap?: {
     offset: [number, number, number];
-    openAngleDeg: number;
+    openEuler: [number, number, number];
   };
 
   /** Optional auto-fold tracks for the side mirrors, triggered on lock.
@@ -1846,10 +1848,10 @@ export const CommunityM3Config: VehicleModelConfig = {
 
   // Charge-port flap live calibration (the grafted `charge_dummy` pivot).
   // Baseline matches the hand-baked position in the GLB; the Showroom sliders
-  // nudge it from here without re-exporting. openAngleDeg -90 = swings outward.
+  // nudge position + open rotation from here without re-exporting.
   chargeFlap: {
     offset: [0, 0, 0],
-    openAngleDeg: -90,
+    openEuler: [0, 0, -90],
   },
 };
 
