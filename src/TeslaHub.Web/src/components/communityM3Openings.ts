@@ -117,15 +117,13 @@ export const OPENINGS_COMMUNITY_M3: ReadonlyArray<OpeningDefinition> = [
       },
     ],
   },
-  // Charge-port flap — rear-left fender. Driven by the `charge_dummy` Empty
-  // the user adds in Blender (a hinge pivot parenting the flap mesh; the flap
-  // must be NON-Tesla geometry — separated from the CC-BY body shell or
-  // hand-modelled — so the public build stays free of proprietary assets).
-  // A default-oriented Blender Empty exports with the same axis mapping as the
-  // other community dummies (localZ → world +Y), so the flap swings around the
-  // vertical axis like a door. FIRST PASS — sign/angle to calibrate in the
-  // viewer once the GLB is re-exported. No-op until the `charge_dummy` node
-  // exists in the scene graph (resolved by name at runtime).
+  // Charge-port flap — rear-left fender. The `charge_dummy` pivot was BAKED at
+  // graft time (graft-charge-flap.mjs → clearNodeTransform) so its rest pose is
+  // identity rotation / unit scale, exactly like the door/hood dummies. It
+  // therefore obeys the same axis mapping (localZ → world +Y, vertical), so the
+  // flap swings around the vertical axis like a left door. Front-edge hinge on
+  // the left → opens toward -Z, same sign as the left doors. SIGN/ANGLE to fine
+  // tune in the viewer; flip the sign if it opens into the body.
   {
     id: 'charge_port',
     length: OPEN_LEN,
@@ -134,7 +132,7 @@ export const OPENINGS_COMMUNITY_M3: ReadonlyArray<OpeningDefinition> = [
         node: 'charge_dummy',
         rotation: [
           { t: 0, eul: [0, 0, 0] },
-          { t: OPEN_LEN, eul: [0, 0, 80] },
+          { t: OPEN_LEN, eul: [0, 0, -90] },
         ],
       },
     ],
