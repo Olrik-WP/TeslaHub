@@ -725,11 +725,10 @@ export interface VehicleModelConfig {
    *     closed, so a flap baked at a wrong tilt can be laid flush on the
    *     body WITHOUT re-exporting the GLB. Also the `charge_port` opening's
    *     first keyframe.
-   *   - `openEuler`: open SWING (degrees, YXZ) applied in WORLD frame about the
-   *     hinge (open = delta ∘ closed), interpolated by quaternion slerp at
-   *     runtime. World-frame so the axis is intuitive (a charge-port hinge is
-   *     ~vertical → swing about world Y to open like a door) regardless of the
-   *     flap's tilted closed pose; slerp keeps it on the short arc. */
+   *   - `openEuler`: ABSOLUTE open pose (degrees, YXZ), dialed exactly like
+   *     `closedEuler`. The runtime slerps closed → open along the short arc, so
+   *     the motion is a clean hinge swing for any pair of poses (no diving
+   *     through the body, no frame/axis guessing). */
   chargeFlap?: {
     offset: [number, number, number];
     closedEuler: [number, number, number];
@@ -1857,8 +1856,9 @@ export const CommunityM3Config: VehicleModelConfig = {
   chargeFlap: {
     offset: [-0.01, -0.1, -0.18],
     closedEuler: [0, -90, 90],
-    // TODO: relative open swing — replace once dialed in from the Showroom.
-    openEuler: [0, 0, -90],
+    // Absolute open pose = closed swung ~90° about the (vertical) hinge. If it
+    // opens INTO the body, the opposite swing is [0, -180, 90].
+    openEuler: [0, 0, 90],
   },
 };
 

@@ -277,23 +277,20 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
   const flapOpenEuler = model.chargeFlap?.openEuler;
   const flapBaseRef = useRef<{ node: THREE.Object3D; base: THREE.Vector3 } | null>(null);
 
-  // Closed/open orientations as quaternions. `openEuler` is a WORLD-frame swing
-  // applied about the hinge (open = delta ∘ closed, i.e. delta pre-multiplied),
-  // so the rotation axis is a real-world axis regardless of the flap's tilted
-  // closed pose. A charge-port hinge is ~vertical, so swinging about world Y
-  // opens it like a door — intuitive, unlike a flap-local axis which the
-  // [0,-90,90] closed pose twists into a diagonal. Quaternion slerp between
-  // closed and open follows the short arc (no diving through the bodywork).
+  // Closed/open orientations as quaternions. BOTH are ABSOLUTE poses (Euler,
+  // YXZ) — `openEuler` is dialed exactly like `closedEuler`: rotate the sliders
+  // until the flap looks open. The runtime slerps closed → open along the short
+  // arc, so the motion is always a clean hinge swing regardless of how tilted
+  // the two poses are (no diving through the bodywork, no frame/axis guessing).
   const flapQuats = useMemo(() => {
     if (!flapClosedEuler || !flapOpenEuler) return null;
     const d = THREE.MathUtils.degToRad;
     const closed = new THREE.Quaternion().setFromEuler(
       new THREE.Euler(d(flapClosedEuler[0]), d(flapClosedEuler[1]), d(flapClosedEuler[2]), 'YXZ'),
     );
-    const delta = new THREE.Quaternion().setFromEuler(
+    const open = new THREE.Quaternion().setFromEuler(
       new THREE.Euler(d(flapOpenEuler[0]), d(flapOpenEuler[1]), d(flapOpenEuler[2]), 'YXZ'),
     );
-    const open = delta.clone().multiply(closed);
     return { closed, open };
   }, [flapClosedEuler, flapOpenEuler]);
 

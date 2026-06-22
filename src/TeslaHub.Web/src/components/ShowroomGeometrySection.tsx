@@ -481,7 +481,7 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
         unit="°"
       />
       <ShowroomVec3Slider
-        label="Ouverture — pivot autour d'un axe MONDE (°, X/Y/Z)"
+        label="Rotation ouverte — pose absolue (°, X/Y/Z)"
         value={openEuler}
         onChange={(v) => set({ openEuler: v })}
         defaultValue={defaults.chargeFlap.openEuler}
@@ -491,13 +491,13 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
         unit="°"
       />
       <p className="text-[10px] text-[#6b7280]">
-        Place la trappe sur l'aile arrière sans ré-exporter le GLB.{' '}
-        <strong>Rotation fermée</strong> = pose de repos : ajuste X/Y/Z pour
-        coucher la trappe à plat contre la carrosserie (si elle se dresse comme
-        un aileron). <strong>Ouverture</strong> = pivot autour d'un axe{' '}
-        <em>monde</em> : la charnière d'une trappe de charge étant verticale,
-        commence par <strong>Y</strong> (ouverture « comme une porte ») et
-        ajuste le signe pour ouvrir vers l'extérieur. L'aperçu est en direct.
+        Place la trappe sur l'aile arrière sans ré-exporter le GLB. Les deux
+        rotations sont des <strong>poses absolues</strong>, réglées de la même
+        façon : <strong>Rotation fermée</strong> = trappe à plat contre la
+        carrosserie ; <strong>Rotation ouverte</strong> = trappe ouverte comme
+        tu la veux. La transition entre les deux est lissée automatiquement
+        (jamais de passage à travers la carrosserie). L'aperçu est en direct,
+        clique « trappe » pour voir le mouvement.
       </p>
     </SubSection>
   );
