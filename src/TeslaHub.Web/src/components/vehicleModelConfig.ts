@@ -725,11 +725,11 @@ export interface VehicleModelConfig {
    *     closed, so a flap baked at a wrong tilt can be laid flush on the
    *     body WITHOUT re-exporting the GLB. Also the `charge_port` opening's
    *     first keyframe.
-   *   - `openEuler`: open SWING (degrees, YXZ) applied RELATIVE to the closed
-   *     pose (open = closed ∘ delta), interpolated by quaternion slerp at
-   *     runtime. Relative + slerp so the flap hinges on the short arc about a
-   *     flap-local axis instead of diving through the body — the user just
-   *     raises a single axis to the desired opening angle in the Showroom. */
+   *   - `openEuler`: open SWING (degrees, YXZ) applied in WORLD frame about the
+   *     hinge (open = delta ∘ closed), interpolated by quaternion slerp at
+   *     runtime. World-frame so the axis is intuitive (a charge-port hinge is
+   *     ~vertical → swing about world Y to open like a door) regardless of the
+   *     flap's tilted closed pose; slerp keeps it on the short arc. */
   chargeFlap?: {
     offset: [number, number, number];
     closedEuler: [number, number, number];
