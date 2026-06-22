@@ -1869,18 +1869,15 @@ export const CommunityM3Config: VehicleModelConfig = {
     offset: [-0.01, -0.1, -0.18],
     closedEuler: [0, -90, 90],
     // Opening = rotate `openAngle` about `openAxis` (a WORLD axis) through the
-    // hinge LINE (`hingePivot`), on top of the closed pose. The hinge sits on
-    // the bottom edge (flap-local X = -0.116) and we rotate a NEGATIVE angle
-    // about world Z so the free (top) edge LIFTS UP and the panel stands up like
-    // the real Tesla lid, revealing the socket below. A positive angle here
-    // swings it sideways/out instead — the wrong motion. Verified by headless
-    // render with the flap painted bright to read orientation unambiguously.
-    openAxis: [0, 0, 1],
-    openAngle: -60,
-    hingePivot: [-0.116, 0, 0],
-    // No straightening needed for the clean Z-lift default; the Showroom
-    // "Redresser" slider feeds this when a tilted axis leaves the flap askew.
-    openTwist: [0, 0, 0],
+    // hinge LINE (`hingePivot`), then apply `openTwist` (world-frame, pinned at
+    // the hinge) to square the panel up. These exact values were dialed in live
+    // in the Showroom against the real Tesla APK lift motion and frozen here as
+    // the community default so the flap opens correctly everywhere (Home,
+    // Charging cards) with no per-car override needed.
+    openAxis: [0, -1, 1],
+    openAngle: -90,
+    hingePivot: [0.12, -0.12, 0],
+    openTwist: [12, 12, 60],
   },
 };
 
