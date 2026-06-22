@@ -274,7 +274,30 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
   // base + offset whenever the calibration changes — no GLB re-export needed.
   const flapOffset = model.chargeFlap?.offset;
   const flapClosedEuler = model.chargeFlap?.closedEuler;
+  const flapOpenEuler = model.chargeFlap?.openEuler;
   const flapBaseRef = useRef<{ node: THREE.Object3D; base: THREE.Vector3 } | null>(null);
+
+  // Closed/open orientations as quaternions. `openEuler` is a LOCAL swing
+  // RELATIVE to the closed pose (open = closed ∘ delta), so the flap hinges
+  // cleanly about a flap-local axis. Interpolating absolute Euler angles from
+  // an already-tilted closed pose (e.g. [0,-90,90]) made the flap dive through
+  // the bodywork; quaternion slerp between these two follows the short arc.
+  const flapQuats = useMemo(() => {
+    if (!flapClosedEuler || !flapOpenEuler) return null;
+    const d = THREE.MathUtils.degToRad;
+    const closed = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(d(flapClosedEuler[0]), d(flapClosedEuler[1]), d(flapClosedEuler[2]), 'YXZ'),
+    );
+    const delta = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(d(flapOpenEuler[0]), d(flapOpenEuler[1]), d(flapOpenEuler[2]), 'YXZ'),
+    );
+    const open = closed.clone().multiply(delta);
+    return { closed, open };
+  }, [flapClosedEuler, flapOpenEuler]);
+
+  // Apply position offset + orientation. Re-runs whenever calibration changes
+  // and re-applies at the flap's CURRENT open progress, so dragging a slider
+  // updates the rendered pose live — no need to re-toggle the flap each time.
   useEffect(() => {
     const node = scene.getObjectByName('charge_dummy') ?? null;
     if (!node) {
@@ -287,17 +310,12 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
     const base = flapBaseRef.current.base;
     const o = flapOffset ?? [0, 0, 0];
     node.position.set(base.x + o[0], base.y + o[1], base.z + o[2]);
-    if (flapClosedEuler) {
-      const d = THREE.MathUtils.degToRad;
-      node.rotation.set(
-        d(flapClosedEuler[0]),
-        d(flapClosedEuler[1]),
-        d(flapClosedEuler[2]),
-        'YXZ',
-      );
+    if (flapQuats) {
+      const p = ctx.__progressRef?.current?.charge_port ?? 0;
+      node.quaternion.copy(flapQuats.closed).slerp(flapQuats.open, p);
     }
     node.updateMatrix();
-  }, [scene, flapOffset, flapClosedEuler]);
+  }, [scene, flapOffset, flapQuats, ctx]);
 
   useFrame((_, delta) => {
     const targets = ctx.targets;
@@ -317,8 +335,19 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
       if (!moving) continue;
 
       progress[opening.id] = next;
-      const time = next * opening.length;
 
+      // Charge-port flap: drive via quaternion slerp (closed → open) instead
+      // of the generic Euler keyframe track, so the hinge swing stays clean.
+      if (flapQuats && opening.id === 'charge_port') {
+        const node = resolveNode('charge_dummy');
+        if (node) {
+          node.quaternion.copy(flapQuats.closed).slerp(flapQuats.open, next);
+          node.updateMatrix();
+        }
+        continue;
+      }
+
+      const time = next * opening.length;
       for (const track of opening.tracks) {
         applyTrack(track, time, resolveNode);
       }

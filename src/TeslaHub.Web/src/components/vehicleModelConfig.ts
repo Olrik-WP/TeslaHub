@@ -725,11 +725,11 @@ export interface VehicleModelConfig {
    *     closed, so a flap baked at a wrong tilt can be laid flush on the
    *     body WITHOUT re-exporting the GLB. Also the `charge_port` opening's
    *     first keyframe.
-   *   - `openEuler`: terminal open rotation (degrees, YXZ order) injected
-   *     into the `charge_port` opening's last keyframe. Three axes because
-   *     a grafted flap's hinge edge is rarely aligned with the vertical
-   *     axis, so a single-axis swing twists it — the user dials the right
-   *     combination live in the Showroom. */
+   *   - `openEuler`: open SWING (degrees, YXZ) applied RELATIVE to the closed
+   *     pose (open = closed ∘ delta), interpolated by quaternion slerp at
+   *     runtime. Relative + slerp so the flap hinges on the short arc about a
+   *     flap-local axis instead of diving through the body — the user just
+   *     raises a single axis to the desired opening angle in the Showroom. */
   chargeFlap?: {
     offset: [number, number, number];
     closedEuler: [number, number, number];
@@ -1855,8 +1855,9 @@ export const CommunityM3Config: VehicleModelConfig = {
   // Baseline matches the hand-baked position in the GLB; the Showroom sliders
   // nudge position + open rotation from here without re-exporting.
   chargeFlap: {
-    offset: [0, 0, 0],
-    closedEuler: [0, 0, 0],
+    offset: [-0.01, -0.1, -0.18],
+    closedEuler: [0, -90, 90],
+    // TODO: relative open swing — replace once dialed in from the Showroom.
     openEuler: [0, 0, -90],
   },
 };
