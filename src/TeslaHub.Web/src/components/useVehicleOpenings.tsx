@@ -277,6 +277,7 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
   const flapOpenAxis = model.chargeFlap?.openAxis;
   const flapOpenAngle = model.chargeFlap?.openAngle;
   const flapHingePivot = model.chargeFlap?.hingePivot;
+  const flapOpenTwist = model.chargeFlap?.openTwist;
   const flapBaseRef = useRef<{ node: THREE.Object3D; base: THREE.Vector3 } | null>(null);
 
   // Closed = absolute rest pose (Euler, YXZ, dialed so the flap lies flat).
@@ -298,13 +299,23 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
     const open = new THREE.Quaternion()
       .setFromAxisAngle(axis, d(flapOpenAngle))
       .multiply(closed);
+    // Straightening: a WORLD-frame correction pre-multiplied onto the open
+    // pose. Because the pivot logic pins the hinge point for ANY quaternion,
+    // this rotates the standing flap about the hinge to square it up without
+    // disturbing the closed pose or the lift arc.
+    if (flapOpenTwist) {
+      const twist = new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(d(flapOpenTwist[0]), d(flapOpenTwist[1]), d(flapOpenTwist[2]), 'XYZ'),
+      );
+      open.premultiply(twist);
+    }
     const pivot = new THREE.Vector3(
       flapHingePivot?.[0] ?? 0,
       flapHingePivot?.[1] ?? 0,
       flapHingePivot?.[2] ?? 0,
     );
     return { closed, open, pivot };
-  }, [flapClosedEuler, flapOpenAxis, flapOpenAngle, flapHingePivot]);
+  }, [flapClosedEuler, flapOpenAxis, flapOpenAngle, flapHingePivot, flapOpenTwist]);
 
   // Set the flap node's quaternion + position for a given open progress,
   // rotating about the hinge LINE (`pivot`) so an offset hinge stays fixed:

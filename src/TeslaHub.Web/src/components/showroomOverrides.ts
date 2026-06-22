@@ -213,6 +213,10 @@ export interface ShowroomOverrides {
     /** Hinge LINE as a flap-local offset from the baked pivot (e.g. bottom
      *  edge) so the flap lifts as one rigid panel instead of see-sawing. */
     hingePivot?: [number, number, number];
+    /** WORLD-frame correction (deg, X/Y/Z) applied to the OPEN pose only,
+     *  pinned at the hinge. Lets a single-axis lift be straightened (e.g.
+     *  rotate about Y) when the panel ends up "de travers". */
+    openTwist?: [number, number, number];
   };
 
   // Legacy glass fine-tuning (still in transit toward `glassFinish`).
@@ -460,6 +464,8 @@ export function mergeShowroomConfig(
           overrides.chargeFlap?.openAngle ?? defaults.chargeFlap.openAngle,
         hingePivot:
           overrides.chargeFlap?.hingePivot ?? defaults.chargeFlap.hingePivot,
+        openTwist:
+          overrides.chargeFlap?.openTwist ?? defaults.chargeFlap.openTwist,
       }
     : undefined;
 
@@ -711,6 +717,7 @@ export function buildEffectiveOverrides(
             number,
             number,
           ],
+          openTwist: [...cfg.chargeFlap.openTwist] as [number, number, number],
         }
       : undefined,
     variants: cfg.activeVariants ? { ...cfg.activeVariants } : undefined,

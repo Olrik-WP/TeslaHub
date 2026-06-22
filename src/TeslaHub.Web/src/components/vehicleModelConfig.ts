@@ -741,6 +741,10 @@ export interface VehicleModelConfig {
     openAxis: [number, number, number];
     openAngle: number;
     hingePivot: [number, number, number];
+    /** WORLD-frame correction (deg, X/Y/Z) applied to the OPEN pose only,
+     *  pinned at the hinge — straightens a single-axis lift that ends up
+     *  "de travers" (e.g. a small Y twist to square the panel up). */
+    openTwist: [number, number, number];
   };
 
   /** Optional auto-fold tracks for the side mirrors, triggered on lock.
@@ -1874,6 +1878,9 @@ export const CommunityM3Config: VehicleModelConfig = {
     openAxis: [0, 0, 1],
     openAngle: -60,
     hingePivot: [-0.116, 0, 0],
+    // No straightening needed for the clean Z-lift default; the Showroom
+    // "Redresser" slider feeds this when a tilted axis leaves the flap askew.
+    openTwist: [0, 0, 0],
   },
 };
 
