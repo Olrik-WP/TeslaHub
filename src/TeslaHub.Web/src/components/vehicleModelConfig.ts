@@ -730,12 +730,17 @@ export interface VehicleModelConfig {
    *     like a door. Fixing the axis means tuning the angle can never push the
    *     flap into the body.
    *   - `openAngle`: how far to rotate about `openAxis` when fully open (deg).
-   *     The runtime slerps closed → open, a clean single-axis hinge motion. */
+   *     The runtime slerps closed → open, a clean single-axis hinge motion.
+   *   - `hingePivot`: the hinge LINE, as a flap-local offset from the baked
+   *     `charge_dummy` origin. The GLB bakes the pivot at the panel CENTRE, so
+   *     a lift would see-saw (twist). Offsetting to the bottom edge makes the
+   *     flap lift as one rigid, flush panel. */
   chargeFlap?: {
     offset: [number, number, number];
     closedEuler: [number, number, number];
     openAxis: [number, number, number];
     openAngle: number;
+    hingePivot: [number, number, number];
   };
 
   /** Optional auto-fold tracks for the side mirrors, triggered on lock.
@@ -1860,12 +1865,13 @@ export const CommunityM3Config: VehicleModelConfig = {
     offset: [-0.01, -0.1, -0.18],
     closedEuler: [0, -90, 90],
     // Opening = rotate `openAngle` about `openAxis` (a WORLD axis) through the
-    // hinge, on top of the closed pose. World Z (front-rear horizontal) makes
-    // the flap LIFT UP like a lid; -80° verified by headless render (flap rises
-    // off the body, doesn't swing sideways nor dive in). Dialing only the angle
-    // can never push the flap into the body — the axis is fixed.
+    // hinge LINE (`hingePivot`), on top of the closed pose. World Z (front-rear)
+    // makes the flap LIFT UP like a lid. The pivot is offset to the bottom edge
+    // (flap-local X = -0.116) so the flap lifts as one rigid flush panel instead
+    // of see-sawing about the baked centre pivot. Verified by headless render.
     openAxis: [0, 0, 1],
-    openAngle: -80,
+    openAngle: 75,
+    hingePivot: [-0.116, 0, 0],
   },
 };
 

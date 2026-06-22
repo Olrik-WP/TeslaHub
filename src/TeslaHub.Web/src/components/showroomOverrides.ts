@@ -210,6 +210,9 @@ export interface ShowroomOverrides {
     openAxis?: [number, number, number];
     /** How far to rotate about `openAxis` when fully open (deg). */
     openAngle?: number;
+    /** Hinge LINE as a flap-local offset from the baked pivot (e.g. bottom
+     *  edge) so the flap lifts as one rigid panel instead of see-sawing. */
+    hingePivot?: [number, number, number];
   };
 
   // Legacy glass fine-tuning (still in transit toward `glassFinish`).
@@ -455,6 +458,8 @@ export function mergeShowroomConfig(
         openAxis: overrides.chargeFlap?.openAxis ?? defaults.chargeFlap.openAxis,
         openAngle:
           overrides.chargeFlap?.openAngle ?? defaults.chargeFlap.openAngle,
+        hingePivot:
+          overrides.chargeFlap?.hingePivot ?? defaults.chargeFlap.hingePivot,
       }
     : undefined;
 
@@ -701,6 +706,11 @@ export function buildEffectiveOverrides(
           ],
           openAxis: [...cfg.chargeFlap.openAxis] as [number, number, number],
           openAngle: cfg.chargeFlap.openAngle,
+          hingePivot: [...cfg.chargeFlap.hingePivot] as [
+            number,
+            number,
+            number,
+          ],
         }
       : undefined,
     variants: cfg.activeVariants ? { ...cfg.activeVariants } : undefined,

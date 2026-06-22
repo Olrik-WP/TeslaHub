@@ -276,13 +276,16 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
   const flapClosedEuler = model.chargeFlap?.closedEuler;
   const flapOpenAxis = model.chargeFlap?.openAxis;
   const flapOpenAngle = model.chargeFlap?.openAngle;
+  const flapHingePivot = model.chargeFlap?.hingePivot;
   const flapBaseRef = useRef<{ node: THREE.Object3D; base: THREE.Vector3 } | null>(null);
 
   // Closed = absolute rest pose (Euler, YXZ, dialed so the flap lies flat).
   // Open = rotate `openAngle` about the WORLD `openAxis` (through the hinge) on
   // top of closed. The axis is FIXED, so tuning only the angle can never push
   // the flap into the body — it always travels along the same clean hinge arc.
-  // The runtime slerps closed → open by progress.
+  // `pivot` is the flap-local hinge-line offset (the GLB bakes the pivot at the
+  // panel centre, which would twist a lift; offsetting to the bottom edge lifts
+  // the flap as one rigid flush panel). The runtime slerps closed → open.
   const flapQuats = useMemo(() => {
     if (!flapClosedEuler || !flapOpenAxis || flapOpenAngle == null) return null;
     const d = THREE.MathUtils.degToRad;
@@ -295,8 +298,35 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
     const open = new THREE.Quaternion()
       .setFromAxisAngle(axis, d(flapOpenAngle))
       .multiply(closed);
-    return { closed, open };
-  }, [flapClosedEuler, flapOpenAxis, flapOpenAngle]);
+    const pivot = new THREE.Vector3(
+      flapHingePivot?.[0] ?? 0,
+      flapHingePivot?.[1] ?? 0,
+      flapHingePivot?.[2] ?? 0,
+    );
+    return { closed, open, pivot };
+  }, [flapClosedEuler, flapOpenAxis, flapOpenAngle, flapHingePivot]);
+
+  // Set the flap node's quaternion + position for a given open progress,
+  // rotating about the hinge LINE (`pivot`) so an offset hinge stays fixed:
+  //   pos = base+offset + closed·pivot − q·pivot,  q = slerp(closed, open, p)
+  const applyFlapPose = useCallback(
+    (node: THREE.Object3D, base: THREE.Vector3, p: number) => {
+      if (!flapQuats) return;
+      const o = flapOffset ?? [0, 0, 0];
+      const q = flapQuats.closed.clone().slerp(flapQuats.open, p);
+      node.quaternion.copy(q);
+      const baseOffset = new THREE.Vector3(base.x + o[0], base.y + o[1], base.z + o[2]);
+      if (flapQuats.pivot.lengthSq() > 0) {
+        const fixed = flapQuats.pivot.clone().applyQuaternion(flapQuats.closed).add(baseOffset);
+        const moved = flapQuats.pivot.clone().applyQuaternion(q);
+        node.position.copy(fixed).sub(moved);
+      } else {
+        node.position.copy(baseOffset);
+      }
+      node.updateMatrix();
+    },
+    [flapQuats, flapOffset],
+  );
 
   // Apply position offset + orientation. Re-runs whenever calibration changes
   // and re-applies at the flap's CURRENT open progress, so dragging a slider
@@ -311,14 +341,9 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
       flapBaseRef.current = { node, base: node.position.clone() };
     }
     const base = flapBaseRef.current.base;
-    const o = flapOffset ?? [0, 0, 0];
-    node.position.set(base.x + o[0], base.y + o[1], base.z + o[2]);
-    if (flapQuats) {
-      const p = ctx.__progressRef?.current?.charge_port ?? 0;
-      node.quaternion.copy(flapQuats.closed).slerp(flapQuats.open, p);
-    }
-    node.updateMatrix();
-  }, [scene, flapOffset, flapQuats, ctx]);
+    const p = ctx.__progressRef?.current?.charge_port ?? 0;
+    applyFlapPose(node, base, p);
+  }, [scene, applyFlapPose, ctx]);
 
   useFrame((_, delta) => {
     const targets = ctx.targets;
@@ -339,14 +364,13 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
 
       progress[opening.id] = next;
 
-      // Charge-port flap: drive via quaternion slerp (closed → open) instead
-      // of the generic Euler keyframe track, so the hinge swing stays clean.
+      // Charge-port flap: drive via quaternion slerp about the hinge LINE
+      // (closed → open) instead of the generic Euler keyframe track, so the
+      // panel lifts cleanly as one rigid piece.
       if (flapQuats && opening.id === 'charge_port') {
         const node = resolveNode('charge_dummy');
-        if (node) {
-          node.quaternion.copy(flapQuats.closed).slerp(flapQuats.open, next);
-          node.updateMatrix();
-        }
+        const base = flapBaseRef.current?.base;
+        if (node && base) applyFlapPose(node, base, next);
         continue;
       }
 
