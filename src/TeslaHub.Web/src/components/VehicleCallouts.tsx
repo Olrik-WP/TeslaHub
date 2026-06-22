@@ -71,6 +71,11 @@ export interface CalloutsActions {
   openChargePort: CalloutAction;
   closeChargePort: CalloutAction;
   unlockCable: CalloutAction;
+  /** Stop an active charging session. Surfaced INSTEAD of `unlockCable`
+   *  while the car is actively charging — Tesla refuses to release the
+   *  cable latch mid-charge, so the user must stop first (mirrors the
+   *  Control page's separate Stop button). */
+  stopCharge: CalloutAction;
   ventWindows: CalloutAction;
   closeWindows: CalloutAction;
   // Phase 2 actions (PR-4) — body-state toggles. Each one is rendered
@@ -122,6 +127,7 @@ const NOOP_ACTIONS: CalloutsActions = {
   openChargePort: NOOP_ACTION,
   closeChargePort: NOOP_ACTION,
   unlockCable: NOOP_ACTION,
+  stopCharge: NOOP_ACTION,
   ventWindows: NOOP_ACTION,
   closeWindows: NOOP_ACTION,
   lockVehicle: NOOP_ACTION,
@@ -172,6 +178,11 @@ export function VehicleCallouts({ vehicle, actions, showroomPreview }: VehicleCa
   const portOpen = !!vehicle.chargePortDoorOpen;
   const pluggedIn = !!vehicle.pluggedIn;
   const windowsOpen = !!vehicle.windowsOpen;
+  // Actively charging? Tesla won't release the cable latch mid-charge,
+  // so while charging we surface "Stop charging" instead of "Unlock
+  // cable" — same intent ordering as the Control page.
+  const charging =
+    vehicle.chargingState === 'Charging' || vehicle.chargingState === 'Starting';
 
   return (
     <>
@@ -215,15 +226,27 @@ export function VehicleCallouts({ vehicle, actions, showroomPreview }: VehicleCa
           We split into two mutually-exclusive callouts based on
           pluggedIn so each click has unambiguous semantics. */}
       {shouldRender('chargePort') && (pluggedIn ? (
-        <Callout
-          calloutKey="chargePort"
-          anchorName={ANCHORS.chargePort}
-          label={t('home.callouts.cableUnlock')}
-          icon={<UnlockIcon />}
-          variant="plug"
-          action={effectiveActions.unlockCable}
-          hidden={isHidden('chargePort')}
-        />
+        charging ? (
+          <Callout
+            calloutKey="chargePort"
+            anchorName={ANCHORS.chargePort}
+            label={t('home.callouts.chargeStop')}
+            icon={<StopIcon />}
+            variant="open"
+            action={effectiveActions.stopCharge}
+            hidden={isHidden('chargePort')}
+          />
+        ) : (
+          <Callout
+            calloutKey="chargePort"
+            anchorName={ANCHORS.chargePort}
+            label={t('home.callouts.cableUnlock')}
+            icon={<UnlockIcon />}
+            variant="plug"
+            action={effectiveActions.unlockCable}
+            hidden={isHidden('chargePort')}
+          />
+        )
       ) : (
         <Callout
           calloutKey="chargePort"
@@ -979,6 +1002,16 @@ function UnlockIcon() {
     <svg viewBox="0 0 12 12" width="8" height="8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="6" width="8" height="5" rx="1" />
       <path d="M4 6V4a2 2 0 0 1 4 0" />
+    </svg>
+  );
+}
+
+// Filled rounded square = universal "stop". Used when the car is
+// charging so the charge-port callout offers "stop charging" first.
+function StopIcon() {
+  return (
+    <svg viewBox="0 0 12 12" width="8" height="8" fill="currentColor">
+      <rect x="3" y="3" width="6" height="6" rx="1" />
     </svg>
   );
 }

@@ -2659,6 +2659,12 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
       chargePortDoorOpen: body.on,
     })),
   });
+  // Stop an active charging session. Surfaced by the charge-port callout
+  // (instead of "unlock cable") while the car is charging — Tesla rejects
+  // a latch release mid-charge, so we must stop first.
+  const chargeStop = useControlMutation(vehicleId, 'charge/stop', {
+    optimistic: vehiclePatch(carId, () => ({ chargingState: 'Stopped' })),
+  });
 
   // PR-4 mutations — lock/sentry/climate. Same endpoints as HomeQuickActions
   // so the two surfaces share optimistic patches and rollback semantics.
@@ -2810,6 +2816,10 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
         onClick: () => chargePort.mutate({ on: true }),
         loading: portOpening,
       },
+      stopCharge: {
+        onClick: () => chargeStop.mutate(undefined as never),
+        loading: chargeStop.isPending,
+      },
       ventWindows: {
         onClick: () => windowCmd.mutate({ command: 'vent' }),
         loading: windowVenting,
@@ -2861,6 +2871,7 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
     trunkRearPending,
     portClosing,
     portOpening,
+    chargeStop.isPending,
     windowVenting,
     windowClosing,
     lockMut.isPending,
@@ -2883,6 +2894,7 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
       out.openChargePort = noop;
       out.closeChargePort = noop;
       out.unlockCable = noop;
+      out.stopCharge = noop;
     }
     if (!showTrunkCallouts) {
       out.openFrunk = noop;
