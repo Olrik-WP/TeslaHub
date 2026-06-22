@@ -154,10 +154,10 @@ export default function HomeBatteryBar({ vehicle, isCharging }: Props) {
     if (!canEdit) return;
     if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
       e.preventDefault();
-      setLocalLimit((v) => Math.max(MIN_LIMIT, (v ?? MIN_LIMIT) - 1));
+      setLocalLimit((v) => snapLimit((v ?? MIN_LIMIT) - LIMIT_STEP));
     } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
       e.preventDefault();
-      setLocalLimit((v) => Math.min(MAX_LIMIT, (v ?? MIN_LIMIT) + 1));
+      setLocalLimit((v) => snapLimit((v ?? MIN_LIMIT) + LIMIT_STEP));
     }
   };
 
