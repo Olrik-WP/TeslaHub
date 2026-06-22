@@ -428,6 +428,7 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
   const closedEuler = (cf.closedEuler ?? defaults.chargeFlap.closedEuler) as [number, number, number];
   const openAxis = (cf.openAxis ?? defaults.chargeFlap.openAxis) as [number, number, number];
   const openAngle = cf.openAngle ?? defaults.chargeFlap.openAngle;
+  const hingePivot = (cf.hingePivot ?? defaults.chargeFlap.hingePivot) as [number, number, number];
 
   const set = (patch: Partial<NonNullable<ShowroomOverrides['chargeFlap']>>) => {
     onChange({ ...overrides, chargeFlap: { ...cf, ...patch } });
@@ -437,7 +438,8 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
     cf.offset !== undefined ||
     cf.closedEuler !== undefined ||
     cf.openAxis !== undefined ||
-    cf.openAngle !== undefined;
+    cf.openAngle !== undefined ||
+    cf.hingePivot !== undefined;
   const reset = () => {
     const { chargeFlap: _drop, ...rest } = overrides;
     void _drop;
@@ -493,7 +495,7 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
         unit="°"
       />
       <ShowroomVec3Slider
-        label="Axe de charnière (avancé · Z=lève · Y=porte)"
+        label="Axe de charnière (X · Y · Z monde)"
         value={openAxis}
         onChange={(v) => set({ openAxis: v })}
         defaultValue={defaults.chargeFlap.openAxis}
@@ -502,15 +504,26 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
         step={1}
         unit=""
       />
+      <ShowroomVec3Slider
+        label="Position charnière (bord) — X=±haut/bas"
+        value={hingePivot}
+        onChange={(v) => set({ hingePivot: v })}
+        defaultValue={defaults.chargeFlap.hingePivot}
+        min={-0.12}
+        max={0.12}
+        step={0.01}
+        unit=""
+      />
       <p className="text-[10px] text-[#6b7280]">
-        Place la trappe sur l'aile arrière sans ré-exporter le GLB.{' '}
-        <strong>Rotation fermée</strong> = trappe à plat contre la carrosserie
-        (ne pas y toucher : déjà calée). <strong>Angle d'ouverture</strong> =
-        seul réglage courant : monte/descends pour ouvrir plus ou moins. La
-        trappe pivote toujours autour du même axe (par défaut elle se{' '}
-        <em>lève</em>), donc régler l'angle ne peut jamais la faire rentrer dans
-        la voiture. L'<strong>axe de charnière</strong> est avancé : Z = se lève,
-        Y = s'ouvre comme une porte. Aperçu en direct (clique « trappe »).
+        <strong>Rotation fermée</strong> : trappe à plat (déjà calée, ne pas
+        toucher). <strong>Angle d'ouverture</strong> : de combien elle s'ouvre.{' '}
+        <strong>Axe de charnière</strong> : autour de quel axe elle tourne (1 sur
+        un seul axe). <strong>Position charnière</strong> : sur quel bord elle
+        pivote — <em>X = -0.12 bord bas, +0.12 bord haut</em> (c'est ça qui
+        décide si elle se <em>lève</em> ou bascule sur le côté). Joue sur
+        l'angle + l'axe + le bord en regardant en direct jusqu'à reproduire la
+        Tesla APK ; quel que soit le réglage, la trappe ne peut pas rentrer dans
+        la carrosserie. Clique « trappe » pour voir le mouvement.
       </p>
     </SubSection>
   );

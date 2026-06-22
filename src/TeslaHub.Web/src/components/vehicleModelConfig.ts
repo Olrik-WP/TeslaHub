@@ -1865,12 +1865,14 @@ export const CommunityM3Config: VehicleModelConfig = {
     offset: [-0.01, -0.1, -0.18],
     closedEuler: [0, -90, 90],
     // Opening = rotate `openAngle` about `openAxis` (a WORLD axis) through the
-    // hinge LINE (`hingePivot`), on top of the closed pose. World Z (front-rear)
-    // makes the flap LIFT UP like a lid. The pivot is offset to the bottom edge
-    // (flap-local X = -0.116) so the flap lifts as one rigid flush panel instead
-    // of see-sawing about the baked centre pivot. Verified by headless render.
+    // hinge LINE (`hingePivot`), on top of the closed pose. The hinge sits on
+    // the bottom edge (flap-local X = -0.116) and we rotate a NEGATIVE angle
+    // about world Z so the free (top) edge LIFTS UP and the panel stands up like
+    // the real Tesla lid, revealing the socket below. A positive angle here
+    // swings it sideways/out instead — the wrong motion. Verified by headless
+    // render with the flap painted bright to read orientation unambiguously.
     openAxis: [0, 0, 1],
-    openAngle: 75,
+    openAngle: -60,
     hingePivot: [-0.116, 0, 0],
   },
 };
