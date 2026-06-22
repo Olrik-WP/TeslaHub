@@ -721,6 +721,10 @@ export interface VehicleModelConfig {
    *     at runtime (X right+, Y front+, Z up+) so the flap can be
    *     re-aligned on the quarter panel from the Showroom WITHOUT
    *     re-baking the GLB.
+   *   - `closedEuler`: REST rotation (degrees, YXZ) applied to the flap when
+   *     closed, so a flap baked at a wrong tilt can be laid flush on the
+   *     body WITHOUT re-exporting the GLB. Also the `charge_port` opening's
+   *     first keyframe.
    *   - `openEuler`: terminal open rotation (degrees, YXZ order) injected
    *     into the `charge_port` opening's last keyframe. Three axes because
    *     a grafted flap's hinge edge is rarely aligned with the vertical
@@ -728,6 +732,7 @@ export interface VehicleModelConfig {
    *     combination live in the Showroom. */
   chargeFlap?: {
     offset: [number, number, number];
+    closedEuler: [number, number, number];
     openEuler: [number, number, number];
   };
 
@@ -1851,6 +1856,7 @@ export const CommunityM3Config: VehicleModelConfig = {
   // nudge position + open rotation from here without re-exporting.
   chargeFlap: {
     offset: [0, 0, 0],
+    closedEuler: [0, 0, 0],
     openEuler: [0, 0, -90],
   },
 };

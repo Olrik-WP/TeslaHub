@@ -425,13 +425,17 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
 
   const cf = overrides.chargeFlap ?? {};
   const offset = (cf.offset ?? defaults.chargeFlap.offset) as [number, number, number];
+  const closedEuler = (cf.closedEuler ?? defaults.chargeFlap.closedEuler) as [number, number, number];
   const openEuler = (cf.openEuler ?? defaults.chargeFlap.openEuler) as [number, number, number];
 
   const set = (patch: Partial<NonNullable<ShowroomOverrides['chargeFlap']>>) => {
     onChange({ ...overrides, chargeFlap: { ...cf, ...patch } });
   };
 
-  const isOverridden = cf.offset !== undefined || cf.openEuler !== undefined;
+  const isOverridden =
+    cf.offset !== undefined ||
+    cf.closedEuler !== undefined ||
+    cf.openEuler !== undefined;
   const reset = () => {
     const { chargeFlap: _drop, ...rest } = overrides;
     void _drop;
@@ -467,6 +471,16 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
         unit="m"
       />
       <ShowroomVec3Slider
+        label="Rotation fermée — repos (°, X/Y/Z)"
+        value={closedEuler}
+        onChange={(v) => set({ closedEuler: v })}
+        defaultValue={defaults.chargeFlap.closedEuler}
+        min={-180}
+        max={180}
+        step={1}
+        unit="°"
+      />
+      <ShowroomVec3Slider
         label="Rotation ouverte (°, X/Y/Z)"
         value={openEuler}
         onChange={(v) => set({ openEuler: v })}
@@ -477,9 +491,12 @@ function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
         unit="°"
       />
       <p className="text-[10px] text-[#6b7280]">
-        Place la trappe sur l'aile arrière sans ré-exporter le GLB. Rotation
-        ouverte = angles d'ouverture sur les 3 axes (la charnière n'étant pas
-        forcément verticale, joue sur X/Y/Z pour trouver le bon basculement).
+        Place la trappe sur l'aile arrière sans ré-exporter le GLB.{' '}
+        <strong>Rotation fermée</strong> = pose de repos : ajuste X/Y/Z pour
+        coucher la trappe à plat contre la carrosserie (si elle se dresse comme
+        un aileron). <strong>Rotation ouverte</strong> = angles une fois
+        ouverte (la charnière n'étant pas forcément verticale, joue sur X/Y/Z
+        pour le bon basculement).
       </p>
     </SubSection>
   );

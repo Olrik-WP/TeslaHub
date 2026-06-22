@@ -263,12 +263,17 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
     [scene],
   );
 
-  // Charge-port flap live offset (community rigged pivot). The animator only
-  // ever writes the flap's ROTATION (the charge_port track has no translation),
-  // so its position is free to nudge here from the Showroom calibration. We
-  // capture the GLB-baked position once per node instance and re-apply
-  // base + offset whenever the offset changes — no GLB re-export needed.
+  // Charge-port flap live calibration (community rigged pivot). The animator
+  // only writes the flap's ROTATION while it is actually moving, so:
+  //   - position: free to nudge here (the charge_port track has no translation).
+  //   - closed rotation: applied here at rest, because a flap baked at a wrong
+  //     tilt would otherwise sit dressed-up like a fin until the first
+  //     open/close cycle. The closedEuler also feeds the t=0 keyframe (see
+  //     showroomOverrides) so the animator agrees with this rest pose.
+  // We capture the GLB-baked position once per node instance and re-apply
+  // base + offset whenever the calibration changes — no GLB re-export needed.
   const flapOffset = model.chargeFlap?.offset;
+  const flapClosedEuler = model.chargeFlap?.closedEuler;
   const flapBaseRef = useRef<{ node: THREE.Object3D; base: THREE.Vector3 } | null>(null);
   useEffect(() => {
     const node = scene.getObjectByName('charge_dummy') ?? null;
@@ -282,8 +287,17 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
     const base = flapBaseRef.current.base;
     const o = flapOffset ?? [0, 0, 0];
     node.position.set(base.x + o[0], base.y + o[1], base.z + o[2]);
+    if (flapClosedEuler) {
+      const d = THREE.MathUtils.degToRad;
+      node.rotation.set(
+        d(flapClosedEuler[0]),
+        d(flapClosedEuler[1]),
+        d(flapClosedEuler[2]),
+        'YXZ',
+      );
+    }
     node.updateMatrix();
-  }, [scene, flapOffset]);
+  }, [scene, flapOffset, flapClosedEuler]);
 
   useFrame((_, delta) => {
     const targets = ctx.targets;
