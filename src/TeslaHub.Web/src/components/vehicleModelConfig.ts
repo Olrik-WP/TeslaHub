@@ -1856,9 +1856,10 @@ export const CommunityM3Config: VehicleModelConfig = {
   chargeFlap: {
     offset: [-0.01, -0.1, -0.18],
     closedEuler: [0, -90, 90],
-    // Absolute open pose = closed swung ~90° about the (vertical) hinge. If it
-    // opens INTO the body, the opposite swing is [0, -180, 90].
-    openEuler: [0, 0, 90],
+    // Absolute open pose = closed swung ~90° OUTWARD about the (vertical) hinge,
+    // verified by headless render (flap clears the body, recess exposed). The
+    // opposite swing [0, 0, 90] dives into the bodywork.
+    openEuler: [0, -180, 90],
   },
 };
 
