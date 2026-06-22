@@ -428,11 +428,14 @@ export function VehicleCallouts({ vehicle, actions, showroomPreview }: VehicleCa
         />
       )}
 
-      {/* --- CLIMATE INFO (interior + exterior temps) --------------------
-          Pure data — interior temp / exterior temp as a single pill.
-          Default anchor = frunk; user moves it onto the windshield via
-          the Showroom XYZ sliders. Renders only when at least one
-          temp signal is fresh. */}
+      {/* --- CLIMATE INFO + TOGGLE (interior / exterior temps) -----------
+          Shows interior / exterior temps AND doubles as a climate
+          on/off toggle: tapping it fires climate/start|stop (same
+          endpoint as the snowflake callout and ClimateCard). Colour
+          reflects the live state — green when the climate is ON,
+          blue when OFF — so the temperature pill itself signals whether
+          the HVAC is running. Default anchor = frunk; user moves it onto
+          the windshield via the Showroom XYZ sliders. */}
       {(vehicle.insideTemp != null || vehicle.outsideTemp != null) && shouldRender('climateInfo') && (
         <Callout
           calloutKey="climateInfo"
@@ -443,8 +446,8 @@ export function VehicleCallouts({ vehicle, actions, showroomPreview }: VehicleCa
             (vehicle.outsideTemp != null ? `${u.fmtTemp(vehicle.outsideTemp)}${u.tempUnit}` : '—')
           }
           icon={<ThermometerIcon />}
-          variant="info"
-          action={NOOP_ACTION /* data callout — no command fired on click */}
+          variant={vehicle.isClimateOn ? 'secure' : 'info'}
+          action={effectiveActions.climateToggle}
           hidden={isHidden('climateInfo')}
         />
       )}
