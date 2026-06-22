@@ -39,6 +39,7 @@ import {
   type VehicleModelKey,
   type WheelFallbackPosition,
 } from './vehicleModelConfig';
+import type { OpeningDefinition } from './vehicleOpeningTypes';
 
 /** Identifier for each wheel corner — used as the key for per-wheel overrides. */
 export type WheelCorner = 'LF' | 'RF' | 'LR' | 'RR';
@@ -196,6 +197,16 @@ export interface ShowroomOverrides {
    *  inner mixed opacity, env; inner solo env). Shallow merge over
    *  `cfg.glassFinish`. */
   glassFinish?: Partial<VehicleModelConfig['glassFinish']>;
+
+  // Charge-port flap (community rigged pivot) — live placement + open
+  // angle so the user can dial the flap in from the Showroom instead of
+  // re-baking the GLB. Both sub-fields optional; absent = shipped default.
+  chargeFlap?: {
+    /** Chassis-frame nudge of the flap+pivot (X right+, Y front+, Z up+). */
+    offset?: [number, number, number];
+    /** Open swing angle (deg) around the vertical axis (negative = outward). */
+    openAngleDeg?: number;
+  };
 
   // Legacy glass fine-tuning (still in transit toward `glassFinish`).
   glass?: GlassOverrides;
@@ -424,14 +435,62 @@ function mergeWheelPositions(
  * read them via a type cast — until the Phase 3 refactor brings them
  * into `VehicleModelConfig` proper.
  */
+/**
+ * Re-inject the calibrated open angle into the `charge_port` opening's
+ * terminal rotation keyframe (the `charge_dummy` track). The rest
+ * keyframe (t=0) stays at [0,0,0]; every later keyframe gets [0,0,angle]
+ * so the flap swings around the vertical axis by `angleDeg`. Pure — returns
+ * a new openings array, leaving the shipped defaults untouched.
+ */
+function applyChargeFlapAngle(
+  openings: ReadonlyArray<OpeningDefinition>,
+  angleDeg: number,
+): ReadonlyArray<OpeningDefinition> {
+  return openings.map((op) => {
+    if (op.id !== 'charge_port') return op;
+    return {
+      ...op,
+      tracks: op.tracks.map((tr) =>
+        tr.node === 'charge_dummy' && tr.rotation
+          ? {
+              ...tr,
+              rotation: tr.rotation.map((kf, i) =>
+                i === 0
+                  ? kf
+                  : { ...kf, eul: [0, 0, angleDeg] as [number, number, number] },
+              ),
+            }
+          : tr,
+      ),
+    };
+  });
+}
+
 export function mergeShowroomConfig(
   defaults: VehicleModelConfig,
   overrides: ShowroomOverrides | null | undefined,
 ): VehicleModelConfig {
   if (!overrides) return defaults;
 
+  // Charge-port flap: resolve offset + open angle, and re-inject the angle
+  // into the openings keyframes the animator reads.
+  const chargeFlap = defaults.chargeFlap
+    ? {
+        offset: overrides.chargeFlap?.offset ?? defaults.chargeFlap.offset,
+        openAngleDeg:
+          overrides.chargeFlap?.openAngleDeg ?? defaults.chargeFlap.openAngleDeg,
+      }
+    : undefined;
+
   return {
     ...defaults,
+
+    // Charge-port flap (community rigged pivot) — offset consumed by the
+    // animator, angle baked into the openings below.
+    chargeFlap,
+    openings: chargeFlap
+      ? applyChargeFlapAngle(defaults.openings, chargeFlap.openAngleDeg)
+      : defaults.openings,
     // wheelUrl swap (different wheel design)
     wheelUrl: overrides.wheelUrl ?? defaults.wheelUrl,
 
@@ -658,6 +717,12 @@ export function buildEffectiveOverrides(
     wheelFinish: { ...cfg.wheelFinish },
     lightTuning: { ...cfg.lightTuning },
     glassFinish: { ...cfg.glassFinish },
+    chargeFlap: cfg.chargeFlap
+      ? {
+          offset: [...cfg.chargeFlap.offset] as [number, number, number],
+          openAngleDeg: cfg.chargeFlap.openAngleDeg,
+        }
+      : undefined,
     variants: cfg.activeVariants ? { ...cfg.activeVariants } : undefined,
   };
 

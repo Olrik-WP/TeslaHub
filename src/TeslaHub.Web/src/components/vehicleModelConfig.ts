@@ -711,6 +711,24 @@ export interface VehicleModelConfig {
    *  recorded but never produce visible motion. */
   openings: ReadonlyArray<OpeningDefinition>;
 
+  /** Runtime calibration for the rigged charge-port flap (the
+   *  `charge_dummy` pivot in community GLBs). Only models whose GLB
+   *  ships a separate, hand-rigged flap need this — Tesla GLBs animate
+   *  the port via the `charge_port` opening keyframes directly and
+   *  leave this undefined.
+   *
+   *   - `offset`: chassis-frame nudge added to `charge_dummy.position`
+   *     at runtime (X right+, Y front+, Z up+) so the flap can be
+   *     re-aligned on the quarter panel from the Showroom WITHOUT
+   *     re-baking the GLB.
+   *   - `openAngleDeg`: terminal swing angle (degrees) around the
+   *     vertical axis injected into the `charge_port` opening's last
+   *     keyframe (negative = swings outward, away from the body). */
+  chargeFlap?: {
+    offset: [number, number, number];
+    openAngleDeg: number;
+  };
+
   /** Optional auto-fold tracks for the side mirrors, triggered on lock.
    *  Only meaningful when the GLB exposes dedicated mirror pivot
    *  nodes (Poppyseed: `Door_LF_Mirror_Spatial`, etc.). Bayberry's
@@ -1825,6 +1843,14 @@ export const CommunityM3Config: VehicleModelConfig = {
   // (door_*_dummy_*, bonnet_dummy_279, boot_dummy_158). Angles are first-pass
   // geometric guesses — calibrate live in the viewer (see communityM3Openings).
   openings: OPENINGS_COMMUNITY_M3,
+
+  // Charge-port flap live calibration (the grafted `charge_dummy` pivot).
+  // Baseline matches the hand-baked position in the GLB; the Showroom sliders
+  // nudge it from here without re-exporting. openAngleDeg -90 = swings outward.
+  chargeFlap: {
+    offset: [0, 0, 0],
+    openAngleDeg: -90,
+  },
 };
 
 export const VEHICLE_MODELS: Record<VehicleModelKey, VehicleModelConfig> = {

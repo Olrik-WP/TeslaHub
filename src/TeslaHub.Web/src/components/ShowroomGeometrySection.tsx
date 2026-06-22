@@ -107,6 +107,7 @@ export function ShowroomGeometrySection({
 
       <WheelsSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <ChargePortSection overrides={overrides} onChange={onChange} defaults={defaults} />
+      <ChargeFlapSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <SuperchargerSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <CableSection overrides={overrides} onChange={onChange} defaults={defaults} />
       <SentryCamerasSection
@@ -409,6 +410,75 @@ function ChargePortSection({ overrides, onChange, defaults }: Props) {
       <p className="text-[10px] text-[#6b7280]">
         Direction = vecteur unitaire de l'extérieur vers la prise. (0, 0, 1) =
         latéral gauche. Garder normalisé pour éviter les distorsions de câble.
+      </p>
+    </SubSection>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// CHARGE FLAP — community rigged pivot: live position + open angle
+// ────────────────────────────────────────────────────────────────────
+
+function ChargeFlapSection({ overrides, onChange, defaults }: Props) {
+  // Only models that ship a hand-rigged flap (community) expose this.
+  if (!defaults.chargeFlap) return null;
+
+  const cf = overrides.chargeFlap ?? {};
+  const offset = (cf.offset ?? defaults.chargeFlap.offset) as [number, number, number];
+  const angle = cf.openAngleDeg ?? defaults.chargeFlap.openAngleDeg;
+
+  const set = (patch: Partial<NonNullable<ShowroomOverrides['chargeFlap']>>) => {
+    onChange({ ...overrides, chargeFlap: { ...cf, ...patch } });
+  };
+
+  const isOverridden = cf.offset !== undefined || cf.openAngleDeg !== undefined;
+  const reset = () => {
+    const { chargeFlap: _drop, ...rest } = overrides;
+    void _drop;
+    onChange(rest);
+  };
+
+  return (
+    <SubSection
+      title="Trappe de charge (communauté)"
+      rightSlot={
+        isOverridden ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              reset();
+            }}
+            className="text-[10px] text-[#6b7280] hover:text-white"
+          >
+            ↺ Reset
+          </button>
+        ) : null
+      }
+    >
+      <ShowroomVec3Slider
+        label="Offset position (X droite · Y avant · Z haut)"
+        value={offset}
+        onChange={(v) => set({ offset: v })}
+        defaultValue={defaults.chargeFlap.offset}
+        min={-1}
+        max={1}
+        step={0.01}
+        unit="m"
+      />
+      <ShowroomSlider
+        label="Ouv°"
+        value={angle}
+        onChange={(n) => set({ openAngleDeg: n })}
+        defaultValue={defaults.chargeFlap.openAngleDeg}
+        min={-180}
+        max={180}
+        step={5}
+        unit="°"
+      />
+      <p className="text-[10px] text-[#6b7280]">
+        Place la trappe sur l'aile arrière sans ré-exporter le GLB. Ouv° = angle
+        d'ouverture autour de l'axe vertical (négatif = vers l'extérieur).
       </p>
     </SubSection>
   );

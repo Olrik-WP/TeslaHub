@@ -263,6 +263,28 @@ export function VehicleOpeningsAnimator({ scene, approach = 4 }: AnimatorProps) 
     [scene],
   );
 
+  // Charge-port flap live offset (community rigged pivot). The animator only
+  // ever writes the flap's ROTATION (the charge_port track has no translation),
+  // so its position is free to nudge here from the Showroom calibration. We
+  // capture the GLB-baked position once per node instance and re-apply
+  // base + offset whenever the offset changes — no GLB re-export needed.
+  const flapOffset = model.chargeFlap?.offset;
+  const flapBaseRef = useRef<{ node: THREE.Object3D; base: THREE.Vector3 } | null>(null);
+  useEffect(() => {
+    const node = scene.getObjectByName('charge_dummy') ?? null;
+    if (!node) {
+      flapBaseRef.current = null;
+      return;
+    }
+    if (flapBaseRef.current?.node !== node) {
+      flapBaseRef.current = { node, base: node.position.clone() };
+    }
+    const base = flapBaseRef.current.base;
+    const o = flapOffset ?? [0, 0, 0];
+    node.position.set(base.x + o[0], base.y + o[1], base.z + o[2]);
+    node.updateMatrix();
+  }, [scene, flapOffset]);
+
   useFrame((_, delta) => {
     const targets = ctx.targets;
     const progress = ctx.__progressRef?.current;
