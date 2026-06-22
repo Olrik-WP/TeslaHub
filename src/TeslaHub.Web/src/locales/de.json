@@ -237,6 +237,10 @@
       "noData": "Keine Batteriedaten",
       "chargeLimit": "Ladelimit"
     },
+    "power": {
+      "house": "Haus (live)",
+      "tesla": "Tesla"
+    },
     "quickActions": {
       "title": "Schnellaktionen",
       "more": "Mehr",
@@ -264,6 +268,7 @@
       "chargePortOpen": "Klappe öffnen",
       "chargePortClose": "Klappe schließen",
       "cableUnlock": "Kabel entriegeln",
+      "chargeStop": "Laden stoppen",
       "windowVent": "Fenster lüften",
       "windowClose": "Fenster schließen",
       "lock": "Verriegeln",
