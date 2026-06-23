@@ -84,8 +84,27 @@ function useGlowTexture(): THREE.Texture {
   }, []);
 }
 
+/** Trapezoid shaft geometry: narrow at the TOP (the source), wide at the
+ *  BOTTOM (the floor) so it reads as a spotlight cone spreading out — far more
+ *  natural than a straight rectangle. Origin centred; spans y∈[-0.5,0.5]. */
+function makeShaftGeometry(topW: number, botW: number): THREE.BufferGeometry {
+  const tw = topW / 2;
+  const bw = botW / 2;
+  const g = new THREE.BufferGeometry();
+  const pos = new Float32Array([
+    -tw, 0.5, 0, tw, 0.5, 0, bw, -0.5, 0,
+    -tw, 0.5, 0, bw, -0.5, 0, -bw, -0.5, 0,
+  ]);
+  const uv = new Float32Array([0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0]);
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.computeVertexNormals();
+  return g;
+}
+
 interface BeamProps {
   texture: THREE.Texture;
+  geom: THREE.BufferGeometry;
   position: [number, number, number];
   rotation: [number, number, number];
   scale: [number, number, number];
@@ -93,9 +112,9 @@ interface BeamProps {
   phase: number;
 }
 
-/** A single volumetric light shaft: two crossed additive planes so it reads
- *  as a 3D beam from any orbit angle. Gently breathes in intensity. */
-function LightBeam({ texture, position, rotation, scale, opacity, phase }: BeamProps) {
+/** A single volumetric light shaft: two crossed additive trapezoids so it
+ *  reads as a 3D spreading cone from any orbit angle. Breathes in intensity. */
+function LightBeam({ texture, geom, position, rotation, scale, opacity, phase }: BeamProps) {
   const matA = useRef<THREE.MeshBasicMaterial>(null);
   const matB = useRef<THREE.MeshBasicMaterial>(null);
   useFrame((state) => {
@@ -106,8 +125,7 @@ function LightBeam({ texture, position, rotation, scale, opacity, phase }: BeamP
   });
   return (
     <group position={position} rotation={rotation} scale={scale}>
-      <mesh>
-        <planeGeometry args={[1, 1]} />
+      <mesh geometry={geom}>
         <meshBasicMaterial
           ref={matA}
           map={texture}
@@ -119,8 +137,7 @@ function LightBeam({ texture, position, rotation, scale, opacity, phase }: BeamP
           toneMapped={false}
         />
       </mesh>
-      <mesh rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[1, 1]} />
+      <mesh geometry={geom} rotation={[0, Math.PI / 2, 0]}>
         <meshBasicMaterial
           ref={matB}
           map={texture}
@@ -145,17 +162,22 @@ interface Props {
 export function StudioAtmosphere({ compact = false }: Props) {
   const beamTex = useBeamTexture();
   const glowTex = useGlowTexture();
+  // Spreading cone shape, shared by every shaft (narrow top → wide bottom).
+  const shaftGeom = useMemo(() => makeShaftGeometry(0.22, 1), []);
 
-  // A few shafts angled like studio key lights, biased to the upper-left.
-  // Crossed planes => volumetric from any orbit angle. A touch stronger now
-  // that there's no Bloom to make them glow.
+  // One DOMINANT key shaft from the upper-right (like the reference render),
+  // tilted off-vertical so it never looks like a flat curtain, plus two subtle
+  // fills. Crossed trapezoids => volumetric, spreading cone from any angle.
   const beams = useMemo(
     () =>
       [
-        { position: [-3.2, 4.4, -1.6], rotation: [0, 0, 0.2], scale: [3.4, 9, 1], opacity: 0.22, phase: 0 },
-        { position: [2.6, 4.6, 1.2], rotation: [0, 0, -0.15], scale: [2.8, 9.5, 1], opacity: 0.17, phase: 1.7 },
-        { position: [-0.4, 4.8, 2.8], rotation: [0.16, 0, 0.05], scale: [2.6, 9, 1], opacity: 0.14, phase: 3.1 },
-      ] as Omit<BeamProps, 'texture'>[],
+        // Dominant key, upper-right, tilted toward the car.
+        { position: [3.4, 5, 1.6], rotation: [0.12, 0, -0.32], scale: [4.2, 10, 1], opacity: 0.26, phase: 0 },
+        // Soft fill, upper-left.
+        { position: [-3, 4.6, -1.2], rotation: [0, 0, 0.22], scale: [3, 9, 1], opacity: 0.14, phase: 1.7 },
+        // Faint rear fill for depth.
+        { position: [-0.4, 4.8, 3], rotation: [0.2, 0, 0.05], scale: [2.6, 9, 1], opacity: 0.1, phase: 3.1 },
+      ] as Omit<BeamProps, 'texture' | 'geom'>[],
     [],
   );
 
@@ -171,15 +193,15 @@ export function StudioAtmosphere({ compact = false }: Props) {
         <circleGeometry args={[42, 64]} />
         <MeshReflectorMaterial
           resolution={compact ? 512 : 1024}
-          mirror={0.75}
-          mixStrength={1.8}
-          mixBlur={1}
-          blur={[400, 150]}
-          minDepthThreshold={0.3}
-          maxDepthThreshold={1.2}
-          depthScale={1.1}
-          roughness={0.62}
-          metalness={0.6}
+          mirror={0.92}
+          mixStrength={2.4}
+          mixBlur={0.8}
+          blur={[300, 90]}
+          minDepthThreshold={0.25}
+          maxDepthThreshold={1.1}
+          depthScale={1.0}
+          roughness={0.42}
+          metalness={0.7}
           color="#0a0b0d"
         />
       </mesh>
@@ -208,12 +230,25 @@ export function StudioAtmosphere({ compact = false }: Props) {
         color="#000000"
       />
 
-      {/* Cool rim/back light to sculpt the shoulder line. */}
-      <directionalLight position={[6, 7, -7]} intensity={0.7} color="#cfe0ff" />
+      {/* Dramatic KEY SPOTLIGHT from the upper-right — lights the roof/shoulder
+          like the reference render and lays a bright pool on the floor. decay=0
+          keeps the intensity predictable regardless of distance. Aimed at the
+          floor centre (default target at origin). */}
+      <spotLight
+        position={[5.5, 9, 3.5]}
+        angle={0.55}
+        penumbra={1}
+        decay={0}
+        intensity={2.2}
+        color="#fff6e8"
+      />
 
-      {/* Volumetric light shafts. */}
+      {/* Cool rim/back light to sculpt the far shoulder line. */}
+      <directionalLight position={[-6, 6, -7]} intensity={0.55} color="#cfe0ff" />
+
+      {/* Volumetric light shafts (spreading cones). */}
       {beams.map((b, i) => (
-        <LightBeam key={i} texture={beamTex} {...b} />
+        <LightBeam key={i} texture={beamTex} geom={shaftGeom} {...b} />
       ))}
 
       {/* Floating dust motes — kept above the car (not on the floor) and pure
