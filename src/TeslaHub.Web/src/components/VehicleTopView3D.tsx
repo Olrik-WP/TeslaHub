@@ -8,6 +8,7 @@ import {
 } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
+import { StudioAtmosphere } from './StudioAtmosphere';
 import type { VehicleStatus } from '../api/queries';
 import {
   OpeningsProvider,
@@ -2906,7 +2907,16 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
 
   return (
     <OpeningsProvider>
-      <div className="relative w-full" style={{ height }}>
+      <div
+        className="relative w-full overflow-hidden rounded-xl"
+        style={{
+          height,
+          // Studio backdrop: a soft pool fading to near-black, so the
+          // transparent WebGL canvas sits on a gradient instead of flat dark.
+          background:
+            'radial-gradient(120% 90% at 50% 32%, #1c1d20 0%, #131417 40%, #0a0a0c 72%, #060607 100%)',
+        }}
+      >
         <ModelAvailabilityBanner vin={vehicle.vin} />
         <Canvas
           ref={canvasRef}
@@ -2930,6 +2940,12 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
             shadow-mapSize={[1024, 1024]}
           />
           <directionalLight position={[-8, 6, -8]} intensity={0.25} />
+
+          {/* Tesla-showroom dressing: reflective floor, contact shadow, light
+              shafts, dust + distance fog. Direct Canvas child so <fog> attaches
+              to the scene. Higher quality in the big Showroom, lighter on the
+              small Home/charging cards. */}
+          <StudioAtmosphere compact={!showroomMode} />
 
           <Suspense fallback={<Loader />}>
             <Environment preset="city" />
