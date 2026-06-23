@@ -102,65 +102,6 @@ function makeShaftGeometry(topW: number, botW: number): THREE.BufferGeometry {
   return g;
 }
 
-/** Soft, low-contrast cloud texture for the ground mist (very feathered so a
- *  few stacked planes read as a haze, not a disc). */
-function useMistTexture(): THREE.Texture {
-  return useMemo(() => {
-    const s = 256;
-    const c = document.createElement('canvas');
-    c.width = s;
-    c.height = s;
-    const ctx = c.getContext('2d')!;
-    const g = ctx.createRadialGradient(s / 2, s / 2, s * 0.05, s / 2, s / 2, s / 2);
-    g.addColorStop(0, 'rgba(208,216,230,0.1)');
-    g.addColorStop(0.5, 'rgba(202,212,228,0.045)');
-    g.addColorStop(1, 'rgba(198,208,226,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, s, s);
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
-  }, []);
-}
-
-/** Light ground mist: a few large, soft, slowly-drifting horizontal planes
- *  hovering just above the floor. Additive + very low opacity so it veils the
- *  base of the car like fog WITHOUT hiding the reflection or washing the floor.
- *  Sits above the reflector, so it also shows (faintly) in the mirror. */
-function GroundFog({ texture }: { texture: THREE.Texture }) {
-  const a = useRef<THREE.Mesh>(null);
-  const b = useRef<THREE.Mesh>(null);
-  const c = useRef<THREE.Mesh>(null);
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
-    if (a.current) a.current.rotation.z = t * 0.015;
-    if (b.current) b.current.rotation.z = -t * 0.011 + 1.5;
-    if (c.current) c.current.rotation.z = t * 0.008 + 3;
-  });
-  const layers: Array<{ ref: React.RefObject<THREE.Mesh | null>; y: number; s: number; o: number }> = [
-    { ref: a, y: 0.22, s: 30, o: 0.16 },
-    { ref: b, y: 0.45, s: 34, o: 0.1 },
-    { ref: c, y: 0.72, s: 38, o: 0.06 },
-  ];
-  return (
-    <>
-      {layers.map((l, i) => (
-        <mesh key={i} ref={l.ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, l.y, 0]}>
-          <planeGeometry args={[l.s, l.s]} />
-          <meshBasicMaterial
-            map={texture}
-            transparent
-            opacity={l.o}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
-    </>
-  );
-}
-
 interface BeamProps {
   texture: THREE.Texture;
   geom: THREE.BufferGeometry;
@@ -221,7 +162,6 @@ interface Props {
 export function StudioAtmosphere({ compact = false }: Props) {
   const beamTex = useBeamTexture();
   const glowTex = useGlowTexture();
-  const mistTex = useMistTexture();
   // Spreading cone shape, shared by every shaft (narrow top → wide bottom).
   const shaftGeom = useMemo(() => makeShaftGeometry(0.22, 1), []);
 
@@ -260,7 +200,7 @@ export function StudioAtmosphere({ compact = false }: Props) {
           minDepthThreshold={0.2}
           maxDepthThreshold={1.0}
           depthScale={1.2}
-          roughness={0.4}
+          roughness={0.3}
           metalness={0.7}
           // Graphite, dark + contrasty. Keep a TOUCH of HDR ambiance (not 0)
           // so the floor stays alive instead of flat-dead — the grey wash came
@@ -319,9 +259,6 @@ export function StudioAtmosphere({ compact = false }: Props) {
       {beams.map((b, i) => (
         <LightBeam key={i} texture={beamTex} geom={shaftGeom} {...b} />
       ))}
-
-      {/* Light drifting ground mist. */}
-      <GroundFog texture={mistTex} />
 
       {/* Floating dust motes — kept above the car (not on the floor) and pure
           white so they never read as coloured specks. */}
