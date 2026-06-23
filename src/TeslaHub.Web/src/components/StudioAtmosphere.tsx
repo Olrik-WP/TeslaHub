@@ -112,9 +112,9 @@ function useMistTexture(): THREE.Texture {
     c.height = s;
     const ctx = c.getContext('2d')!;
     const g = ctx.createRadialGradient(s / 2, s / 2, s * 0.05, s / 2, s / 2, s / 2);
-    g.addColorStop(0, 'rgba(214,222,235,0.22)');
-    g.addColorStop(0.5, 'rgba(206,215,230,0.1)');
-    g.addColorStop(1, 'rgba(200,210,228,0)');
+    g.addColorStop(0, 'rgba(208,216,230,0.1)');
+    g.addColorStop(0.5, 'rgba(202,212,228,0.045)');
+    g.addColorStop(1, 'rgba(198,208,226,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, s, s);
     const tex = new THREE.CanvasTexture(c);
@@ -138,9 +138,9 @@ function GroundFog({ texture }: { texture: THREE.Texture }) {
     if (c.current) c.current.rotation.z = t * 0.008 + 3;
   });
   const layers: Array<{ ref: React.RefObject<THREE.Mesh | null>; y: number; s: number; o: number }> = [
-    { ref: a, y: 0.18, s: 26, o: 0.5 },
-    { ref: b, y: 0.36, s: 30, o: 0.38 },
-    { ref: c, y: 0.6, s: 34, o: 0.26 },
+    { ref: a, y: 0.22, s: 30, o: 0.16 },
+    { ref: b, y: 0.45, s: 34, o: 0.1 },
+    { ref: c, y: 0.72, s: 38, o: 0.06 },
   ];
   return (
     <>
@@ -254,13 +254,13 @@ export function StudioAtmosphere({ compact = false }: Props) {
         <MeshReflectorMaterial
           resolution={compact ? 512 : 1024}
           mirror={0.92}
-          mixStrength={2.6}
-          mixBlur={0.8}
-          blur={[300, 90]}
-          minDepthThreshold={0.25}
-          maxDepthThreshold={1.1}
-          depthScale={1.0}
-          roughness={0.42}
+          mixStrength={1.5}
+          mixBlur={0.35}
+          blur={[120, 45]}
+          minDepthThreshold={0.2}
+          maxDepthThreshold={1.0}
+          depthScale={1.2}
+          roughness={0.4}
           metalness={0.7}
           // Graphite, dark + contrasty. Keep a TOUCH of HDR ambiance (not 0)
           // so the floor stays alive instead of flat-dead — the grey wash came

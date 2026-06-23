@@ -2932,14 +2932,14 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
             gl.toneMappingExposure = 1.05;
           }}
         >
-          <ambientLight intensity={0.35} />
+          <ambientLight intensity={0.26} />
           <directionalLight
             position={[10, 15, 10]}
-            intensity={0.9}
+            intensity={0.85}
             castShadow
             shadow-mapSize={[1024, 1024]}
           />
-          <directionalLight position={[-8, 6, -8]} intensity={0.25} />
+          <directionalLight position={[-8, 6, -8]} intensity={0.22} />
 
           {/* Tesla-showroom dressing: reflective floor, contact shadow, light
               shafts, dust + distance fog. Direct Canvas child so <fog> attaches
