@@ -194,7 +194,7 @@ export function StudioAtmosphere({ compact = false }: Props) {
         <MeshReflectorMaterial
           resolution={compact ? 512 : 1024}
           mirror={0.92}
-          mixStrength={2.4}
+          mixStrength={2.6}
           mixBlur={0.8}
           blur={[300, 90]}
           minDepthThreshold={0.25}
@@ -202,7 +202,12 @@ export function StudioAtmosphere({ compact = false }: Props) {
           depthScale={1.0}
           roughness={0.42}
           metalness={0.7}
-          color="#0a0b0d"
+          // Graphite, dark + contrasty: kill the bright HDR "city" wash so the
+          // floor stays near-black (the grey came from that env reflection),
+          // letting the white car + light pool pop. The planar car reflection
+          // is unaffected (it comes from the reflector pass, not the env map).
+          envMapIntensity={0.12}
+          color="#101216"
         />
       </mesh>
 
