@@ -211,13 +211,14 @@ export function StudioAtmosphere({ compact = false }: Props) {
         />
       </mesh>
 
-      {/* Warm light pool on the floor under the car (additive). */}
+      {/* Warm light pool on the floor under the car (additive). Kept small +
+          subtle so it accents the centre instead of greying the whole floor. */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, GROUND_Y + 0.005, 0]}>
-        <planeGeometry args={[12, 12]} />
+        <planeGeometry args={[8.5, 8.5]} />
         <meshBasicMaterial
           map={glowTex}
           transparent
-          opacity={0.65}
+          opacity={0.3}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
@@ -236,15 +237,18 @@ export function StudioAtmosphere({ compact = false }: Props) {
       />
 
       {/* Dramatic KEY SPOTLIGHT from the upper-right — lights the roof/shoulder
-          like the reference render and lays a bright pool on the floor. decay=0
-          keeps the intensity predictable regardless of distance. Aimed at the
+          like the reference render and lays a CONCENTRATED pool on the floor.
+          decay=2 (physical falloff) is the key: the light fades with distance
+          so only the centre brightens and the rest of the floor stays dark —
+          decay=0 was flooding the whole floor into flat grey. Aimed at the
           floor centre (default target at origin). */}
       <spotLight
         position={[5.5, 9, 3.5]}
-        angle={0.55}
+        angle={0.5}
         penumbra={1}
-        decay={0}
-        intensity={2.2}
+        decay={2}
+        distance={30}
+        intensity={340}
         color="#fff6e8"
       />
 

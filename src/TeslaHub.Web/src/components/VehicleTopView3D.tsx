@@ -3044,8 +3044,8 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
             target={cfg.cameraPose.target}
             enablePan
             enableZoom
-            minDistance={2.5}
-            maxDistance={30}
+            minDistance={3.0}
+            maxDistance={13}
             autoRotate={autoRotate}
             autoRotateSpeed={0.6}
             minPolarAngle={Math.PI / 6}
