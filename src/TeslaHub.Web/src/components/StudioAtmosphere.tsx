@@ -1,29 +1,59 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { MeshReflectorMaterial, ContactShadows, Sparkles } from '@react-three/drei';
+import {
+  EffectComposer,
+  Bloom,
+  Vignette,
+  ToneMapping,
+} from '@react-three/postprocessing';
+import { ToneMappingMode } from 'postprocessing';
 import * as THREE from 'three';
 
 /**
  * Tesla-showroom-style atmosphere for the 3D vehicle viewer.
  *
  * Turns the bare "car floating in the void" look into a studio set:
- *   - a dark glossy REFLECTIVE FLOOR (mirrors the car like the real app),
+ *   - a graded 3D BACKDROP dome (so the scene owns its background and the
+ *     postprocessing pass stays correct),
+ *   - a dark glossy REFLECTIVE FLOOR (circular, dissolving into the backdrop
+ *     via distance fog — no hard horizon line),
  *   - a soft CONTACT SHADOW so the car is grounded (essential for the
  *     community GLB which ships no baked floor shadow),
- *   - a warm RADIAL LIGHT POOL on the floor under the car,
- *   - a few volumetric LIGHT BEAMS ("sun shafts") drifting from above,
+ *   - a radial LIGHT POOL on the floor under the car,
+ *   - a few soft volumetric LIGHT BEAMS ("sun shafts") drifting from above,
+ *   - a cool RIM LIGHT that sculpts the car's shoulder line,
  *   - floating DUST motes (Sparkles),
- *   - light distance FOG so the floor dissolves into the dark instead of
- *     ending on a hard edge.
+ *   - light distance FOG,
+ *   - BLOOM + VIGNETTE + ACES tone mapping (postprocessing).
  *
- * Everything is additive scene dressing — it never touches the car meshes,
- * the openings rig, or the cable. Designed to be cheap enough for the small
- * Home card (modest reflector resolution, few beams, low particle count).
+ * IMPORTANT — looks great on mobile too. Nothing is removed on weaker
+ * devices; instead every cost knob (reflector resolution, bloom kernel,
+ * MSAA, particle count) scales down via the `tier` so the rich look is
+ * preserved while staying smooth. A <PerformanceMonitor> in the Canvas adds
+ * a runtime safety net (drops DPR under sustained load).
  *
  * Ground is at world y = 0 (matches cableGroundAnchor / supercharger).
  */
 
 const GROUND_Y = 0;
+const FOG_COLOR = '#0a0b0d';
+
+export type QualityTier = 'high' | 'mid';
+
+/** Pick a quality tier once, from device hints. Both tiers are "beautiful";
+ *  `mid` just trims internal resolutions so phones/tablets stay fluid. */
+export function useQualityTier(): QualityTier {
+  return useMemo(() => {
+    if (typeof window === 'undefined') return 'mid';
+    const coarse = window.matchMedia?.('(pointer: coarse)')?.matches ?? false;
+    const small = window.matchMedia?.('(max-width: 820px)')?.matches ?? false;
+    const cores = navigator.hardwareConcurrency ?? 8;
+    const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;
+    const weak = coarse || small || cores <= 4 || mem <= 4;
+    return weak ? 'mid' : 'high';
+  }, []);
+}
 
 /** Vertical gradient texture for a light shaft: bright core fading out
  *  horizontally and softly capped top + bottom. Generated once. */
@@ -37,20 +67,19 @@ function useBeamTexture(): THREE.Texture {
     const ctx = c.getContext('2d')!;
     const img = ctx.createImageData(w, h);
     for (let y = 0; y < h; y++) {
-      // Fade in from the top, fade out toward the floor (soft both ends).
       const v = y / (h - 1);
-      const topFade = Math.min(1, v / 0.25);
-      const botFade = Math.min(1, (1 - v) / 0.55);
+      const topFade = Math.min(1, v / 0.3);
+      const botFade = Math.min(1, (1 - v) / 0.6);
       const vert = topFade * botFade;
       for (let x = 0; x < w; x++) {
         const u = x / (w - 1);
-        const dx = Math.abs(u - 0.5) * 2; // 0 at core, 1 at edge
-        const horiz = Math.pow(1 - dx, 2.2);
+        const dx = Math.abs(u - 0.5) * 2;
+        const horiz = Math.pow(1 - dx, 1.7);
         const a = Math.max(0, vert * horiz);
         const i = (y * w + x) * 4;
         img.data[i] = 255;
-        img.data[i + 1] = 250;
-        img.data[i + 2] = 235;
+        img.data[i + 1] = 249;
+        img.data[i + 2] = 233;
         img.data[i + 3] = Math.round(a * 255);
       }
     }
@@ -70,11 +99,33 @@ function useGlowTexture(): THREE.Texture {
     c.height = s;
     const ctx = c.getContext('2d')!;
     const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-    g.addColorStop(0, 'rgba(255,248,232,0.55)');
+    g.addColorStop(0, 'rgba(255,248,232,0.6)');
     g.addColorStop(0.4, 'rgba(255,246,228,0.22)');
     g.addColorStop(1, 'rgba(255,246,228,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, s, s);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }, []);
+}
+
+/** Vertical gradient texture for the backdrop dome (top dark → horizon
+ *  slightly lifted → bottom dark). Mapped on a back-side sphere. */
+function useDomeTexture(): THREE.Texture {
+  return useMemo(() => {
+    const h = 256;
+    const c = document.createElement('canvas');
+    c.width = 4;
+    c.height = h;
+    const ctx = c.getContext('2d')!;
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#060708'); // top
+    g.addColorStop(0.55, '#0e0f12'); // upper horizon lift
+    g.addColorStop(0.7, '#121317'); // horizon glow
+    g.addColorStop(1, '#070809'); // bottom
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 4, h);
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
@@ -97,7 +148,7 @@ function LightBeam({ texture, position, rotation, scale, opacity, phase }: BeamP
   const matB = useRef<THREE.MeshBasicMaterial>(null);
   useFrame((state) => {
     const t = state.clock.elapsedTime;
-    const o = opacity * (0.78 + 0.22 * Math.sin(t * 0.5 + phase));
+    const o = opacity * (0.8 + 0.2 * Math.sin(t * 0.45 + phase));
     if (matA.current) matA.current.opacity = o;
     if (matB.current) matB.current.opacity = o;
   });
@@ -134,58 +185,66 @@ function LightBeam({ texture, position, rotation, scale, opacity, phase }: BeamP
 }
 
 interface Props {
-  /** Smaller scenes (Home card) can dial particle / beam counts down. */
-  compact?: boolean;
+  tier?: QualityTier;
 }
 
-export function StudioAtmosphere({ compact = false }: Props) {
+export function StudioAtmosphere({ tier = 'high' }: Props) {
   const beamTex = useBeamTexture();
   const glowTex = useGlowTexture();
+  const domeTex = useDomeTexture();
+  const high = tier === 'high';
 
-  // A few shafts angled like late-afternoon studio key lights, biased to the
-  // upper-left to match the reference. Heights ~9m, hitting the floor near the
-  // car. Crossed planes => volumetric from any angle.
+  // Soft, wide shafts biased to the upper-left, like studio key lights. Crossed
+  // planes => volumetric from any angle. Bloom makes them glow like god-rays.
   const beams = useMemo(
     () =>
       [
-        { position: [-3.2, 4.4, -1.6], rotation: [0, 0, 0.22], scale: [3.2, 9, 1], opacity: 0.16, phase: 0 },
-        { position: [2.6, 4.6, 1.2], rotation: [0, 0, -0.16], scale: [2.6, 9.5, 1], opacity: 0.12, phase: 1.7 },
-        { position: [-0.4, 4.8, 2.8], rotation: [0.18, 0, 0.05], scale: [2.4, 9, 1], opacity: 0.1, phase: 3.1 },
+        { position: [-3.4, 4.6, -1.4], rotation: [0, 0, 0.2], scale: [4.4, 9.5, 1], opacity: 0.12, phase: 0 },
+        { position: [2.8, 4.8, 1.4], rotation: [0, 0, -0.14], scale: [3.8, 10, 1], opacity: 0.09, phase: 1.7 },
+        { position: [-0.6, 5, 3], rotation: [0.16, 0, 0.04], scale: [3.4, 9.5, 1], opacity: 0.08, phase: 3.1 },
       ] as Omit<BeamProps, 'texture'>[],
     [],
   );
 
   return (
     <>
-      {/* Distance fog: car stays crisp, the floor edges dissolve into dark. */}
-      <fog attach="fog" args={['#08090b', 16, 46]} />
+      {/* Distance fog: car stays crisp, the floor dissolves into the dome. */}
+      <fog attach="fog" args={[FOG_COLOR, 18, 48]} />
 
-      {/* Reflective studio floor — a hair below ground so it never z-fights
-          a model's baked floor decal; reflection shows around it. */}
+      {/* Graded backdrop dome — owns the visible background so postprocessing
+          stays correct and the floor has something to fade into. */}
+      <mesh scale={[-1, 1, 1]}>
+        <sphereGeometry args={[60, 32, 16]} />
+        <meshBasicMaterial map={domeTex} side={THREE.BackSide} depthWrite={false} fog={false} toneMapped={false} />
+      </mesh>
+
+      {/* Reflective studio floor — circular so its edge fades uniformly into
+          the fog/dome (no straight horizon line). A hair below ground so it
+          never z-fights a model's baked floor decal. */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, GROUND_Y - 0.01, 0]}>
-        <planeGeometry args={[80, 80]} />
+        <circleGeometry args={[40, 64]} />
         <MeshReflectorMaterial
-          resolution={compact ? 512 : 1024}
-          mirror={0.55}
-          mixStrength={1.6}
+          resolution={high ? 1024 : 512}
+          mirror={0.85}
+          mixStrength={2.2}
           mixBlur={1}
-          blur={[400, 200]}
-          minDepthThreshold={0.4}
+          blur={[high ? 600 : 300, high ? 200 : 120]}
+          minDepthThreshold={0.3}
           maxDepthThreshold={1.2}
           depthScale={1.1}
-          roughness={0.85}
-          metalness={0.5}
+          roughness={0.55}
+          metalness={0.6}
           color="#0a0b0d"
         />
       </mesh>
 
       {/* Warm light pool on the floor under the car (additive). */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, GROUND_Y + 0.005, 0]}>
-        <planeGeometry args={[12, 12]} />
+        <planeGeometry args={[13, 13]} />
         <meshBasicMaterial
           map={glowTex}
           transparent
-          opacity={0.6}
+          opacity={0.7}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
@@ -198,10 +257,13 @@ export function StudioAtmosphere({ compact = false }: Props) {
         scale={14}
         far={5}
         blur={2.6}
-        opacity={0.6}
-        resolution={compact ? 256 : 512}
+        opacity={0.62}
+        resolution={high ? 512 : 256}
         color="#000000"
       />
+
+      {/* Cool rim/back light to sculpt the shoulder line. */}
+      <directionalLight position={[6, 7, -7]} intensity={high ? 0.8 : 0.7} color="#cfe0ff" />
 
       {/* Volumetric light shafts. */}
       {beams.map((b, i) => (
@@ -210,15 +272,29 @@ export function StudioAtmosphere({ compact = false }: Props) {
 
       {/* Floating dust motes drifting through the beams. */}
       <Sparkles
-        count={compact ? 40 : 80}
-        scale={[12, 6, 12]}
-        position={[0, 2.4, 0]}
+        count={high ? 90 : 45}
+        scale={[13, 6, 13]}
+        position={[0, 2.6, 0]}
         size={2.2}
-        speed={0.25}
+        speed={0.22}
         opacity={0.5}
         color="#fff7e6"
         noise={0.6}
       />
+
+      {/* Postprocessing — Bloom is the big beauty win (reflections, beams and
+          lights glow). Kernel/MSAA scale with tier so phones stay smooth. */}
+      <EffectComposer multisampling={high ? 4 : 0} enableNormalPass={false}>
+        <Bloom
+          intensity={high ? 0.7 : 0.55}
+          luminanceThreshold={0.6}
+          luminanceSmoothing={0.22}
+          mipmapBlur
+          radius={high ? 0.7 : 0.55}
+        />
+        <Vignette eskil={false} offset={0.28} darkness={0.72} />
+        <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+      </EffectComposer>
     </>
   );
 }

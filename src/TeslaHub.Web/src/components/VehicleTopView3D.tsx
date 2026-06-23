@@ -5,10 +5,11 @@ import {
   OrbitControls,
   Environment,
   Html,
+  PerformanceMonitor,
 } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
-import { StudioAtmosphere } from './StudioAtmosphere';
+import { StudioAtmosphere, useQualityTier } from './StudioAtmosphere';
 import type { VehicleStatus } from '../api/queries';
 import {
   OpeningsProvider,
@@ -2615,6 +2616,12 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
   // Auto-rotate OFF by default — was distracting and made clicking on
   // a moving target frustrating. Toggle in top-right corner.
   const [autoRotate, setAutoRotate] = useState(false);
+  // Studio render quality. `tier` is a one-shot device hint (phones/tablets
+  // get `mid` — still the full look, just cheaper internals). `dpr` is live:
+  // the <PerformanceMonitor> drops it under sustained load and restores it
+  // when the frame budget recovers, so the rich look never causes jank.
+  const tier = useQualityTier();
+  const [dpr, setDpr] = useState<number>(tier === 'high' ? 1.75 : 1.25);
   // Cable mode is now driven by the live VehicleStatus through
   // <useVehicleVisualSync>. We keep it in local state so the cable
   // mount/unmount is a fast local re-render rather than re-deriving in
@@ -2921,17 +2928,25 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
         <Canvas
           ref={canvasRef}
           camera={{ position: cfg.cameraPose.position, fov: cfg.cameraPose.fov }}
-          dpr={[1, 1.5]}
+          dpr={dpr}
           gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
           style={{ background: 'transparent' }}
           onCreated={({ gl }) => {
             gl.outputColorSpace = THREE.SRGBColorSpace;
-            gl.toneMapping = THREE.ACESFilmicToneMapping;
-            // Slight overexposure helps brushed alloy wheels read against
-            // the dark windows and contact shadow.
+            // Tone mapping is applied by the postprocessing <ToneMapping>
+            // effect (ACES), so the renderer itself must NOT tone-map or the
+            // image gets crushed twice.
+            gl.toneMapping = THREE.NoToneMapping;
             gl.toneMappingExposure = 1.05;
           }}
         >
+          {/* Frame-budget safety net: lower DPR when the GPU struggles
+              (phones, busy scenes), raise it back when there's headroom.
+              Keeps every effect on — only the resolution flexes. */}
+          <PerformanceMonitor
+            onDecline={() => setDpr((d) => Math.max(0.85, d - 0.25))}
+            onIncline={() => setDpr((d) => Math.min(tier === 'high' ? 2 : 1.5, d + 0.25))}
+          />
           <ambientLight intensity={0.35} />
           <directionalLight
             position={[10, 15, 10]}
@@ -2945,7 +2960,7 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
               shafts, dust + distance fog. Direct Canvas child so <fog> attaches
               to the scene. Higher quality in the big Showroom, lighter on the
               small Home/charging cards. */}
-          <StudioAtmosphere compact={!showroomMode} />
+          <StudioAtmosphere tier={tier} />
 
           <Suspense fallback={<Loader />}>
             <Environment preset="city" />
