@@ -196,6 +196,17 @@ export interface VehicleModelConfig {
    *  Usually stripped by PackedSceneGLTF — kept as a best-effort
    *  first pass. Anchor lookup BEFORE falling back to positions. */
   wheelAnchorNames: ReadonlyArray<{ name: string; mirror: boolean }>;
+  /** Uniform scale multiplier applied to ALL four mounted wheels at
+   *  once (fallback-mode only). The separate wheel GLB (`wheelUrl`) is
+   *  exported at its real-world size, but a model whose body GLB was
+   *  exported at a slightly different unit scale than its wheel GLB
+   *  ends up with tyres that look too small (or too big) in the arches.
+   *  This single knob lets the Showroom dial the whole set up/down
+   *  without touching the per-corner positions, and the runtime keeps
+   *  the tyres grounded by lifting the hub centre proportionally
+   *  (hub height is the tyre radius, so `y * wheelScale` keeps the
+   *  contact patch on the floor). Undefined / 1 = native GLB size. */
+  wheelScale?: number;
 
   // ───────────────────────────────────────────────────────────────────
   // Charge port + cable geometry — per-model placement

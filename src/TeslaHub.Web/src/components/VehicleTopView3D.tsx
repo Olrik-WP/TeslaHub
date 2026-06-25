@@ -554,6 +554,9 @@ function useModelConsts() {
       ]),
       WHEEL_ANCHORS: cfg.wheelAnchorNames,
       WHEEL_FALLBACK_POSITIONS: cfg.wheelFallbackPositions,
+      // Uniform multiplier on the whole wheel set (fallback mode). 1 =
+      // native GLB size. Tyres stay grounded as it changes.
+      WHEEL_SCALE: cfg.wheelScale ?? 1,
     }),
     [cfg],
   );
@@ -583,6 +586,7 @@ function PoppyseedModel({ wheelsAvailable }: { wheelsAvailable: boolean }) {
     FLOOR_NODE_NAMES,
     WHEEL_ANCHORS,
     WHEEL_FALLBACK_POSITIONS,
+    WHEEL_SCALE,
   } = useModelConsts();
   const debug = useContext(ShowroomDebugContext);
   const debugGlass = debug.glass;
@@ -1515,13 +1519,20 @@ const BODY_PAINT_MAT = cfg.materialPatterns.bodyPaint;
               );
             }
           }
-          // Always (re-)apply position + rotation + flipZ. This is what
-          // makes Showroom sliders actually move/orient the wheel in
-          // realtime — drag a slider → cfg rebuilt → memo re-runs →
-          // wrapper transform updated in place.
-          wrapper.position.set(pos.x, pos.y, pos.z);
+          // Always (re-)apply position + rotation + flipZ + scale. This
+          // is what makes Showroom sliders actually move/orient/resize the
+          // wheel in realtime — drag a slider → cfg rebuilt → memo re-runs
+          // → wrapper transform updated in place.
+          //
+          // WHEEL_SCALE uniformly grows/shrinks all four tyres. The hub
+          // centre (`pos.y`) is calibrated to equal the tyre radius, so
+          // lifting it to `pos.y * WHEEL_SCALE` keeps the contact patch on
+          // the floor as the wheel scales (otherwise a bigger wheel would
+          // sink below the ground plane). Scale 1 → unchanged behaviour.
+          const s = WHEEL_SCALE;
+          wrapper.position.set(pos.x, pos.y * s, pos.z);
           wrapper.rotation.set(0, THREE.MathUtils.degToRad(pos.rotY ?? 0), 0);
-          wrapper.scale.set(1, 1, pos.flipZ ? -1 : 1);
+          wrapper.scale.set(s, s, pos.flipZ ? -s : s);
           wheelsAttached++;
         }
       }

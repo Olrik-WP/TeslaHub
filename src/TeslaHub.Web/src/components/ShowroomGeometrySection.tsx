@@ -226,7 +226,13 @@ function WheelsSection({ overrides, onChange, defaults }: Props) {
     onChange({ ...overrides, wheelUrl: url || undefined });
   };
 
+  const setWheelScale = (value: number) => {
+    onChange({ ...overrides, wheelScale: value });
+  };
+
   const currentUrl = overrides.wheelUrl ?? defaults.wheelUrl;
+  const defaultScale = defaults.wheelScale ?? 1;
+  const currentScale = overrides.wheelScale ?? defaultScale;
 
   if (!hasSeparateWheels) return null;
 
@@ -274,6 +280,24 @@ function WheelsSection({ overrides, onChange, defaults }: Props) {
         </div>
         <p className="text-[10px] text-[#4b5563]">
           Si le GLB n'existe pas dans /models/, la roue restera invisible.
+        </p>
+      </div>
+
+      {/* Global wheel size — scales all 4 wheels together, keeps them grounded. */}
+      <div className="space-y-1">
+        <ShowroomSlider
+          label="Taille des roues"
+          value={currentScale}
+          onChange={setWheelScale}
+          defaultValue={defaultScale}
+          min={0.5}
+          max={1.5}
+          step={0.01}
+          unit="×"
+        />
+        <p className="text-[10px] text-[#4b5563]">
+          Agrandit ou réduit les 4 roues en même temps (les pneus restent
+          posés au sol). 1× = taille d'origine du GLB.
         </p>
       </div>
 
