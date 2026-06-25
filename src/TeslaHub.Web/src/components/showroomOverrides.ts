@@ -138,6 +138,12 @@ export interface ShowroomOverrides {
   /** Partial per-corner wheel position. Each corner is independent —
    *  setting LF doesn't reset RF, RR, LR. */
   wheelFallbackPositions?: Partial<Record<WheelCorner, WheelPositionOverride>>;
+  /** Uniform scale multiplier for ALL four wheels at once. 1 = native
+   *  GLB size. Used to fix a wheel set that reads too small / too big in
+   *  the arches because the body and wheel GLBs were exported at slightly
+   *  different unit scales. The runtime keeps the tyres grounded while
+   *  scaling. Undefined = use the model default (effectively 1). */
+  wheelScale?: number;
 
   // Charge port + cable
   chargePort?: Partial<VehicleModelConfig['chargePort']>;
@@ -499,6 +505,9 @@ export function mergeShowroomConfig(
       overrides.wheelFallbackPositions,
     ),
 
+    // Uniform wheel scale (scalar → replace; undefined keeps the default)
+    wheelScale: overrides.wheelScale ?? defaults.wheelScale,
+
     // Charge port (object → shallow merge)
     chargePort: overrides.chargePort
       ? { ...defaults.chargePort, ...overrides.chargePort }
@@ -685,6 +694,7 @@ export function buildEffectiveOverrides(
       Object.keys(wheelFallbackPositions).length > 0
         ? wheelFallbackPositions
         : undefined,
+    wheelScale: cfg.wheelScale ?? 1,
     chargePort: { ...cfg.chargePort },
     cableGroundAnchor: [...cfg.cableGroundAnchor] as [number, number, number],
     cableSlackPost: cfg.cableSlack.post,
