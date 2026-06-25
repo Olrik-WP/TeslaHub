@@ -2,6 +2,7 @@ import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, u
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   useGLTF,
+  useEnvironment,
   OrbitControls,
   Environment,
   Html,
@@ -53,6 +54,15 @@ const dbg3d: typeof console.log = (...args) => { if (import.meta.env.DEV) consol
 // Charging handle is universal across Tesla models — same physical part
 // regardless of which car it's plugged into. Not in the per-model config.
 const HANDLE_URL = '/models/charger_handle.glb';
+
+// IBL environment map. This is drei's `city` preset HDR, but SELF-HOSTED next
+// to the community models in public/: `<Environment preset="city">` fetches it
+// from raw.githack.com at runtime and suspends the same <Suspense> as the
+// model, so a slow/flaky CDN kept the "Loading 3D model..." overlay up for
+// 7-8s on EVERY car. Bundled in the build it is served same-origin by Caddy's
+// static file_server (no extra rule needed) and loads near-instantly. Same
+// HDR → identical look.
+const ENV_HDR_URL = '/community-models/potsdamer_platz_1k.hdr';
 
 // ---- Debug visualisation context -----------------------------------------
 // Showroom-only ephemeral toggles. When `glass = true` every glass mesh is
@@ -2948,7 +2958,7 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
           <StudioAtmosphere compact={!showroomMode} />
 
           <Suspense fallback={<Loader />}>
-            <Environment preset="city" />
+            <Environment files={ENV_HDR_URL} />
             {/* IMPORTANT — keyed by the model key so a runtime swap
                 (Showroom: Model 3 → Model Y, or Home: switching cars
                 between a 3 and a Y) FORCES every model-bound component
@@ -3470,6 +3480,9 @@ function VehicleStateSync({
 // login isn't blocked by a network round-trip. Per-model preload happens
 // implicitly on first useGLTF call inside <PoppyseedModel>.
 useGLTF.preload(PoppyseedConfig.modelUrl);
+// Kick the IBL HDR fetch off immediately too — it shares the model's <Suspense>,
+// so without this it would re-block the "Loading 3D model..." overlay.
+useEnvironment.preload({ files: ENV_HDR_URL });
 // NOTE: do NOT `useGLTF.preload` the supercharger here. Optional assets
 // served from a bind-mounted volume may legitimately 404 on first page
 // load (e.g. file dropped in /srv/models AFTER the app opened). drei's
