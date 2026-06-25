@@ -1,0 +1,20 @@
+# Docker build context excludes. Unlike .gitignore, THIS is what controls what
+# `COPY . .` ships into the image. Without it the build was baking the ~95 MB
+# Blender source (and stale .old backups) from public/community-models/ into
+# the served dist/.
+
+# Host install/output — never copy into the Linux build stage (host is Windows,
+# so its node_modules binaries are incompatible; dist is rebuilt anyway).
+node_modules
+dist
+
+# Heavy source / backup assets that live in public/ but must NOT be served.
+# Use **/ so nested paths (public/community-models/*) are matched too.
+**/*.blend
+**/*.blend1
+**/*.old
+
+# Misc
+.git
+.gitignore
+*.log
