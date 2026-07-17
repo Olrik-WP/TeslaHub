@@ -1,4 +1,5 @@
-import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import {
   useGLTF,
@@ -2386,6 +2387,45 @@ function Loader() {
   );
 }
 
+/**
+ * Swallows load/render errors from a 3D subtree so a MISSING or corrupt
+ * asset never bubbles to the app-level ErrorBoundary ("Something went
+ * wrong") and takes down the whole page.
+ *
+ * Why this is critical for public builds: the community-fallback probe
+ * (`useResolvedModelConfig`) needs a render cycle to confirm the
+ * proprietary Tesla GLB is a 404 before it swaps to the bundled
+ * community model. During that first render `useGLTF(poppyseed.glb)`
+ * throws on the 404 — which previously only "worked" by accident
+ * because the slow CDN <Environment> kept the whole <Suspense> in its
+ * fallback long enough for the probe to win the race. With the HDR now
+ * served locally that cover is gone, so we make the failure explicit
+ * and RECOVERABLE: keying this boundary on `cfg.key` means that when the
+ * probe flips the config poppyseed → community, the boundary remounts
+ * fresh and renders the community car instead of staying errored.
+ */
+class ModelErrorBoundary extends Component<
+  { children: ReactNode; fallback?: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    // Expected for public builds without the proprietary GLBs — keep it
+    // at debug level so the console stays clean in production.
+    dbg3d('[Poppyseed3D] model subtree error (handled, falling back):', error);
+  }
+
+  render() {
+    if (this.state.failed) return this.props.fallback ?? null;
+    return this.props.children;
+  }
+}
+
 // Probes a 3D asset URL once when it changes. Returns:
 //   - `null` while the probe is in flight (or the URL has just changed
 //     and we haven't probed the new one yet — the "stale-protect").
@@ -2968,8 +3008,19 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
               small Home/charging cards. */}
           <StudioAtmosphere compact={!showroomMode} />
 
+          {/* IBL lighting — isolated in its own Suspense + error boundary so a
+              missing/failed HDR degrades to "no reflections" instead of
+              blocking the model's Loader or crashing the page. */}
+          <ModelErrorBoundary>
+            <Suspense fallback={null}>
+              <Environment files={ENV_HDR_URL} />
+            </Suspense>
+          </ModelErrorBoundary>
+
           <Suspense fallback={<Loader />}>
-            <Environment files={ENV_HDR_URL} />
+            {/* Recoverable boundary — see ModelErrorBoundary. Keyed on cfg.key
+                so a poppyseed → community fallback swap remounts it clean. */}
+            <ModelErrorBoundary key={cfg.key}>
             {/* IMPORTANT — keyed by the model key so a runtime swap
                 (Showroom: Model 3 → Model Y, or Home: switching cars
                 between a 3 and a Y) FORCES every model-bound component
@@ -3040,6 +3091,7 @@ function VehicleTopView3DInner({ vehicle, showroomMode, height = 360 }: Props) {
                   cards stay completely clean. */}
               {showroomMode && <DebugAnchorOverlay />}
             </group>
+            </ModelErrorBoundary>
           </Suspense>
 
           {/* React's Suspense hide/unhide toggles `.visible` on host objects.
