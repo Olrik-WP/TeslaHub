@@ -39,6 +39,7 @@ import {
   useResetShowroom,
   useSaveShowroom,
 } from './useResolvedModelConfig';
+import { useGlbAvailable } from './useGlbAvailable';
 import type { ShowroomOverrides } from './showroomOverrides';
 import {
   PoppyseedConfig,
@@ -774,6 +775,41 @@ function ModelSection({
 }: ModelSectionProps) {
   const { t } = useTranslation();
 
+  // Probe the proprietary GLBs so the picker only OFFERS a model the
+  // operator can actually render. The community model is bundled in the
+  // app and always available; poppyseed/bayberry live in the optional
+  // /models volume. Public deployments (no volume) thus see only
+  // "community" instead of dead entries their users will never have.
+  const poppyseedAvailable = useGlbAvailable(PoppyseedConfig.modelUrl);
+  const bayberryAvailable = useGlbAvailable(BayberryConfig.modelUrl);
+  const availabilityByKey: Record<VehicleModelKey, boolean | null> = {
+    poppyseed: poppyseedAvailable,
+    bayberry: bayberryAvailable,
+    community: true,
+  };
+
+  // Hide a Tesla model only once its GLB is CONFIRMED missing (=== false).
+  // While probing (null) we keep it so a self-hoster with the volume never
+  // sees the option flicker away. The currently-selected model always
+  // stays visible so the <select> value never becomes invalid.
+  const visibleOptions = TRIM_OPTIONS.filter(
+    (o) =>
+      o.key === 'community' ||
+      o.key === selectedKey ||
+      availabilityByKey[o.key] !== false,
+  );
+
+  // If the model being edited is confirmed absent (public build), drop the
+  // editor onto the always-present community model so the operator lands on
+  // something usable instead of an empty "introuvable" canvas. Fires once —
+  // after the swap selectedKey === 'community' and the guard stops it.
+  useEffect(() => {
+    if (selectedKey !== 'community' && availabilityByKey[selectedKey] === false) {
+      onSelectModel('community');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedKey, poppyseedAvailable, bayberryAvailable]);
+
   const autoDetected: VehicleModelKey = vin?.toUpperCase().charAt(3) === 'Y'
     ? 'bayberry'
     : 'poppyseed';
@@ -796,7 +832,7 @@ function ModelSection({
           'text-sm text-white focus:border-[#e31937] focus:outline-none'
         }
       >
-        {TRIM_OPTIONS.map((o) => (
+        {visibleOptions.map((o) => (
           <option key={o.key} value={o.key}>
             {o.label}
             {o.key === autoDetected ? ' · (auto)' : ''}
